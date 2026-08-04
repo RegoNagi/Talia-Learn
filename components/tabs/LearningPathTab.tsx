@@ -287,7 +287,9 @@ export function LearningPathTab({
         title: newUnitTitle || 'Untitled Module', 
         weeks: 'Week 1', 
         progress: 0, 
-        lessons: [] 
+        lessons: [],
+        isHidden: false,
+        sharedWith: [],
       }]);
       setExpandedUnits(prev => [...prev, currentUnitId!]);
     }
