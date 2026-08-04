@@ -2,25 +2,33 @@ import { supabase } from '@/lib/supabaseClient';
 
 export interface LibraryFolder {
   id: string;
+  teacherId: string;
   parentId: string | null;
   name: string;
   color: string;
   createdAt: string;
   isPublic: boolean;
-  sharedWith: string[];
+  inMaterial: boolean;
+  sharedWithClasses: string[];
+  sharedWithTeachers: string[];
+  origin: 'material' | 'my_library';
 }
 
 export interface LibraryFile {
   id: string;
+  teacherId: string;
   folderId: string | null;
   name: string;
   type: 'pdf' | 'doc' | 'slides' | 'sheet' | 'image' | 'video' | 'archive' | 'code' | 'other';
   size: string;
   createdAt: string;
   isPublic: boolean;
+  inMaterial: boolean;
   author: string;
-  sharedWith: string[];
+  sharedWithClasses: string[];
+  sharedWithTeachers: string[];
   storagePath: string | null;
+  origin: 'material' | 'my_library';
 }
 
 interface LibraryScope {
@@ -29,54 +37,99 @@ interface LibraryScope {
   subject: string;
 }
 
-export async function getLibraryFolders(scope: LibraryScope): Promise<LibraryFolder[]> {
-  const { data, error } = await supabase
-    .from('library_folders')
-    .select('id, parent_id, name, color, created_at, is_public, shared_with')
-    .eq('class_id', scope.classId)
-    .eq('subject', scope.subject);
+const FOLDER_SELECT = 'id, teacher_id, parent_id, name, color, created_at, is_public, in_material, shared_with, shared_with_teachers, origin';
+const FILE_SELECT = 'id, teacher_id, folder_id, name, type, size_label, created_at, is_public, in_material, author_name, shared_with, shared_with_teachers, storage_path, origin';
 
-  if (error) {
-    console.error('Error fetching library folders:', error);
-    return [];
-  }
-  return (data || []).map((row: any) => ({
+function mapFolder(row: any): LibraryFolder {
+  return {
     id: row.id,
+    teacherId: row.teacher_id,
     parentId: row.parent_id,
     name: row.name,
     color: row.color,
     createdAt: row.created_at,
     isPublic: row.is_public,
-    sharedWith: row.shared_with || [],
-  }));
+    inMaterial: row.in_material,
+    sharedWithClasses: row.shared_with || [],
+    sharedWithTeachers: row.shared_with_teachers || [],
+    origin: row.origin || 'material',
+  };
 }
 
-export async function getLibraryFiles(scope: LibraryScope): Promise<LibraryFile[]> {
-  const { data, error } = await supabase
-    .from('library_files')
-    .select('id, folder_id, name, type, size_label, created_at, is_public, author_name, shared_with, storage_path')
-    .eq('class_id', scope.classId)
-    .eq('subject', scope.subject);
-
-  if (error) {
-    console.error('Error fetching library files:', error);
-    return [];
-  }
-  return (data || []).map((row: any) => ({
+function mapFile(row: any): LibraryFile {
+  return {
     id: row.id,
+    teacherId: row.teacher_id,
     folderId: row.folder_id,
     name: row.name,
     type: row.type,
     size: row.size_label || '',
     createdAt: row.created_at,
     isPublic: row.is_public,
+    inMaterial: row.in_material,
     author: row.author_name || '',
-    sharedWith: row.shared_with || [],
+    sharedWithClasses: row.shared_with || [],
+    sharedWithTeachers: row.shared_with_teachers || [],
     storagePath: row.storage_path,
-  }));
+    origin: row.origin || 'material',
+  };
 }
 
-export async function createLibraryFolder(scope: LibraryScope, input: { parentId: string | null; name: string; color: string; isPublic: boolean }): Promise<string | null> {
+function dedupe<T extends { id: string }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  return rows.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+}
+
+// Material: عناصرها الأصلية + أي حاجة اتضافت لها من My Library + أي حاجة اتشاركت من فصول تانية
+export async function getMaterialFolders(scope: LibraryScope): Promise<LibraryFolder[]> {
+  const [ownRes, sharedRes] = await Promise.all([
+    supabase.from('library_folders').select(FOLDER_SELECT).eq('class_id', scope.classId).eq('subject', scope.subject),
+    supabase.from('library_folders').select(FOLDER_SELECT).contains('shared_with', [scope.classId]),
+  ]);
+  const own = (ownRes.data || []).filter((r: any) => r.origin === 'material' || r.in_material);
+  const shared = sharedRes.data || [];
+  return dedupe([...own, ...shared].map(mapFolder));
+}
+
+export async function getMaterialFiles(scope: LibraryScope): Promise<LibraryFile[]> {
+  const [ownRes, sharedRes] = await Promise.all([
+    supabase.from('library_files').select(FILE_SELECT).eq('class_id', scope.classId).eq('subject', scope.subject),
+    supabase.from('library_files').select(FILE_SELECT).contains('shared_with', [scope.classId]),
+  ]);
+  const own = (ownRes.data || []).filter((r: any) => r.origin === 'material' || r.in_material);
+  const shared = sharedRes.data || [];
+  return dedupe([...own, ...shared].map(mapFile));
+}
+
+// My Library: بتاعتي أنا (كل حاجة)، + بتاعة زميلي المعلم في نفس الفصل والمادة لو خلاها عامة، + أي حاجة اتشاركت معايا بالاسم
+export async function getMyLibraryFolders(scope: LibraryScope): Promise<LibraryFolder[]> {
+  const [mineRes, coTeacherRes, sharedWithMeRes] = await Promise.all([
+    supabase.from('library_folders').select(FOLDER_SELECT).eq('origin', 'my_library').eq('teacher_id', scope.teacherId),
+    supabase.from('library_folders').select(FOLDER_SELECT).eq('origin', 'my_library').eq('class_id', scope.classId).eq('subject', scope.subject).eq('is_public', true),
+    supabase.from('library_folders').select(FOLDER_SELECT).eq('subject', scope.subject).contains('shared_with_teachers', [scope.teacherId]),
+  ]);
+  const rows = [...(mineRes.data || []), ...(coTeacherRes.data || []), ...(sharedWithMeRes.data || [])];
+  return dedupe(rows.map(mapFolder));
+}
+
+export async function getMyLibraryFiles(scope: LibraryScope): Promise<LibraryFile[]> {
+  const [mineRes, coTeacherRes, sharedWithMeRes] = await Promise.all([
+    supabase.from('library_files').select(FILE_SELECT).eq('origin', 'my_library').eq('teacher_id', scope.teacherId),
+    supabase.from('library_files').select(FILE_SELECT).eq('origin', 'my_library').eq('class_id', scope.classId).eq('subject', scope.subject).eq('is_public', true),
+    supabase.from('library_files').select(FILE_SELECT).eq('subject', scope.subject).contains('shared_with_teachers', [scope.teacherId]),
+  ]);
+  const rows = [...(mineRes.data || []), ...(coTeacherRes.data || []), ...(sharedWithMeRes.data || [])];
+  return dedupe(rows.map(mapFile));
+}
+
+// عام الاستخدام العام (بيستخدمها LibraryDrawer عشان يجيب كل حاجة المعلم عنده بغض النظر عن المصدر)
+export async function getLibraryFiles(scope: LibraryScope): Promise<LibraryFile[]> {
+  const { data, error } = await supabase.from('library_files').select(FILE_SELECT).eq('class_id', scope.classId).eq('subject', scope.subject);
+  if (error) { console.error('Error fetching library files:', error); return []; }
+  return (data || []).map(mapFile);
+}
+
+export async function createLibraryFolder(scope: LibraryScope, input: { parentId: string | null; name: string; color: string; origin: 'material' | 'my_library' }): Promise<string | null> {
   const { data, error } = await supabase
     .from('library_folders')
     .insert({
@@ -86,7 +139,9 @@ export async function createLibraryFolder(scope: LibraryScope, input: { parentId
       parent_id: input.parentId,
       name: input.name,
       color: input.color,
-      is_public: input.isPublic,
+      is_public: false,
+      in_material: input.origin === 'material',
+      origin: input.origin,
     })
     .select('id')
     .single();
@@ -100,27 +155,52 @@ export async function createLibraryFolder(scope: LibraryScope, input: { parentId
 
 export async function deleteLibraryFolder(id: string): Promise<boolean> {
   const { error } = await supabase.from('library_folders').delete().eq('id', id);
-  if (error) {
-    console.error('Error deleting library folder:', error);
-    return false;
-  }
+  if (error) { console.error('Error deleting library folder:', error); return false; }
   return true;
 }
 
+// زر عام/خاص السريع: يبان لزميلك المعلم (نفس الفصل والمادة) ولا لأ — مش بينشر لـ Material
 export async function toggleFolderPrivacy(id: string, isPublic: boolean): Promise<boolean> {
   const { error } = await supabase.from('library_folders').update({ is_public: isPublic }).eq('id', id);
   return !error;
 }
 
-export async function updateFolderSharing(id: string, sharedWith: string[]): Promise<boolean> {
-  const { error } = await supabase.from('library_folders').update({ shared_with: sharedWith }).eq('id', id);
+export async function toggleFilePrivacy(id: string, isPublic: boolean): Promise<boolean> {
+  const { error } = await supabase.from('library_files').update({ is_public: isPublic }).eq('id', id);
   return !error;
 }
 
-// بيرفع الملف فعليًا لـ Supabase Storage، وبعدين بيسجّل بياناته في جدول library_files
+// زر "إضافة لـ Material" — بينشر بس لمادة المعلم ده نفسه، ومحدش غيره
+export async function addFolderToMaterial(id: string): Promise<boolean> {
+  const { error } = await supabase.from('library_folders').update({ in_material: true }).eq('id', id);
+  return !error;
+}
+export async function addFileToMaterial(id: string): Promise<boolean> {
+  const { error } = await supabase.from('library_files').update({ in_material: true }).eq('id', id);
+  return !error;
+}
+export async function removeFolderFromMaterial(id: string): Promise<boolean> {
+  const { error } = await supabase.from('library_folders').update({ in_material: false }).eq('id', id);
+  return !error;
+}
+export async function removeFileFromMaterial(id: string): Promise<boolean> {
+  const { error } = await supabase.from('library_files').update({ in_material: false }).eq('id', id);
+  return !error;
+}
+
+// مشاركة مع فصول تانية و/أو معلمين بالاسم
+export async function updateFolderSharing(id: string, sharedWithClasses: string[], sharedWithTeachers: string[]): Promise<boolean> {
+  const { error } = await supabase.from('library_folders').update({ shared_with: sharedWithClasses, shared_with_teachers: sharedWithTeachers }).eq('id', id);
+  return !error;
+}
+export async function updateFileSharing(id: string, sharedWithClasses: string[], sharedWithTeachers: string[]): Promise<boolean> {
+  const { error } = await supabase.from('library_files').update({ shared_with: sharedWithClasses, shared_with_teachers: sharedWithTeachers }).eq('id', id);
+  return !error;
+}
+
 export async function uploadLibraryFile(
   scope: LibraryScope,
-  input: { folderId: string | null; name: string; type: LibraryFile['type']; isPublic: boolean; author: string; file: File | null }
+  input: { folderId: string | null; name: string; type: LibraryFile['type']; author: string; file: File | null; origin: 'material' | 'my_library' }
 ): Promise<{ id: string | null; error: string | null }> {
   let storagePath: string | null = null;
   let sizeLabel = '1.5 MB';
@@ -147,8 +227,10 @@ export async function uploadLibraryFile(
       type: input.type,
       size_label: sizeLabel,
       storage_path: storagePath,
-      is_public: input.isPublic,
+      is_public: false,
+      in_material: input.origin === 'material',
       author_name: input.author,
+      origin: input.origin,
     })
     .select('id')
     .single();
@@ -158,6 +240,33 @@ export async function uploadLibraryFile(
     return { id: null, error: error?.message || 'Unknown error saving file record' };
   }
   return { id: data.id, error: null };
+}
+
+// بيضيف مصدر رسمي من منهج Talia 360 مباشرة لـ Material (بدون رفع حقيقي، بيسجّل بس مرجع URL)
+export async function addOfficialResourceToMaterial(scope: LibraryScope, resource: { title: string; type: string; url: string }): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('library_files')
+    .insert({
+      teacher_id: scope.teacherId,
+      class_id: scope.classId,
+      subject: scope.subject,
+      folder_id: null,
+      name: resource.title,
+      type: (resource.type || 'link').toLowerCase().includes('video') ? 'video' : (resource.type || '').toLowerCase().includes('link') ? 'other' : 'pdf',
+      size_label: '',
+      storage_path: null,
+      is_public: false,
+      in_material: true,
+      author_name: 'المنهج الرسمي',
+      origin: 'material',
+    })
+    .select('id')
+    .single();
+  if (error || !data) {
+    console.error('Error adding official resource to material:', error);
+    return null;
+  }
+  return data.id;
 }
 
 export function getLibraryFileDownloadUrl(storagePath: string): string {
@@ -170,26 +279,23 @@ export async function deleteLibraryFile(id: string, storagePath: string | null):
     await supabase.storage.from('library-files').remove([storagePath]);
   }
   const { error } = await supabase.from('library_files').delete().eq('id', id);
-  if (error) {
-    console.error('Error deleting library file:', error);
-    return false;
-  }
+  if (error) { console.error('Error deleting library file:', error); return false; }
   return true;
 }
 
-export async function toggleFilePrivacy(id: string, isPublic: boolean): Promise<boolean> {
-  const { error } = await supabase.from('library_files').update({ is_public: isPublic }).eq('id', id);
-  return !error;
-}
-
-export async function updateFileSharing(id: string, sharedWith: string[]): Promise<boolean> {
-  const { error } = await supabase.from('library_files').update({ shared_with: sharedWith }).eq('id', id);
-  return !error;
-}
-
-// بيجيب كل الفصول الحقيقية بتاعة نفس المعلم (لخيار "شير مع كل فصولي")
+// بيجيب كل الفصول الحقيقية بتاعة نفس المعلم (لخيار "شير مع فصولي")
 export async function getTeacherClassNames(teacherId: string): Promise<{ id: string; name: string }[]> {
   const { data, error } = await supabase.from('class_sections').select('id, name').eq('teacher_id', teacherId);
   if (error) return [];
   return data || [];
+}
+
+// بيجيب باقي المعلمين اللي بيدرّسوا نفس المادة (في أي صف) — لخيار "شير مع معلم بالاسم"
+export async function getTeachersForSubject(subject: string, excludeTeacherId: string): Promise<{ id: string; name: string }[]> {
+  const { data: subjectRows, error } = await supabase.from('teacher_subjects').select('teacher_id').eq('subject', subject);
+  if (error || !subjectRows) return [];
+  const teacherIds = Array.from(new Set(subjectRows.map((r: any) => r.teacher_id))).filter((id) => id !== excludeTeacherId);
+  if (teacherIds.length === 0) return [];
+  const { data: teacherRows } = await supabase.from('teachers').select('id, user_id, users ( name )').in('id', teacherIds);
+  return (teacherRows || []).map((row: any) => ({ id: row.id, name: row.users?.name || '' }));
 }

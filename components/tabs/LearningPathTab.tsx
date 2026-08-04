@@ -384,7 +384,7 @@ export function LearningPathTab({
       </div>
 
       {contentView === 'material' || contentView === 'my-library' ? (
-        <BrowseLibraryTab language={language} role={viewRole?.toLowerCase() || 'student'} teacherId={teacherId} classId={classId} subject={subject} forcedMode={contentView === 'material' ? 'material' : 'my-library'} />
+        <BrowseLibraryTab language={language} role={viewRole?.toLowerCase() || 'student'} teacherId={teacherId} classId={classId} subject={subject} grade={grade} forcedMode={contentView === 'material' ? 'material' : 'my-library'} />
       ) : (
         <>
           {/* Units List */}

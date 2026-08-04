@@ -7,34 +7,16 @@ import {
   FileSpreadsheet, Film, Copy, Check, Palette, ArrowLeft, Layers, ShieldCheck
 } from 'lucide-react';
 import {
-  getLibraryFolders, getLibraryFiles, createLibraryFolder, deleteLibraryFolder,
-  toggleFolderPrivacy as toggleFolderPrivacyReal, updateFolderSharing,
+  getMaterialFolders, getMaterialFiles, getMyLibraryFolders, getMyLibraryFiles,
+  createLibraryFolder, deleteLibraryFolder,
+  toggleFolderPrivacy as toggleFolderPrivacyReal, toggleFilePrivacy as toggleFilePrivacyReal,
+  addFolderToMaterial, addFileToMaterial, removeFolderFromMaterial, removeFileFromMaterial,
+  updateFolderSharing, updateFileSharing,
   uploadLibraryFile, getLibraryFileDownloadUrl, deleteLibraryFile,
-  toggleFilePrivacy as toggleFilePrivacyReal, updateFileSharing, getTeacherClassNames,
+  getTeacherClassNames, getTeachersForSubject, addOfficialResourceToMaterial,
+  LibraryFolder, LibraryFile,
 } from '@/services/libraryData';
-
-export interface LibraryFolder {
-  id: string;
-  parentId: string | null;
-  name: string;
-  color: string; // 'indigo' | 'emerald' | 'amber' | 'rose' | 'purple' | 'cyan' | 'blue' | 'slate'
-  createdAt: string;
-  isPublic: boolean;
-  sharedWith?: string[];
-}
-
-export interface LibraryFile {
-  id: string;
-  folderId: string | null;
-  name: string;
-  type: 'pdf' | 'doc' | 'slides' | 'sheet' | 'image' | 'video' | 'archive' | 'code' | 'other';
-  size: string;
-  createdAt: string;
-  isPublic: boolean;
-  author: string;
-  sharedWith?: string[];
-  storagePath?: string | null;
-}
+import { getOfficialCurriculumResources } from '@/services/academicData';
 
 const colorThemeMap: Record<string, { bg: string; border: string; text: string; iconBg: string; activeRing: string }> = {
   indigo: { bg: 'bg-indigo-50/70', border: 'border-indigo-200 hover:border-indigo-400', text: 'text-indigo-700', iconBg: 'bg-indigo-100 text-indigo-600', activeRing: 'ring-indigo-500' },
@@ -47,7 +29,7 @@ const colorThemeMap: Record<string, { bg: string; border: string; text: string; 
   slate: { bg: 'bg-slate-100/70', border: 'border-slate-300 hover:border-slate-400', text: 'text-slate-700', iconBg: 'bg-slate-200 text-slate-700', activeRing: 'ring-slate-500' },
 };
 
-export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId, classId, subject, forcedMode }: { language?: 'en' | 'ar', role?: string, teacherId?: string, classId?: string, subject?: string, forcedMode?: 'material' | 'my-library' }) {
+export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId, classId, subject, grade, forcedMode }: { language?: 'en' | 'ar', role?: string, teacherId?: string, classId?: string, subject?: string, grade?: string, forcedMode?: 'material' | 'my-library' }) {
   const isRtl = language === 'ar';
   
   // State
@@ -55,12 +37,15 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   const [files, setFiles] = useState<LibraryFile[]>([]);
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(true);
   const [targetClasses, setTargetClasses] = useState<{ id: string; name: string; arName: string }[]>([]);
+  const [targetTeachers, setTargetTeachers] = useState<{ id: string; name: string }[]>([]);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [typeFilter, setTypeFilter] = useState<string>('all');
-  // material = اللي بيبان للطلاب (عام)، my-library = مساحة المعلم الخاصة (كل حاجة، عام وخاص)
+  // material = اللي بيبان للطلاب، my-library = مساحة المعلم الخاصة
   const [libraryMode, setLibraryMode] = useState<'material' | 'my-library'>(forcedMode || (role === 'teacher' ? 'my-library' : 'material'));
+  const [isOfficialPickerOpen, setIsOfficialPickerOpen] = useState(false);
+  const [officialResources, setOfficialResources] = useState<{ id: string; title: string; type: string; url: string }[]>([]);
 
   useEffect(() => {
     if (forcedMode) setLibraryMode(forcedMode);
@@ -71,17 +56,20 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   const refreshLibrary = () => {
     if (!scope) return;
     setIsLoadingLibrary(true);
-    Promise.all([getLibraryFolders(scope), getLibraryFiles(scope), getTeacherClassNames(scope.teacherId)]).then(([f, files_, classes]) => {
-      setFolders(f as any);
-      setFiles(files_ as any);
+    const foldersPromise = libraryMode === 'material' ? getMaterialFolders(scope) : getMyLibraryFolders(scope);
+    const filesPromise = libraryMode === 'material' ? getMaterialFiles(scope) : getMyLibraryFiles(scope);
+    Promise.all([foldersPromise, filesPromise, getTeacherClassNames(scope.teacherId), getTeachersForSubject(scope.subject, scope.teacherId)]).then(([f, files_, classes, teachers]) => {
+      setFolders(f);
+      setFiles(files_);
       setTargetClasses(classes.map(c => ({ id: c.id, name: c.name, arName: c.name })));
+      setTargetTeachers(teachers);
       setIsLoadingLibrary(false);
     });
   };
 
   useEffect(() => {
     refreshLibrary();
-  }, [scope?.classId, scope?.subject]);
+  }, [scope?.classId, scope?.subject, libraryMode]);
   
   // Modals
   const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
@@ -92,18 +80,17 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   // Form State
   const [newFolderName, setNewFolderName] = useState('');
   const [newFolderColor, setNewFolderColor] = useState('indigo');
-  const [newFolderPublic, setNewFolderPublic] = useState(true);
 
   const [uploadName, setUploadName] = useState('');
   const [uploadType, setUploadType] = useState<LibraryFile['type']>('pdf');
   const [uploadFileObj, setUploadFileObj] = useState<File | null>(null);
   const [uploadTargetFolder, setUploadTargetFolder] = useState<string | null>(currentFolderId);
-  const [uploadPublic, setUploadPublic] = useState(true);
   const [uploadError, setUploadError] = useState('');
   const [isUploading, setIsUploading] = useState(false);
 
   // Share Modal State
   const [selectedTargetLibs, setSelectedTargetLibs] = useState<string[]>([]);
+  const [selectedTargetTeachers, setSelectedTargetTeachers] = useState<string[]>([]);
   const [shareLinkCopied, setShareLinkCopied] = useState(false);
   const [shareSuccessToast, setShareSuccessToast] = useState(false);
 
@@ -134,10 +121,9 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
       const matchesDir = searchQuery ? true : f.parentId === currentFolderId;
       const matchesSearch = f.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesType = typeFilter === 'all' || typeFilter === 'folder';
-      const matchesMode = libraryMode === 'my-library' ? true : f.isPublic;
-      return matchesDir && matchesSearch && matchesType && matchesMode;
+      return matchesDir && matchesSearch && matchesType;
     });
-  }, [folders, currentFolderId, searchQuery, typeFilter, libraryMode]);
+  }, [folders, currentFolderId, searchQuery, typeFilter]);
 
   // Filtered Files in active directory
   const currentFiles = useMemo(() => {
@@ -150,8 +136,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
         : typeFilter === 'media' ? ['image', 'video'].includes(f.type)
         : typeFilter === 'sheet' ? ['sheet', 'slides'].includes(f.type)
         : f.type === typeFilter;
-      const matchesMode = libraryMode === 'my-library' ? true : f.isPublic;
-      return matchesDir && matchesSearch && matchesType && matchesMode;
+      return matchesDir && matchesSearch && matchesType;
     });
   }, [files, currentFolderId, searchQuery, typeFilter, libraryMode]);
 
@@ -164,7 +149,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
       parentId: currentFolderId,
       name: newFolderName.trim(),
       color: newFolderColor,
-      isPublic: newFolderPublic,
+      origin: libraryMode === 'my-library' ? 'my_library' : 'material',
     });
 
     if (id) {
@@ -172,7 +157,6 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
       setIsNewFolderOpen(false);
       setNewFolderName('');
       setNewFolderColor('indigo');
-      setNewFolderPublic(true);
     }
   };
 
@@ -199,9 +183,9 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
       folderId: uploadTargetFolder,
       name: fname,
       type: detectedType,
-      isPublic: uploadPublic,
       author: role === 'teacher' ? 'You (Teacher)' : 'Student',
       file: uploadFileObj,
+      origin: libraryMode === 'my-library' ? 'my_library' : 'material',
     });
 
     setIsUploading(false);
@@ -210,7 +194,6 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
       setIsUploadOpen(false);
       setUploadName('');
       setUploadFileObj(null);
-      setUploadPublic(true);
     } else {
       setUploadError(error || (isRtl ? 'حصل خطأ أثناء الرفع.' : 'Upload failed.'));
     }
@@ -252,7 +235,8 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   const openShareModal = (item: LibraryFolder | LibraryFile, isFolder: boolean, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setShareItem({ item, isFolder });
-    setSelectedTargetLibs(item.sharedWith || []);
+    setSelectedTargetLibs(item.sharedWithClasses || []);
+    setSelectedTargetTeachers(item.sharedWithTeachers || []);
     setShareLinkCopied(false);
   };
 
@@ -260,8 +244,8 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
     if (!shareItem) return;
     const { item, isFolder } = shareItem;
     const ok = isFolder
-      ? await updateFolderSharing(item.id, selectedTargetLibs)
-      : await updateFileSharing(item.id, selectedTargetLibs);
+      ? await updateFolderSharing(item.id, selectedTargetLibs, selectedTargetTeachers)
+      : await updateFileSharing(item.id, selectedTargetLibs, selectedTargetTeachers);
     if (ok) {
       refreshLibrary();
       setShareSuccessToast(true);
@@ -270,6 +254,18 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
         setShareItem(null);
       }, 1200);
     }
+  };
+
+  const toggleFolderInMaterial = async (folder: LibraryFolder, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const ok = folder.inMaterial ? await removeFolderFromMaterial(folder.id) : await addFolderToMaterial(folder.id);
+    if (ok) refreshLibrary();
+  };
+
+  const toggleFileInMaterial = async (file: LibraryFile, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const ok = file.inMaterial ? await removeFileFromMaterial(file.id) : await addFileToMaterial(file.id);
+    if (ok) refreshLibrary();
   };
 
   const renderFileIcon = (type: LibraryFile['type']) => {
@@ -328,16 +324,6 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
                 ))}
               </div>
 
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 mb-6">
-                <div>
-                  <p className="text-sm font-bold text-slate-800">{isRtl ? 'الظهور' : 'Visibility Setting'}</p>
-                  <p className="text-[11px] text-slate-400">{newFolderPublic ? (isRtl ? 'ظاهر للطلاب' : 'Visible to students') : (isRtl ? 'خاص بيك بس' : 'Private to you')}</p>
-                </div>
-                <button type="button" onClick={() => setNewFolderPublic(!newFolderPublic)} className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 ${newFolderPublic ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
-                  {newFolderPublic ? <Globe size={13} /> : <Lock size={13} />} {newFolderPublic ? 'Public' : 'Private'}
-                </button>
-              </div>
-
               <div className="flex gap-3">
                 <button type="button" onClick={() => setIsNewFolderOpen(false)} className="flex-1 py-3 rounded-xl border border-slate-200 font-bold text-sm text-slate-600">{isRtl ? 'إلغاء' : 'Cancel'}</button>
                 <button type="submit" className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm">{isRtl ? 'إنشاء المجلد' : 'Create Folder'}</button>
@@ -376,16 +362,6 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
                 <option value="">{isRtl ? 'المكتبة الرئيسية (بدون مجلد)' : 'Root Library (No Folder)'}</option>
                 {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
-
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 mb-6">
-                <div>
-                  <p className="text-sm font-bold text-slate-800">{isRtl ? 'الظهور' : 'Privacy'}</p>
-                  <p className="text-[11px] text-slate-400">{uploadPublic ? (isRtl ? 'ظاهر للطلاب' : 'Public to students') : (isRtl ? 'خاص بيك بس' : 'Private to you')}</p>
-                </div>
-                <button type="button" onClick={() => setUploadPublic(!uploadPublic)} className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 ${uploadPublic ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
-                  {uploadPublic ? <Globe size={13} /> : <Lock size={13} />} {uploadPublic ? 'Public' : 'Private'}
-                </button>
-              </div>
 
               {uploadError && (
                 <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 mb-4">{uploadError}</p>
@@ -438,20 +414,62 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
                 {targetClasses.length === 0 && <p className="text-xs text-slate-400 py-2">{isRtl ? 'مفيش فصول تانية عندك لسه.' : 'No other classes yet.'}</p>}
               </div>
 
-              <label className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 mb-6 cursor-pointer">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck size={16} className="text-slate-400" />
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">{isRtl ? 'عام' : 'Public'}</p>
-                    <p className="text-[11px] text-slate-400">{isRtl ? 'يظهر في مكتبات المعلمين التانيين' : 'Visible in other teachers’ libraries'}</p>
-                  </div>
-                </div>
-                <input type="checkbox" checked={selectedTargetLibs.includes('public')} onChange={() => setSelectedTargetLibs((prev) => prev.includes('public') ? prev.filter((x) => x !== 'public') : [...prev, 'public'])} className="accent-indigo-600 w-4 h-4" />
-              </label>
+              <label className="block text-xs font-bold text-slate-500 mb-2">{isRtl ? 'شارك مع معلمين (نفس المادة)' : 'Share with Teachers (same subject)'}</label>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto mb-6">
+                {targetTeachers.map((t) => (
+                  <label key={t.id} className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-50">
+                    <span className="flex items-center gap-2.5 text-xs font-medium text-slate-700">
+                      <input type="checkbox" checked={selectedTargetTeachers.includes(t.id)} onChange={() => setSelectedTargetTeachers((prev) => prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id])} className="accent-indigo-600" />
+                      {t.name}
+                    </span>
+                  </label>
+                ))}
+                {targetTeachers.length === 0 && <p className="text-xs text-slate-400 py-2">{isRtl ? 'مفيش معلمين تانيين بيدرّسوا نفس المادة لسه.' : 'No other teachers of this subject yet.'}</p>}
+              </div>
 
               <div className="flex gap-3">
                 <button onClick={() => setShareItem(null)} className="flex-1 py-3 rounded-xl border border-slate-200 font-bold text-sm text-slate-600">{isRtl ? 'إلغاء' : 'Cancel'}</button>
                 <button onClick={handleSaveShare} className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm">{isRtl ? 'حفظ المشاركة' : 'Save & Update Sharing'}</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Official Library Picker */}
+      <AnimatePresence>
+        {isOfficialPickerOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4">
+            <motion.div initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[80vh] flex flex-col">
+              <div className="flex justify-between items-center mb-5">
+                <div className="flex items-center gap-2">
+                  <Book className="text-indigo-600" size={20} />
+                  <h3 className="font-bold text-lg text-slate-900">{isRtl ? 'المكتبة الرسمية' : 'Official Library'}</h3>
+                </div>
+                <button onClick={() => setIsOfficialPickerOpen(false)} className="text-slate-400 hover:text-slate-700"><X size={20} /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-2">
+                {officialResources.length === 0 && (
+                  <p className="text-center text-sm text-slate-400 py-10">{isRtl ? 'مفيش موارد رسمية للمادة دي لسه.' : 'No official resources for this subject yet.'}</p>
+                )}
+                {officialResources.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-800 truncate">{r.title}</p>
+                      <p className="text-[11px] text-slate-400 uppercase">{r.type}</p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!scope) return;
+                        const id = await addOfficialResourceToMaterial(scope, r);
+                        if (id) refreshLibrary();
+                      }}
+                      className="shrink-0 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold"
+                    >
+                      {isRtl ? 'إضافة' : 'Add'}
+                    </button>
+                  </div>
+                ))}
               </div>
             </motion.div>
           </motion.div>
@@ -479,8 +497,20 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
+            {libraryMode === 'material' && role === 'teacher' && (
+              <button
+                onClick={() => {
+                  if (grade && subject) getOfficialCurriculumResources(grade, subject).then(setOfficialResources);
+                  setIsOfficialPickerOpen(true);
+                }}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-indigo-700 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-indigo-200"
+              >
+                <Book size={16} />
+                <span>{isRtl ? 'من المكتبة الرسمية' : 'From Official Library'}</span>
+              </button>
+            )}
             <button
-              onClick={() => { setNewFolderPublic(libraryMode === 'material'); setIsNewFolderOpen(true); }}
+              onClick={() => { setIsNewFolderOpen(true); }}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-slate-200"
             >
               <FolderPlus size={16} className="text-indigo-600" />
@@ -490,7 +520,6 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
             <button
               onClick={() => {
                 setUploadTargetFolder(currentFolderId);
-                setUploadPublic(libraryMode === 'material');
                 setIsUploadOpen(true);
               }}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm"
@@ -619,38 +648,89 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
                     <Folder size={14} />
                     <span>{isRtl ? 'المجلدات' : 'Folders'} ({currentFolders.length})</span>
                   </h2>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                    {currentFolders.map((folder) => {
-                      const theme = colorThemeMap[folder.color] || colorThemeMap.indigo;
-                      const folderFilesCount = files.filter(f => f.folderId === folder.id).length;
-                      return (
-                        <div
-                          key={folder.id}
-                          onClick={() => setCurrentFolderId(folder.id)}
-                          className="group relative p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition-all cursor-pointer flex flex-col items-center text-center gap-2"
-                        >
-                          <Folder size={44} className={theme.text} fill="currentColor" fillOpacity={0.15} strokeWidth={1.5} />
-                          <div className="min-w-0 w-full">
-                            <h3 className="font-bold text-sm text-slate-800 truncate">{folder.name}</h3>
-                            <p className="text-[11px] text-slate-400">{folderFilesCount} {isRtl ? 'عنصر' : 'items'}</p>
-                          </div>
+                  {libraryMode === 'material' ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      {currentFolders.map((folder) => {
+                        const theme = colorThemeMap[folder.color] || colorThemeMap.indigo;
+                        const folderFilesCount = files.filter(f => f.folderId === folder.id).length;
+                        return (
+                          <div
+                            key={folder.id}
+                            onClick={() => setCurrentFolderId(folder.id)}
+                            className="group relative p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition-all cursor-pointer flex flex-col items-center text-center gap-2"
+                          >
+                            <Folder size={44} className={theme.text} fill="currentColor" fillOpacity={0.15} strokeWidth={1.5} />
+                            <div className="min-w-0 w-full">
+                              <h3 className="font-bold text-sm text-slate-800 truncate">{folder.name}</h3>
+                              <p className="text-[11px] text-slate-400">{folderFilesCount} {isRtl ? 'عنصر' : 'items'}</p>
+                            </div>
 
-                          <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                            <button onClick={(e) => toggleFolderPrivacy(folder.id, e)} className="p-1.5 rounded-lg bg-white shadow-sm border border-slate-100 text-slate-500 hover:text-slate-800">
-                              {folder.isPublic ? <Globe size={12} /> : <Lock size={12} />}
-                            </button>
-                            <button onClick={(e) => openShareModal(folder, true, e)} className="p-1.5 rounded-lg bg-white shadow-sm border border-slate-100 text-slate-500 hover:text-indigo-600">
-                              <Share2 size={12} />
-                            </button>
-                            <button onClick={(e) => deleteFolder(folder.id, e)} className="p-1.5 rounded-lg bg-white shadow-sm border border-slate-100 text-slate-500 hover:text-rose-600">
-                              <Trash2 size={12} />
-                            </button>
+                            <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                              <button onClick={(e) => toggleFolderPrivacy(folder.id, e)} className="p-1.5 rounded-lg bg-white shadow-sm border border-slate-100 text-slate-500 hover:text-slate-800">
+                                {folder.isPublic ? <Globe size={12} /> : <Lock size={12} />}
+                              </button>
+                              <button onClick={(e) => openShareModal(folder, true, e)} className="p-1.5 rounded-lg bg-white shadow-sm border border-slate-100 text-slate-500 hover:text-indigo-600">
+                                <Share2 size={12} />
+                              </button>
+                              <button onClick={(e) => deleteFolder(folder.id, e)} className="p-1.5 rounded-lg bg-white shadow-sm border border-slate-100 text-slate-500 hover:text-rose-600">
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {currentFolders.map((folder) => {
+                        const theme = colorThemeMap[folder.color] || colorThemeMap.indigo;
+                        const folderFilesCount = files.filter(f => f.folderId === folder.id).length;
+                        return (
+                          <div
+                            key={folder.id}
+                            onClick={() => setCurrentFolderId(folder.id)}
+                            className={`group relative p-4 rounded-2xl border ${theme.border} ${theme.bg} transition-all duration-200 shadow-2xs hover:shadow-md cursor-pointer flex flex-col justify-between h-[135px]`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${theme.iconBg} shadow-xs`}>
+                                  <Folder size={20} />
+                                </div>
+                                <div className="min-w-0">
+                                  <h3 className={`font-bold text-sm ${theme.text} truncate`}>{folder.name}</h3>
+                                  <p className="text-[11px] text-slate-400 font-medium">{folderFilesCount} items</p>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="pt-3 border-t border-black/5 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+                              <div className="flex items-center gap-1.5">
+                                <button onClick={(e) => toggleFolderPrivacy(folder.id, e)} className="p-1 rounded-md transition-colors bg-slate-200/80 hover:bg-slate-300">
+                                  {folder.isPublic ? <Globe size={12} /> : <Lock size={12} />}
+                                </button>
+                                <span>Created {folder.createdAt}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={(e) => toggleFolderInMaterial(folder, e)}
+                                  title={folder.inMaterial ? (isRtl ? 'موجود في Material' : 'In Material') : (isRtl ? 'إضافة لـ Material' : 'Add to Material')}
+                                  className={`px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 ${folder.inMaterial ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200/80 text-slate-600 hover:bg-slate-300'}`}
+                                >
+                                  <Book size={11} /> {folder.inMaterial ? (isRtl ? 'في Material' : 'In Material') : (isRtl ? 'أضف لـ Material' : 'Add to Material')}
+                                </button>
+                                <button onClick={(e) => openShareModal(folder, true, e)} className="p-1 text-slate-500 hover:text-indigo-600 rounded-md">
+                                  <Share2 size={13} />
+                                </button>
+                                <button onClick={(e) => deleteFolder(folder.id, e)} className="p-1 text-slate-400 hover:text-rose-600 rounded-md">
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   </div>
-                </div>
               )}
 
               {/* File Cards */}
@@ -675,10 +755,20 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
                           </div>
                         </div>
                         <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-                          <button onClick={(e) => toggleFilePrivacy(file.id, e)} className="p-1 px-2 rounded-md text-[10px] font-bold flex items-center gap-1 bg-slate-100">
-                            {file.isPublic ? <Globe size={11} /> : <Lock size={11} />}
-                            <span>{file.isPublic ? 'Public' : 'Private'}</span>
-                          </button>
+                          {libraryMode === 'my-library' ? (
+                            <div className="flex items-center gap-1">
+                              <button onClick={(e) => toggleFilePrivacy(file.id, e)} title={isRtl ? 'يبان لزميلك المعلم' : 'Visible to co-teacher'} className="p-1 px-2 rounded-md text-[10px] font-bold flex items-center gap-1 bg-slate-100">
+                                {file.isPublic ? <Globe size={11} /> : <Lock size={11} />}
+                              </button>
+                              <button
+                                onClick={(e) => toggleFileInMaterial(file, e)}
+                                title={file.inMaterial ? (isRtl ? 'موجود في Material' : 'In Material') : (isRtl ? 'إضافة لـ Material' : 'Add to Material')}
+                                className={`px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 ${file.inMaterial ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                              >
+                                <Book size={11} /> {file.inMaterial ? (isRtl ? 'في Material' : 'In Material') : (isRtl ? 'أضف لـ Material' : 'Add to Material')}
+                              </button>
+                            </div>
+                          ) : <span />}
                           <div className="flex items-center gap-1">
                             <button onClick={() => file.storagePath ? window.open(getLibraryFileDownloadUrl(file.storagePath), '_blank') : setPreviewFile(file)} className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg">
                               <Eye size={14} />
