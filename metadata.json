@@ -1,0 +1,6 @@
+{
+  "name": "Talia Kids - Educational Platform",
+  "description": "A modern, course-centric Learning Management System with Class Space and distinct Health & Skills data tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

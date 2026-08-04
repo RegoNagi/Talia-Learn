@@ -1,0 +1,105 @@
+import { supabase } from '@/lib/supabaseClient';
+
+export type LearnRole = 'teacher' | 'student' | 'parent';
+
+export interface AuthenticatedUser {
+  userId: string;
+  name: string;
+  role: LearnRole;
+  email: string;
+  // نطاق البيانات الخاص بكل دور
+  teacherId?: string;
+  subjects?: string[];       // للمعلم: المواد اللي بيدرّسها
+  grades?: string[];         // للمعلم: الصفوف اللي بيدرّسها
+  studentId?: string;
+  studentGrade?: string;     // للطالب: صفّه هو
+  parentId?: string;
+  childStudentIds?: string[]; // لولي الأمر: أبناؤه
+}
+
+// بيسجّل الدخول بإيميل وباسورد حقيقيين (نفس حسابات Talia 360)، وبيرجّع نطاق البيانات المناسب لدوره
+export async function loginToTaliaLearn(email: string, password: string): Promise<AuthenticatedUser | null> {
+  const { data: userRow, error } = await supabase
+    .from('users')
+    .select('id, name, role, email')
+    .eq('email', email)
+    .eq('password', password)
+    .maybeSingle();
+
+  if (error || !userRow) {
+    return null;
+  }
+
+  const roleUpper = (userRow.role || '').toUpperCase();
+
+  if (roleUpper === 'TEACHER') {
+    const { data: teacherRow } = await supabase
+      .from('teachers')
+      .select('id')
+      .eq('user_id', userRow.id)
+      .maybeSingle();
+
+    if (!teacherRow) return null;
+
+    const [{ data: subjectRows }, { data: gradeRows }] = await Promise.all([
+      supabase.from('teacher_subjects').select('subject').eq('teacher_id', teacherRow.id),
+      supabase.from('teacher_grades').select('grade').eq('teacher_id', teacherRow.id),
+    ]);
+
+    return {
+      userId: userRow.id,
+      name: userRow.name,
+      role: 'teacher',
+      email: userRow.email,
+      teacherId: teacherRow.id,
+      subjects: (subjectRows || []).map((r: any) => r.subject),
+      grades: (gradeRows || []).map((r: any) => r.grade),
+    };
+  }
+
+  if (roleUpper === 'STUDENT') {
+    const { data: studentRow } = await supabase
+      .from('students')
+      .select('id, grade')
+      .eq('user_id', userRow.id)
+      .maybeSingle();
+
+    if (!studentRow) return null;
+
+    return {
+      userId: userRow.id,
+      name: userRow.name,
+      role: 'student',
+      email: userRow.email,
+      studentId: studentRow.id,
+      studentGrade: studentRow.grade,
+    };
+  }
+
+  if (roleUpper === 'PARENT') {
+    const { data: parentRow } = await supabase
+      .from('parents')
+      .select('id')
+      .eq('user_id', userRow.id)
+      .maybeSingle();
+
+    if (!parentRow) return null;
+
+    const { data: linkRows } = await supabase
+      .from('parent_students')
+      .select('student_id')
+      .eq('parent_id', parentRow.id);
+
+    return {
+      userId: userRow.id,
+      name: userRow.name,
+      role: 'parent',
+      email: userRow.email,
+      parentId: parentRow.id,
+      childStudentIds: (linkRows || []).map((r: any) => r.student_id),
+    };
+  }
+
+  // أي دور تاني (أدمن مثلًا) مش من أدوار Talia Learn
+  return null;
+}
