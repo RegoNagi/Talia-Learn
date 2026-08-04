@@ -12,6 +12,7 @@ import { EarlyWarningRadar } from '@/components/EarlyWarningRadar';
 import { ClassRoster } from '@/components/ClassRoster';
 import { EducationalCalendar } from '@/components/EducationalCalendar';
 import { TeacherDashboard } from '@/components/TeacherDashboard';
+import { TakeAttendance } from '@/components/TakeAttendance';
 import { loginToTaliaLearn, AuthenticatedUser } from '@/services/auth';
 import { ArrowRight, Clock, Globe, Laptop, BookOpen, Layers, BrainCircuit, Building, BarChart2, Calendar, AlertCircle, Compass, Zap, Sun, CalendarRange, Users, ChevronRight, ChevronLeft, Bell, Menu, X, CheckCircle2, CheckSquare, Filter } from 'lucide-react';
 
@@ -402,6 +403,8 @@ export default function Dashboard() {
                   <EarlyWarningRadar language={language} />
                 ) : activeSpace === 'roster' ? (
                   <ClassRoster language={language} />
+                ) : activeSpace === 'attendance' && authUser?.teacherId ? (
+                  <TakeAttendance language={language} teacherId={authUser.teacherId} />
                 ) : activeSpace === 'calendar' ? (
                   <EducationalCalendar language={language} />
                 ) : activeSpace === 'home' ? (

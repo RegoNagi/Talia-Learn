@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Home, Building, Database, LogOut, Globe, Users, ListVideo, MessageSquare, Activity, Calendar, BookOpen, X } from 'lucide-react';
+import { Home, Building, Database, LogOut, Globe, Users, ListVideo, MessageSquare, Activity, Calendar, BookOpen, X, ClipboardCheck } from 'lucide-react';
 import taliaLogo from '@/assets/talia-learn-logo.png';
 
 const dict = {
@@ -13,6 +13,7 @@ const dict = {
     messages: 'مركز الرسائل',
     radar: 'رادار التحذير',
     roster: 'قائمة طلاب الفصل',
+    attendance: 'تسجيل الحضور',
     calendar: 'التقويم',
     activityStream: 'مسار الأنشطة',
     questionBank: 'بنك الأسئلة',
@@ -26,6 +27,7 @@ const dict = {
     messages: 'Messages',
     radar: 'Early Warning Radar',
     roster: 'Class Roster',
+    attendance: 'Take Attendance',
     calendar: 'Calendar',
     activityStream: 'Activity Stream',
     questionBank: 'Question Bank',
@@ -174,6 +176,15 @@ export function GlobalSidebar({
             label={t.roster} 
             active={activeSpace === 'roster'}
             onClick={() => handleNavClick(() => onSpaceSelect?.('roster'))} 
+          />
+        )}
+
+        {isTeacher && (
+          <NavItem 
+            icon={<ClipboardCheck size={20} />} 
+            label={t.attendance} 
+            active={activeSpace === 'attendance'}
+            onClick={() => handleNavClick(() => onSpaceSelect?.('attendance'))} 
           />
         )}
         
