@@ -344,17 +344,19 @@ export function AssessmentSidebar({
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <label className="text-xs font-bold text-slate-600">{t.maxScore}</label>
-                    <button 
-                      onClick={() => setIsAutoCalc(!isAutoCalc)}
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-colors ${isAutoCalc ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'}`}
-                    >
-                      {isAutoCalc ? t.autoCalcOn : t.manual}
-                    </button>
+                    {activeTab === 'quiz' && (
+                      <button 
+                        onClick={() => setIsAutoCalc(!isAutoCalc)}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-colors ${isAutoCalc ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'}`}
+                      >
+                        {isAutoCalc ? t.autoCalcOn : t.manual}
+                      </button>
+                    )}
                   </div>
                   <input 
                     type="number" 
                     value={maxScore}
-                    disabled={isAutoCalc}
+                    disabled={activeTab === 'quiz' && isAutoCalc}
                     onChange={(e) => setMaxScore(parseInt(e.target.value))}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold text-slate-700 disabled:opacity-50 focus:ring-2 focus:ring-orange-100 outline-none"
                   />

@@ -367,10 +367,10 @@ function AssessmentBuilderContent() {
         <div className="flex-1 overflow-y-auto bg-[#FAFAFA]">
           <div className="p-8 max-w-2xl mx-auto flex flex-col gap-6 w-full">
             <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2">
-              <Eye size={14} /> {language === 'ar' ? 'معاينة كطالب — كده هيشوفها الطالب بالظبط' : 'Student Preview — this is exactly what a student will see'}
+              <Eye size={14} /> معاينة كطالب — كده هيشوفها الطالب بالظبط
             </div>
             <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-              <h2 className="text-2xl font-bold text-slate-800 mb-2">{title || (language === 'ar' ? 'بدون عنوان' : 'Untitled Assignment')}</h2>
+              <h2 className="text-2xl font-bold text-slate-800 mb-2">{title || 'بدون عنوان'}</h2>
               {dueDate && (
                 <div className="flex items-center gap-4 text-sm text-slate-500 mb-8 font-medium">
                   <span className="flex items-center gap-1"><AlertCircle size={16}/> Due: {new Date(`${dueDate}T${dueTime || '23:59'}`).toLocaleString()}</span>
@@ -378,7 +378,7 @@ function AssessmentBuilderContent() {
               )}
               <div className="mb-8">
                 <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-2">Instructions</h3>
-                <p className="text-slate-600 leading-relaxed text-lg whitespace-pre-wrap">{instructionsText || (language === 'ar' ? 'مفيش تعليمات لسه.' : 'No instructions yet.')}</p>
+                <p className="text-slate-600 leading-relaxed text-lg whitespace-pre-wrap">{instructionsText || 'مفيش تعليمات لسه.'}</p>
               </div>
               {attachments.length > 0 && (
                 <div className="mb-8">
