@@ -6,6 +6,7 @@ export interface LearnUnit {
   weeksLabel: string;
   displayOrder: number;
   isHidden: boolean;
+  isComplete: boolean;
   sharedWith: string[];
 }
 
@@ -19,6 +20,8 @@ export interface LearnLesson {
   libraryFileId: string | null;
   storagePath: string | null;
   displayOrder: number;
+  isHidden: boolean;
+  isComplete: boolean;
 }
 
 interface UnitScope {
@@ -27,23 +30,47 @@ interface UnitScope {
   subject: string;
 }
 
-// Modules (الوحدات) — بتجيب بتاعة الفصل ده + أي حاجة اتشاركت من فصول تانية
-export async function getUnits(scope: UnitScope): Promise<LearnUnit[]> {
-  const [ownRes, sharedRes] = await Promise.all([
-    supabase.from('learning_units').select('id, title, weeks_label, display_order, is_hidden, shared_with').eq('class_id', scope.classId).eq('subject', scope.subject),
-    supabase.from('learning_units').select('id, title, weeks_label, display_order, is_hidden, shared_with').contains('shared_with', [scope.classId]),
-  ]);
-  if (ownRes.error) console.error('Error fetching units:', ownRes.error);
-  const seen = new Set<string>();
-  const all = [...(ownRes.data || []), ...(sharedRes.data || [])].filter((r: any) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
-  return all.map((row: any) => ({
+const UNIT_SELECT = 'id, title, weeks_label, display_order, is_hidden, is_complete, shared_with';
+const LESSON_SELECT = 'id, unit_id, title, type, week_label, url, library_file_id, storage_path, display_order, is_hidden, is_complete';
+
+function mapUnit(row: any): LearnUnit {
+  return {
     id: row.id,
     title: row.title,
     weeksLabel: row.weeks_label || '',
     displayOrder: row.display_order,
     isHidden: row.is_hidden,
+    isComplete: row.is_complete,
     sharedWith: row.shared_with || [],
-  }));
+  };
+}
+
+function mapLesson(row: any): LearnLesson {
+  return {
+    id: row.id,
+    unitId: row.unit_id,
+    title: row.title,
+    type: row.type,
+    weekLabel: row.week_label || '',
+    url: row.url,
+    libraryFileId: row.library_file_id,
+    storagePath: row.storage_path,
+    displayOrder: row.display_order,
+    isHidden: row.is_hidden,
+    isComplete: row.is_complete,
+  };
+}
+
+// Modules (الوحدات) — بتجيب بتاعة الفصل ده + أي حاجة اتشاركت من فصول تانية
+export async function getUnits(scope: UnitScope): Promise<LearnUnit[]> {
+  const [ownRes, sharedRes] = await Promise.all([
+    supabase.from('learning_units').select(UNIT_SELECT).eq('class_id', scope.classId).eq('subject', scope.subject),
+    supabase.from('learning_units').select(UNIT_SELECT).contains('shared_with', [scope.classId]),
+  ]);
+  if (ownRes.error) console.error('Error fetching units:', ownRes.error);
+  const seen = new Set<string>();
+  const all = [...(ownRes.data || []), ...(sharedRes.data || [])].filter((r: any) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+  return all.map(mapUnit);
 }
 
 export async function createUnit(scope: UnitScope, input: { title: string; weeksLabel: string }): Promise<{ id: string | null; error: string | null }> {
@@ -81,6 +108,11 @@ export async function toggleUnitHidden(id: string, isHidden: boolean): Promise<b
   return !error;
 }
 
+export async function toggleUnitComplete(id: string, isComplete: boolean): Promise<boolean> {
+  const { error } = await supabase.from('learning_units').update({ is_complete: isComplete }).eq('id', id);
+  return !error;
+}
+
 export async function updateUnitSharing(id: string, sharedWith: string[]): Promise<boolean> {
   const { error } = await supabase.from('learning_units').update({ shared_with: sharedWith }).eq('id', id);
   return !error;
@@ -90,24 +122,14 @@ export async function getLessons(unitIds: string[]): Promise<LearnLesson[]> {
   if (unitIds.length === 0) return [];
   const { data, error } = await supabase
     .from('learning_lessons')
-    .select('id, unit_id, title, type, week_label, url, library_file_id, storage_path, display_order')
+    .select(LESSON_SELECT)
     .in('unit_id', unitIds)
     .order('display_order', { ascending: true });
   if (error) {
     console.error('Error fetching lessons:', error);
     return [];
   }
-  return (data || []).map((row: any) => ({
-    id: row.id,
-    unitId: row.unit_id,
-    title: row.title,
-    type: row.type,
-    weekLabel: row.week_label || '',
-    url: row.url,
-    libraryFileId: row.library_file_id,
-    storagePath: row.storage_path,
-    displayOrder: row.display_order,
-  }));
+  return (data || []).map(mapLesson);
 }
 
 // بيرفع الملف فعليًا (لو موجود) لنفس bucket المكتبة، وبيسجّل الدرس بعد كده
@@ -147,12 +169,31 @@ export async function createLesson(input: { unitId: string; title: string; type:
   return { id: data.id, error: null };
 }
 
+export async function updateLesson(id: string, input: { title?: string }): Promise<{ ok: boolean; error: string | null }> {
+  const patch: any = {};
+  if (input.title !== undefined) patch.title = input.title;
+  const { error } = await supabase.from('learning_lessons').update(patch).eq('id', id);
+  if (error) console.error('Error updating lesson:', error);
+  return { ok: !error, error: error?.message || null };
+}
+
+export async function toggleLessonHidden(id: string, isHidden: boolean): Promise<boolean> {
+  const { error } = await supabase.from('learning_lessons').update({ is_hidden: isHidden }).eq('id', id);
+  return !error;
+}
+
+export async function toggleLessonComplete(id: string, isComplete: boolean): Promise<boolean> {
+  const { error } = await supabase.from('learning_lessons').update({ is_complete: isComplete }).eq('id', id);
+  return !error;
+}
+
 export function getLessonFileUrl(storagePath: string): string {
   const { data } = supabase.storage.from('library-files').getPublicUrl(storagePath);
   return data.publicUrl;
 }
 
-export async function deleteLesson(id: string): Promise<boolean> {
+export async function deleteLesson(id: string): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('learning_lessons').delete().eq('id', id);
-  return !error;
+  if (error) console.error('Error deleting lesson:', error);
+  return { ok: !error, error: error?.message || null };
 }

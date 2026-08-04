@@ -38,7 +38,7 @@ import { AddAssessmentModal } from '@/components/LearningPath/AddAssessmentModal
 import { StudentCompletionPopover } from '@/components/LearningPath/StudentCompletionPopover';
 import { UnitMasteryBuilder } from '@/components/UnitMasteryBuilder';
 import { BrowseLibraryTab } from '@/components/tabs/BrowseLibraryTab';
-import { getUnits, createUnit, deleteUnit, updateUnit, toggleUnitHidden, updateUnitSharing, getLessons, createLesson, deleteLesson } from '@/services/learningPathData';
+import { getUnits, createUnit, deleteUnit, updateUnit, toggleUnitHidden, toggleUnitComplete, updateUnitSharing, getLessons, createLesson, updateLesson, deleteLesson, toggleLessonHidden, toggleLessonComplete } from '@/services/learningPathData';
 import { getTeacherClassNames } from '@/services/libraryData';
 
 type ContentType = 'video' | 'pdf' | 'quiz' | 'assignment' | 'project' | 'link';
@@ -56,6 +56,8 @@ interface Lesson {
   dueDate?: string;
   status: LessonStatus;
   completed?: boolean;
+  isHidden: boolean;
+  isTopicComplete: boolean;
 }
 
 interface Unit {
@@ -65,6 +67,7 @@ interface Unit {
   progress: number;
   lessons: Lesson[];
   isHidden: boolean;
+  isComplete: boolean;
   sharedWith: string[];
 }
 
@@ -102,6 +105,7 @@ export function LearningPathTab({
         weeks: u.weeksLabel,
         progress: 0,
         isHidden: u.isHidden,
+        isComplete: u.isComplete,
         sharedWith: u.sharedWith,
         lessons: lessons.filter(l => l.unitId === u.id).map((l) => ({
           id: l.id,
@@ -112,6 +116,8 @@ export function LearningPathTab({
           completedCount: 0,
           totalCount: 0,
           status: 'upcoming' as LessonStatus,
+          isHidden: l.isHidden,
+          isTopicComplete: l.isComplete,
         })),
       }));
       setUnits(mapped);
@@ -123,7 +129,20 @@ export function LearningPathTab({
     refreshUnits();
   }, [learnScope?.classId, learnScope?.subject]);
 
-  const [expandedUnits, setExpandedUnits] = useState<string[]>(['u1']);
+  useEffect(() => {
+    if (!activeUnitMenuId && !activeLessonMenuId) return;
+    const closeMenus = () => { setActiveUnitMenuId(null); setActiveLessonMenuId(null); };
+    document.addEventListener('click', closeMenus);
+    return () => document.removeEventListener('click', closeMenus);
+  }, [activeUnitMenuId, activeLessonMenuId]);
+
+  const expandAllUnits = () => setExpandedUnits(units.map(u => u.id));
+  const collapseAllUnits = () => setExpandedUnits([]);
+
+  const [expandedUnits, setExpandedUnits] = useState<string[]>([]);
+  const [activeUnitMenuId, setActiveUnitMenuId] = useState<string | null>(null);
+  const [activeLessonMenuId, setActiveLessonMenuId] = useState<string | null>(null);
+  const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
   const [activeUnitForAdd, setActiveUnitForAdd] = useState<string | null>(null);
   const [activeCompletion, setActiveCompletion] = useState<{ id: string; rect: DOMRect } | null>(null);
   const [activeMasteryUnitId, setActiveMasteryUnitId] = useState<string | null>(null);
@@ -251,7 +270,9 @@ export function LearningPathTab({
       week: 'Week 1', // Default for new items
       completedCount: 0,
       totalCount: 22,
-      status: 'upcoming'
+      status: 'upcoming',
+      isHidden: false,
+      isTopicComplete: false,
     };
 
     setUnits(prevUnits => prevUnits.map(unit => {
@@ -289,6 +310,7 @@ export function LearningPathTab({
         progress: 0, 
         lessons: [],
         isHidden: false,
+        isComplete: false,
         sharedWith: [],
       }]);
       setExpandedUnits(prev => [...prev, currentUnitId!]);
@@ -302,7 +324,9 @@ export function LearningPathTab({
       week: 'Week 1',
       completedCount: 0,
       totalCount: 22,
-      status: 'upcoming'
+      status: 'upcoming',
+      isHidden: false,
+      isTopicComplete: false,
     };
 
     setUnits(prevUnits => prevUnits.map(unit => {
@@ -380,6 +404,16 @@ export function LearningPathTab({
         <BrowseLibraryTab language={language} role={viewRole?.toLowerCase() || 'student'} teacherId={teacherId} classId={classId} subject={subject} grade={grade} forcedMode={contentView === 'material' ? 'material' : 'my-library'} />
       ) : (
         <>
+          {units.length > 0 && (
+            <div className="flex justify-end gap-2 mb-4">
+              <button onClick={expandAllUnits} className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                {language === 'ar' ? 'فتح الكل' : 'Expand All'}
+              </button>
+              <button onClick={collapseAllUnits} className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                {language === 'ar' ? 'قفل الكل' : 'Collapse All'}
+              </button>
+            </div>
+          )}
           {/* Units List */}
           <div className="space-y-6 pb-20 w-full">
         {units.map((unit) => (
@@ -414,6 +448,19 @@ export function LearningPathTab({
               <div className="flex items-center gap-2">
                 {!isStudent && (
                   <>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const ok = await toggleUnitComplete(unit.id, !unit.isComplete);
+                        if (ok) refreshUnits();
+                      }}
+                      title={language === 'ar' ? 'وضع علامة اكتمل' : 'Mark as Complete'}
+                      className={`w-9 h-9 flex items-center justify-center border rounded-xl transition-all shadow-none ${
+                        unit.isComplete ? 'bg-emerald-500 text-white border-transparent' : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-500'
+                      }`}
+                    >
+                      <Check size={18} className="stroke-[3]" />
+                    </button>
                     <button
                       onClick={async (e) => {
                         e.stopPropagation();
@@ -464,22 +511,25 @@ export function LearningPathTab({
                     
                     <div className="w-px h-6 bg-slate-200 mx-2" />
 
-                    <div className="relative group/unit-menu">
+                    <div className="relative">
                       <button 
+                        onClick={(e) => { e.stopPropagation(); setActiveUnitMenuId(activeUnitMenuId === unit.id ? null : unit.id); }}
                         className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-xl transition-colors shadow-none"
                       >
                         <MoreVertical size={18} />
                       </button>
-                      <div className="absolute top-full mt-1 right-0 w-48 bg-white rounded-xl shadow-none border border-slate-100 p-1 hidden group-hover/unit-menu:block z-20">
+                      {activeUnitMenuId === unit.id && (
+                      <div onClick={(e) => e.stopPropagation()} className="absolute top-full mt-1 right-0 w-48 bg-white rounded-xl shadow-lg border border-slate-100 p-1 z-20">
                         <button 
-                          onClick={() => setEditingUnit({ ...unit })}
+                          onClick={() => { setEditingUnit({ ...unit }); setActiveUnitMenuId(null); }}
                           className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
                         >
-                          <Edit size={14} /> Edit Unit
+                          <Edit size={14} /> Edit Module
                         </button>
                         <div className="h-px bg-slate-100 my-1" />
                         <button 
                           onClick={async () => {
+                            setActiveUnitMenuId(null);
                             if (window.confirm('Are you sure you want to delete this module? This cannot be undone.')) {
                               const { ok, error } = await deleteUnit(unit.id);
                               if (ok) refreshUnits();
@@ -491,6 +541,7 @@ export function LearningPathTab({
                           <Trash2 size={14} /> Delete Module
                         </button>
                       </div>
+                      )}
                     </div>
                   </>
                 )}
@@ -556,13 +607,13 @@ export function LearningPathTab({
                           <div>
                             <div className="flex items-center gap-2">
                               <h4 className="font-medium text-slate-800 text-sm">{lesson.title}</h4>
+                              {lesson.isHidden && (
+                                <span className="flex items-center gap-1 bg-amber-50 text-amber-700 text-[9px] font-bold px-1.5 py-0.5 rounded-md border border-amber-200">
+                                  <EyeOff size={9} /> {language === 'ar' ? 'مخفي' : 'Hidden'}
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-2 mt-1">
-                              {/* Week Label */}
-                              <span className="flex items-center gap-1 text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
-                                <Calendar size={10} /> {lesson.week}
-                              </span>
-
                               {/* Badges */}
                               {!isStudent && lesson.source === 'official' && (
                                 <span className="flex items-center gap-1 bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border border-slate-200">
@@ -586,24 +637,21 @@ export function LearningPathTab({
                         {/* Right Side Controls */}
                         <div className="flex items-center gap-2">
                           
-                          {/* Completion Visual */}
+                          {/* Mark as Complete (Teacher) */}
                           {!isStudent && (
-                            <div className="relative">
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleCompletionPopover(lesson.id, e);
-                                }}
-                                className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors border shadow-none ${getStatusColor(lesson.status)}`}
-                              >
-                                {lesson.status === 'overdue' || lesson.status === 'urgent' ? (
-                                  <AlertCircle size={16} className={getStatusIconColor(lesson.status)} />
-                                ) : (
-                                  <CheckCircle2 size={16} className={getStatusIconColor(lesson.status)} />
-                                )}
-                                <span className="text-xs font-bold">{lesson.completedCount}/{lesson.totalCount}</span>
-                              </button>
-                            </div>
+                            <button 
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const ok = await toggleLessonComplete(lesson.id, !lesson.isTopicComplete);
+                                if (ok) refreshUnits();
+                              }}
+                              title={language === 'ar' ? 'وضع علامة اكتمل' : 'Mark as Complete'}
+                              className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all shadow-none border ${
+                                lesson.isTopicComplete ? 'bg-emerald-500 text-white border-transparent' : 'border-slate-200 text-slate-300 hover:border-slate-300 hover:text-slate-400'
+                              }`}
+                            >
+                              <Check size={16} className="stroke-[3]" />
+                            </button>
                           )}
 
                           {isStudent && (
@@ -630,37 +678,48 @@ export function LearningPathTab({
                           {/* Context Menu (3-dots) for Teacher */}
                           {!isStudent && (
                             <div className="flex items-center gap-2">
-                              <div className="relative group/menu">
-                                <button className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors shadow-none">
+                              <div className="relative">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setActiveLessonMenuId(activeLessonMenuId === lesson.id ? null : lesson.id); }}
+                                  className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors shadow-none"
+                                >
                                   <MoreHorizontal size={20} />
                                 </button>
-                                
-                                {/* Hover Menu Dropdown */}
-                              <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-none border border-slate-100 p-1 hidden group-hover/menu:block z-20">
-                                {lesson.source === 'official' ? (
-                                  <>
-                                    <button className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none">
-                                      <EyeOff size={14} /> Hide from Students
-                                    </button>
-                                    <button className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none">
-                                      <Copy size={14} /> Duplicate
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none">
-                                      <Edit size={14} /> Edit Content
-                                    </button>
-                                    <button className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none">
-                                      <Copy size={14} /> Duplicate
-                                    </button>
-                                    <div className="h-px bg-slate-100 my-1" />
-                                    <button className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2 shadow-none">
-                                      <Trash2 size={14} /> Delete
-                                    </button>
-                                  </>
-                                )}
+
+                              {activeLessonMenuId === lesson.id && (
+                              <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-slate-100 p-1 z-20">
+                                <button
+                                  onClick={() => { setEditingLesson({ ...lesson }); setActiveLessonMenuId(null); }}
+                                  className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
+                                >
+                                  <Edit size={14} /> {language === 'ar' ? 'تعديل الاسم' : 'Edit Name'}
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    setActiveLessonMenuId(null);
+                                    const ok = await toggleLessonHidden(lesson.id, !lesson.isHidden);
+                                    if (ok) refreshUnits();
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
+                                >
+                                  <EyeOff size={14} /> {lesson.isHidden ? (language === 'ar' ? 'إظهار للطلاب' : 'Show to Students') : (language === 'ar' ? 'إخفاء عن الطلاب' : 'Hide from Students')}
+                                </button>
+                                <div className="h-px bg-slate-100 my-1" />
+                                <button
+                                  onClick={async () => {
+                                    setActiveLessonMenuId(null);
+                                    if (window.confirm(language === 'ar' ? 'متأكد إنك عايز تمسح الموضوع ده؟' : 'Delete this topic?')) {
+                                      const { ok, error } = await deleteLesson(lesson.id);
+                                      if (ok) refreshUnits();
+                                      else alert(language === 'ar' ? `حصل خطأ أثناء الحذف: ${error}` : `Error deleting: ${error}`);
+                                    }
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2 shadow-none"
+                                >
+                                  <Trash2 size={14} /> Delete
+                                </button>
                               </div>
+                              )}
                               </div>
                             </div>
                           )}
@@ -685,7 +744,7 @@ export function LearningPathTab({
               className="w-full py-6 border-2 border-dashed border-slate-200 rounded-3xl text-slate-500 font-medium hover:border-teal-300 hover:bg-teal-50 hover:text-teal-600 transition-all flex items-center justify-center gap-2 shadow-none"
             >
               <Plus size={20} />
-              Create New Unit
+              {language === 'ar' ? 'إنشاء وحدة جديدة' : 'Create New Module'}
             </button>
           ) : (
             <div className="bg-white rounded-3xl border border-slate-200 shadow-none p-6">
@@ -696,43 +755,69 @@ export function LearningPathTab({
                 </button>
               </div>
               
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-slate-700 mb-2">Module Title</label>
-                <input 
-                  type="text" 
-                  value={newUnitTitle}
-                  onChange={(e) => setNewUnitTitle(e.target.value)}
-                  placeholder="e.g.: Algebraic Expressions"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-none"
-                />
-              </div>
-
               {!newUnitMode ? (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="flex gap-3">
                   <button 
                     onClick={() => setNewUnitMode('ai')}
-                    className="p-6 border border-slate-200 rounded-2xl text-left hover:border-purple-300 hover:bg-purple-50 transition-all group shadow-none"
+                    className="flex-1 flex items-center justify-center gap-2 py-4 border border-slate-200 rounded-2xl hover:border-purple-300 hover:bg-purple-50 transition-all shadow-none"
                   >
-                    <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                      <Sparkles size={24} />
-                    </div>
-                    <h4 className="font-bold text-slate-800 mb-1">AI Generation</h4>
-                    <p className="text-sm text-slate-500">Smart plan based on national standards</p>
+                    <Sparkles size={18} className="text-purple-600" />
+                    <span className="font-bold text-slate-700 text-sm">{language === 'ar' ? 'توليد بالذكاء الاصطناعي' : 'AI Generation'}</span>
                   </button>
                   <button 
                     onClick={() => setNewUnitMode('manual')}
-                    className="p-6 border border-slate-200 rounded-2xl text-left hover:border-teal-300 hover:bg-teal-50 transition-all group shadow-none"
+                    className="flex-1 flex items-center justify-center gap-2 py-4 border border-slate-200 rounded-2xl hover:border-teal-300 hover:bg-teal-50 transition-all shadow-none"
                   >
-                    <div className="w-12 h-12 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                      <Layout size={24} />
-                    </div>
-                    <h4 className="font-bold text-slate-800 mb-1">Manual Build</h4>
-                    <p className="text-sm text-slate-500">Create custom structure from scratch</p>
+                    <Layout size={18} className="text-teal-600" />
+                    <span className="font-bold text-slate-700 text-sm">{language === 'ar' ? 'إنشاء يدوي' : 'Manual Build'}</span>
                   </button>
                 </div>
-              ) : newUnitMode === 'ai' ? (
+              ) : newUnitMode === 'manual' ? (
                 <div>
-                  {!generatedPlan ? (
+                  <label className="block text-sm font-medium text-slate-700 mb-2">{language === 'ar' ? 'اسم الوحدة' : 'Module Title'}</label>
+                  <input 
+                    type="text" 
+                    autoFocus
+                    value={newUnitTitle}
+                    onChange={(e) => setNewUnitTitle(e.target.value)}
+                    placeholder="e.g.: Algebraic Expressions"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-none mb-4"
+                  />
+                  <div className="flex gap-3">
+                    <button onClick={() => setNewUnitMode(null)} className="px-5 py-2.5 text-slate-600 hover:bg-slate-50 rounded-xl font-medium transition-colors shadow-none">
+                      {language === 'ar' ? 'رجوع' : 'Back'}
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        if (!learnScope || !newUnitTitle.trim()) return;
+                        const { id, error } = await createUnit(learnScope, { title: newUnitTitle, weeksLabel: '' });
+                        if (id) {
+                          refreshUnits();
+                          setIsBuildingUnit(false);
+                          setNewUnitMode(null);
+                          setNewUnitTitle('');
+                        } else {
+                          alert(language === 'ar' ? `حصل خطأ أثناء إنشاء الوحدة: ${error}` : `Error creating module: ${error}`);
+                        }
+                      }}
+                      disabled={!newUnitTitle.trim()}
+                      className="flex-1 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl font-medium transition-colors shadow-none"
+                    >
+                      {language === 'ar' ? 'إضافة' : 'Add'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Module Title</label>
+                  <input 
+                    type="text" 
+                    value={newUnitTitle}
+                    onChange={(e) => setNewUnitTitle(e.target.value)}
+                    placeholder="e.g.: Algebraic Expressions"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-none mb-4"
+                  />
+                {!generatedPlan ? (
                     <button 
                       onClick={handleGeneratePlan}
                       disabled={!newUnitTitle || isGeneratingPlan}
@@ -1066,6 +1151,56 @@ export function LearningPathTab({
                       }
                     } else {
                       setEditingUnit(null);
+                    }
+                  }}
+                  className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-medium transition-colors shadow-none"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Topic Modal */}
+      <AnimatePresence>
+        {editingLesson && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl border border-slate-100 p-6 w-full max-w-md relative shadow-none"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-slate-800">{language === 'ar' ? 'تعديل الموضوع' : 'Edit Topic'}</h3>
+                <button onClick={() => setEditingLesson(null)} className="text-slate-400 hover:text-slate-600 transition-colors shadow-none">
+                  <X size={24} />
+                </button>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{language === 'ar' ? 'اسم الموضوع' : 'Topic Title'}</label>
+                <input 
+                  type="text" 
+                  value={editingLesson.title}
+                  onChange={(e) => setEditingLesson({ ...editingLesson, title: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-none"
+                />
+              </div>
+              <div className="flex justify-end gap-3 mt-8">
+                <button onClick={() => setEditingLesson(null)} className="px-5 py-2.5 text-slate-600 hover:bg-slate-50 rounded-xl font-medium transition-colors shadow-none">
+                  Cancel
+                </button>
+                <button 
+                  onClick={async () => {
+                    if (!editingLesson) return;
+                    const { ok, error } = await updateLesson(editingLesson.id, { title: editingLesson.title });
+                    if (ok) {
+                      refreshUnits();
+                      setEditingLesson(null);
+                    } else {
+                      alert(language === 'ar' ? `حصل خطأ أثناء التعديل: ${error}` : `Error saving: ${error}`);
                     }
                   }}
                   className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-medium transition-colors shadow-none"
