@@ -164,7 +164,7 @@ export function LearningPathTab({
   const [generatedPlan, setGeneratedPlan] = useState<any[] | null>(null);
   const [previewPrompt, setPreviewPrompt] = useState<{title: string, prompt: string} | null>(null);
 
-  const [contentView, setContentView] = useState<'path' | 'library'>('path');
+  const [contentView, setContentView] = useState<'path' | 'material' | 'my-library'>('path');
 
   const isStudent = viewRole === 'STUDENT';
 
@@ -367,16 +367,24 @@ export function LearningPathTab({
             Learning Path
           </button>
           <button
-            onClick={() => setContentView('library')}
-            className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors ${contentView === 'library' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+            onClick={() => setContentView('material')}
+            className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors ${contentView === 'material' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
           >
             Material
           </button>
+          {!isStudent && (
+            <button
+              onClick={() => setContentView('my-library')}
+              className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors ${contentView === 'my-library' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+            >
+              My Library
+            </button>
+          )}
         </div>
       </div>
 
-      {contentView === 'library' ? (
-        <BrowseLibraryTab language={language} role={viewRole?.toLowerCase() || 'student'} teacherId={teacherId} classId={classId} subject={subject} />
+      {contentView === 'material' || contentView === 'my-library' ? (
+        <BrowseLibraryTab language={language} role={viewRole?.toLowerCase() || 'student'} teacherId={teacherId} classId={classId} subject={subject} forcedMode={contentView === 'material' ? 'material' : 'my-library'} />
       ) : (
         <>
           {/* Units List */}

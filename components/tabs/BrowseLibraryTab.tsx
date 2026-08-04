@@ -47,7 +47,7 @@ const colorThemeMap: Record<string, { bg: string; border: string; text: string; 
   slate: { bg: 'bg-slate-100/70', border: 'border-slate-300 hover:border-slate-400', text: 'text-slate-700', iconBg: 'bg-slate-200 text-slate-700', activeRing: 'ring-slate-500' },
 };
 
-export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId, classId, subject }: { language?: 'en' | 'ar', role?: string, teacherId?: string, classId?: string, subject?: string }) {
+export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId, classId, subject, forcedMode }: { language?: 'en' | 'ar', role?: string, teacherId?: string, classId?: string, subject?: string, forcedMode?: 'material' | 'my-library' }) {
   const isRtl = language === 'ar';
   
   // State
@@ -60,7 +60,11 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   // material = اللي بيبان للطلاب (عام)، my-library = مساحة المعلم الخاصة (كل حاجة، عام وخاص)
-  const [libraryMode, setLibraryMode] = useState<'material' | 'my-library'>(role === 'teacher' ? 'my-library' : 'material');
+  const [libraryMode, setLibraryMode] = useState<'material' | 'my-library'>(forcedMode || (role === 'teacher' ? 'my-library' : 'material'));
+
+  useEffect(() => {
+    if (forcedMode) setLibraryMode(forcedMode);
+  }, [forcedMode]);
 
   const scope = teacherId && classId && subject ? { teacherId, classId, subject } : null;
 
@@ -454,7 +458,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
         )}
       </AnimatePresence>
       <div className="flex flex-col gap-2.5 mb-3">
-        {role === 'teacher' && (
+        {role === 'teacher' && !forcedMode && (
           <div className="flex gap-2">
             <button onClick={() => setLibraryMode('material')} className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 ${libraryMode === 'material' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
               <Globe size={13} /> {isRtl ? 'Material (يشوفها الطلاب)' : 'Material (students see this)'}
