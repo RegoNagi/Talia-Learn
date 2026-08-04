@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { 
@@ -13,12 +13,16 @@ import {
   GraduationCap
 } from 'lucide-react';
 import { ClassSpaceView } from '@/features/class-space/ClassSpaceView';
+import { AuthenticatedUser } from '@/services/auth';
+import { getMyClassSections, LearnClassSection } from '@/services/attendanceData';
+import { getStudentClassSection, getGradeSubjects, LearnClassInfo } from '@/services/academicData';
 
 interface MyClassesViewProps {
   language: 'ar' | 'en';
   onLanguageChange?: (lang: 'ar' | 'en') => void;
   userRole: 'teacher' | 'student' | 'parent';
   defaultSubTab?: 'subjects' | 'space';
+  authUser: AuthenticatedUser;
 }
 
 const dict = {
@@ -89,57 +93,65 @@ export function MyClassesView({
 }: MyClassesViewProps) {
   const [activeTab, setActiveTab] = useState<'subjects' | 'space'>(defaultSubTab);
   const [activeFilter, setActiveFilter] = useState<string>('All Classes');
+  const [myClasses, setMyClasses] = useState<LearnClassSection[]>([]);
+  const [myClassInfo, setMyClassInfo] = useState<LearnClassInfo | null>(null);
+  const [mySubjects, setMySubjects] = useState<string[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
   const t = dict[language];
 
-  const courses = [
-    { 
-      id: 'chem101', 
-      title: translatedCourses[language]['chem101'].title, 
-      code: 'CHEM 101', 
-      className: '10-A', 
-      image: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&q=80&w=600&h=400', 
-      progress: 65, 
-      nextDue: translatedCourses[language]['chem101'].nextDue, 
-      pendingGradingCount: 5, 
-      progressColor: 'bg-emerald-500' 
-    },
-    { 
-      id: 'eng201', 
-      title: translatedCourses[language]['eng201'].title, 
-      code: 'ENG 201', 
-      className: '10-B', 
-      image: 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?auto=format&fit=crop&q=80&w=600&h=400', 
-      progress: 42, 
-      nextDue: translatedCourses[language]['eng201'].nextDue, 
-      pendingGradingCount: 12, 
-      progressColor: 'bg-indigo-500' 
-    },
-    { 
-      id: 'phys301', 
-      title: translatedCourses[language]['phys301'].title, 
-      code: 'PHYS 301', 
-      className: '11-C', 
-      image: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&q=80&w=600&h=400', 
-      progress: 88, 
-      nextDue: translatedCourses[language]['phys301'].nextDue, 
-      pendingGradingCount: 0, 
-      progressColor: 'bg-cyan-500' 
-    },
-    { 
-      id: 'hist105', 
-      title: translatedCourses[language]['hist105'].title, 
-      code: 'HIST 105', 
-      className: '10-A', 
-      image: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=600&h=400', 
-      progress: 12, 
-      nextDue: translatedCourses[language]['hist105'].nextDue, 
-      pendingGradingCount: 3, 
-      progressColor: 'bg-amber-500' 
-    },
-  ];
+  useEffect(() => {
+    setIsLoadingData(true);
+    if (userRole === 'teacher' && authUser.teacherId) {
+      getMyClassSections(authUser.teacherId).then((classes) => {
+        setMyClasses(classes);
+        setIsLoadingData(false);
+      });
+    } else if (userRole === 'student' && authUser.studentId) {
+      Promise.all([
+        getStudentClassSection(authUser.studentId),
+        authUser.studentGrade ? getGradeSubjects(authUser.studentGrade) : Promise.resolve([]),
+      ]).then(([cls, subjects]) => {
+        setMyClassInfo(cls);
+        setMySubjects(subjects);
+        setIsLoadingData(false);
+      });
+    } else if (userRole === 'parent' && (authUser.childStudentIds || []).length > 0) {
+      const childId = authUser.childStudentIds![0];
+      getStudentClassSection(childId).then((cls) => {
+        setMyClassInfo(cls);
+        if (cls) {
+          getGradeSubjects(cls.gradeLevel).then((subjects) => {
+            setMySubjects(subjects);
+            setIsLoadingData(false);
+          });
+        } else {
+          setIsLoadingData(false);
+        }
+      });
+    } else {
+      setIsLoadingData(false);
+    }
+  }, [userRole, authUser]);
 
-  const classes = ['All Classes', '10-A', '10-B', '11-C'];
+  // بطاقات المواد الحقيقية: لكل فصل حقيقي × مادة حقيقية بيدرّسها المعلم فيه، أو مواد صف الطالب/الابن الحقيقية
+  const courses = userRole === 'teacher'
+    ? myClasses.flatMap((cls) => (authUser.subjects || []).map((subject) => ({
+        id: `${cls.id}-${subject}`,
+        title: subject,
+        className: cls.name,
+        studentCount: cls.students.length,
+      })))
+    : myClassInfo
+      ? mySubjects.map((subject) => ({
+          id: subject,
+          title: subject,
+          className: myClassInfo!.name,
+          studentCount: myClassInfo!.studentCount,
+        }))
+      : [];
+
+  const classes = ['All Classes', ...Array.from(new Set(myClasses.map((c) => c.name)))];
 
   const filteredCourses = activeFilter === 'All Classes' 
     ? courses 
@@ -224,7 +236,7 @@ export function MyClassesView({
               )}
               <div>
                 <h1 className="text-3xl font-bold text-slate-800">
-                  {userRole === 'teacher' ? t.welcomeTeacher : userRole === 'parent' ? t.welcomeParent : t.welcomeStudent}
+                  {language === 'ar' ? `مرحباً بك، ${authUser.name}! 👋` : `Welcome back, ${authUser.name}! 👋`}
                 </h1>
                 <p className="text-slate-500 mt-1">
                   {userRole === 'teacher' ? t.teacherSubtitle : userRole === 'parent' ? t.parentSubtitle : t.studentSubtitle}
@@ -233,21 +245,13 @@ export function MyClassesView({
             </div>
             <div className="flex items-center gap-4 mt-2">
               <div className="text-right hidden md:block">
-                <p className="text-sm font-bold text-slate-800">
-                  {userRole === 'teacher' ? t.teacherName : userRole === 'parent' ? t.parentName : t.studentName}
-                </p>
+                <p className="text-sm font-bold text-slate-800">{authUser.name}</p>
                 <p className="text-xs text-slate-400">
-                  {userRole === 'teacher' ? t.teacherRole : userRole === 'parent' ? t.parentRole : t.studentRole}
+                  {userRole === 'teacher' ? (authUser.subjects || []).join('، ') || t.teacherRole : userRole === 'parent' ? t.parentRole : myClassInfo?.name || t.studentRole}
                 </p>
               </div>
-              <div className="relative w-12 h-12 rounded-full border-2 border-white shadow-sm overflow-hidden shrink-0">
-                <Image 
-                  src={userRole === 'teacher' ? "https://picsum.photos/seed/sarah/100" : userRole === 'parent' ? "https://picsum.photos/seed/david/100" : "https://picsum.photos/seed/alex/100"}
-                  alt="Profile" 
-                  fill
-                  className="object-cover"
-                  referrerPolicy="no-referrer"
-                />
+              <div className="relative w-12 h-12 rounded-full border-2 border-white shadow-sm overflow-hidden shrink-0 bg-orange-100 flex items-center justify-center">
+                <span className="text-orange-600 font-bold text-lg">{authUser.name?.charAt(0) || '?'}</span>
               </div>
             </div>
           </header>
@@ -275,91 +279,44 @@ export function MyClassesView({
             <div className="flex justify-between items-end mb-6">
               <h2 className="text-xl font-bold text-slate-800">{t.yourCourses}</h2>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-              {filteredCourses.map((course) => (
-                <Link href={`/courses/${course.id}?role=${userRole || 'student'}`} key={course.id} className="group block h-[380px]">
-                  <div className="bg-white rounded-3xl border border-slate-100 hover:bg-gray-50 transition-all duration-300 overflow-hidden h-full flex flex-col relative w-full">
-                
-                {/* Pending Grading Badge */}
-                {course.pendingGradingCount > 0 && (
-                  <div className="absolute top-3 right-3 z-20 flex items-center justify-center w-7 h-7 bg-rose-500 text-white text-xs font-bold rounded-full shadow-[0_0_15px_rgba(244,63,94,0.5)] animate-pulse">
-                    {course.pendingGradingCount}
-                  </div>
-                )}
 
-                {/* Header (60% Height) */}
-                <div className="h-[60%] relative overflow-hidden">
-                  <Image 
-                    src={course.image} 
-                    alt={course.title} 
-                    fill 
-                    className="object-cover transition-transform duration-500 group-hover:scale-105"
-                    referrerPolicy="no-referrer"
-                  />
-                  {/* Gradient Overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent z-10"></div>
-                  
-                  {/* Class Tag */}
-                  {userRole === 'teacher' && (
-                    <div className="absolute top-4 left-4 z-20">
-                      <span className="bg-black/30 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider border border-white/10">
-                        {course.className}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Title Overlay */}
-                  <div className="absolute bottom-4 left-4 right-4 z-20">
-                    <h3 className="text-white font-bold text-lg leading-tight drop-shadow-md">
-                      {course.title}
-                    </h3>
-                  </div>
-                </div>
-                
-                {/* Course Details (40% Height) */}
-                <div className="p-5 flex-1 flex flex-col justify-between bg-white z-20">
-                  <div>
-                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
-                      <Clock size={14} className="shrink-0" />
-                      <span>{course.nextDue}</span>
-                    </div>
-                    
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mb-2">
-                      <div className={`h-full ${course.progressColor} opacity-80`} style={{ width: `${course.progress}%` }}></div>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <p className="text-xs font-medium text-slate-500">{t.syllabusProgress}</p>
-                      <p className="text-xs font-bold text-slate-700">{course.progress}%</p>
-                    </div>
-                  </div>
-                  
-                  {userRole === 'teacher' && (
-                    <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
-                      <div className="flex -space-x-2">
-                        {[1, 2, 3].map((i) => (
-                          <div key={i} className="relative w-6 h-6 rounded-full border-2 border-slate-100 bg-slate-200 overflow-hidden">
-                            <Image 
-                              src={`https://picsum.photos/seed/${course.id}${i}/50`} 
-                              alt="Student"
-                              fill
-                              className="object-cover"
-                              referrerPolicy="no-referrer"
-                            />
-                          </div>
-                        ))}
+            {isLoadingData ? (
+              <p className="text-center text-slate-400 py-16">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                {filteredCourses.map((course) => (
+                  <div key={course.id} className="bg-white rounded-3xl border border-slate-100 overflow-hidden h-[200px] flex flex-col relative w-full">
+                    <div className="h-[55%] relative overflow-hidden bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center">
+                      <BookOpen size={40} className="text-white/90" />
+                      {userRole === 'teacher' && (
+                        <div className="absolute top-4 left-4 z-20">
+                          <span className="bg-black/30 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider border border-white/10">
+                            {course.className}
+                          </span>
+                        </div>
+                      )}
+                      <div className="absolute bottom-4 left-4 right-4 z-20">
+                        <h3 className="text-white font-bold text-lg leading-tight drop-shadow-md">
+                          {course.title}
+                        </h3>
                       </div>
-                      <span className="text-xs font-medium text-slate-400">
-                        {t.studentsCount}
-                      </span>
                     </div>
-                  )}
-                </div>
+                    <div className="p-5 flex-1 flex flex-col justify-center bg-white z-20">
+                      <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <Users size={14} className="shrink-0" />
+                        <span>{course.studentCount} {language === 'ar' ? 'طالب' : 'students'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {filteredCourses.length === 0 && (
+                  <p className="col-span-full text-center text-slate-400 py-16">
+                    {language === 'ar' ? 'مفيش فصول أو مواد مرتبطة بحسابك لسه.' : 'No classes or subjects linked to your account yet.'}
+                  </p>
+                )}
               </div>
-            </Link>
-          ))}
-        </div>
-      </section>
+            )}
+          </section>
     </div>
   )}
 

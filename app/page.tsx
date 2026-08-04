@@ -389,12 +389,15 @@ export default function Dashboard() {
             <main className="flex-1 overflow-y-auto bg-[#f8f9fa]">
               <div className={`w-full max-w-[1400px] mx-auto ${activeSpace === 'calendar' ? 'h-full p-2 sm:p-4 lg:p-6' : 'p-3 sm:p-6 lg:p-10'}`}>
                 {activeSpace === 'myClasses' || activeSpace === 'subjects' || activeSpace === 'class' ? (
+                  authUser && (
                   <MyClassesView 
                     language={language}
                     onLanguageChange={setLanguage}
                     userRole={userRole || 'student'}
                     defaultSubTab={activeSpace === 'subjects' ? 'subjects' : 'space'}
+                    authUser={authUser}
                   />
+                  )
                 ) : activeSpace === 'school' ? (
                   <SpacesView space="school" language={language} />
                 ) : activeSpace === 'messages' ? (
@@ -410,12 +413,15 @@ export default function Dashboard() {
                 ) : activeSpace === 'home' ? (
                   <TeacherDashboard language={language} userRole={userRole || 'student'} />
                 ) : (
+                  authUser && (
                   <MyClassesView 
                     language={language}
                     onLanguageChange={setLanguage}
                     userRole={userRole || 'student'}
                     defaultSubTab="space"
+                    authUser={authUser}
                   />
+                  )
                 )}
               </div>
             </main>
