@@ -1028,6 +1028,9 @@ export function LearningPathTab({
         onClose={() => setIsAddAssessmentOpen(false)}
         onAdd={handleSaveAssessment}
         unitTitle={targetUnitTitle}
+        classId={classId}
+        subject={subject}
+        unitId={targetUnitId}
       />
 
       <StudentCompletionPopover 

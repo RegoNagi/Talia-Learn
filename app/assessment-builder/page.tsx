@@ -13,10 +13,12 @@ import {
   Search, Check, Lock, Copy, MessageSquare, Minus, Home
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { FloatingPortal } from '@floating-ui/react';
 import { AssessmentSidebar } from '@/components/AssessmentSidebar';
+import { useAuth } from '@/contexts/AuthContext';
+import { createAssignment } from '@/services/assignmentData';
 
 interface Question {
   id: string;
@@ -43,8 +45,15 @@ interface RubricCriterion {
 
 export default function AssessmentBuilderPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'quiz' | 'assignment'>('quiz');
-  const [title, setTitle] = useState('Unit 1: Matrix Operations Quiz');
+  const searchParams = useSearchParams();
+  const { authUser } = useAuth();
+  const scopeClassId = searchParams.get('classId') || '';
+  const scopeSubject = searchParams.get('subject') || '';
+  const scopeUnitId = searchParams.get('unitId') || '';
+  const [isSavingReal, setIsSavingReal] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [activeTab, setActiveTab] = useState<'quiz' | 'assignment'>('assignment');
+  const [title, setTitle] = useState('');
   const [category, setCategory] = useState('quiz');
   const [maxScore, setMaxScore] = useState(100);
   const [isAutoCalc, setIsAutoCalc] = useState(true);
@@ -54,7 +63,7 @@ export default function AssessmentBuilderPage() {
   const [attemptLimit, setAttemptLimit] = useState('1');
   const [timeLimitHours, setTimeLimitHours] = useState('1');
   const [timeLimitMinutes, setTimeLimitMinutes] = useState('0');
-  const [dueDate, setDueDate] = useState('2023-10-24');
+  const [dueDate, setDueDate] = useState('');
   const [dueTime, setDueTime] = useState('23:59');
   
   // Security & Display
@@ -144,7 +153,34 @@ export default function AssessmentBuilderPage() {
     }, 3000);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (activeTab === 'assignment') {
+      if (!authUser?.teacherId || !scopeClassId || !scopeSubject) {
+        addToast('حصل خطأ: بيانات الفصل أو المادة مش متوفرة.');
+        return;
+      }
+      if (!title.trim()) {
+        addToast('اكتب عنوان الواجب الأول.');
+        return;
+      }
+      setIsSavingReal(true);
+      setSaveError('');
+      const dueDateTime = dueDate ? `${dueDate}T${dueTime || '23:59'}` : null;
+      const { id, error } = await createAssignment(
+        { teacherId: authUser.teacherId, classId: scopeClassId, subject: scopeSubject },
+        { title: title.trim(), instructions: instructionsText, dueDate: dueDateTime }
+      );
+      setIsSavingReal(false);
+      if (id) {
+        addToast('Assignment Saved & Published!');
+        setTimeout(() => router.back(), 1000);
+      } else {
+        setSaveError(error || 'Unknown error');
+        addToast(`حصل خطأ أثناء الحفظ: ${error}`);
+      }
+      return;
+    }
+    // الكويز لسه مش متوصّل بالحفظ الحقيقي (خطوة قادمة منفصلة)
     addToast('Assessment Saved & Published!');
     setTimeout(() => router.back(), 1000);
   };
@@ -285,6 +321,7 @@ export default function AssessmentBuilderPage() {
         </div>
 
         <div className="flex items-center gap-3 flex-1 justify-end">
+          {saveError && <span className="text-xs text-rose-600 font-bold">{saveError}</span>}
           <button 
             className="text-slate-500 hover:text-slate-700 font-bold text-sm px-4 py-2 rounded-xl hover:bg-slate-100 transition-all"
           >
@@ -292,9 +329,10 @@ export default function AssessmentBuilderPage() {
           </button>
           <button 
             onClick={handleSave}
-            className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center gap-2"
+            disabled={isSavingReal}
+            className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-60 transition-all shadow-lg shadow-indigo-200 flex items-center gap-2"
           >
-            <Save size={16} /> Save & Publish
+            <Save size={16} /> {isSavingReal ? 'Saving...' : 'Save & Publish'}
           </button>
         </div>
       </header>

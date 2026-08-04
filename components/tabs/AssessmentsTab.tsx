@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Users, CheckCircle, BarChart3, ArrowUpRight, Settings, Zap, PenTool, Eye,
   PlayCircle, FileText, Check, Upload, Clock, AlertCircle, ShieldAlert, ArrowLeft,
   Save, Plus, X
 } from 'lucide-react';
 import {
-  getAssignments, createAssignment, getSubmissionsForAssignment, getMySubmission,
+  getAssignments, getSubmissionsForAssignment, getMySubmission,
   submitAssignment, gradeSubmission, getSubmissionFileUrl,
   Assignment, AssignmentSubmission,
 } from '@/services/assignmentData';
@@ -21,6 +22,7 @@ interface AssessmentsTabProps {
 }
 
 export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId, subject }: AssessmentsTabProps) {
+  const router = useRouter();
   const scope = teacherId && classId && subject ? { teacherId, classId, subject } : null;
   const studentScope = studentId && classId && subject ? { studentId, classId, subject } : null;
 
@@ -28,7 +30,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
   const [submissionCounts, setSubmissionCounts] = useState<Record<string, { submitted: number; graded: number; total: number }>>({});
   const [isLoading, setIsLoading] = useState(true);
 
-  const [view, setView] = useState<'list' | 'create' | 'grading-list' | 'grading-student' | 'intro' | 'submit' | 'success'>('list');
+  const [view, setView] = useState<'list' | 'grading-list' | 'grading-student' | 'intro' | 'submit' | 'success'>('list');
   const [activeAssignment, setActiveAssignment] = useState<Assignment | null>(null);
   const [gradingSubmissions, setGradingSubmissions] = useState<AssignmentSubmission[]>([]);
   const [activeSubmission, setActiveSubmission] = useState<AssignmentSubmission | null>(null);
@@ -59,30 +61,6 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
   useEffect(() => {
     refreshList();
   }, [scope?.classId, scope?.subject, studentScope?.classId, studentScope?.subject]);
-
-  // ============ Teacher: Create Assignment ============
-  const [newTitle, setNewTitle] = useState('');
-  const [newInstructions, setNewInstructions] = useState('');
-  const [newDueDate, setNewDueDate] = useState('');
-  const [isSavingNew, setIsSavingNew] = useState(false);
-  const [createError, setCreateError] = useState('');
-
-  const handleCreateAssignment = async () => {
-    if (!scope || !newTitle.trim()) return;
-    setIsSavingNew(true);
-    setCreateError('');
-    const { id, error } = await createAssignment(scope, { title: newTitle.trim(), instructions: newInstructions, dueDate: newDueDate || null });
-    setIsSavingNew(false);
-    if (id) {
-      refreshList();
-      setView('list');
-      setNewTitle('');
-      setNewInstructions('');
-      setNewDueDate('');
-    } else {
-      setCreateError(error || 'Unknown error');
-    }
-  };
 
   // ============ Teacher: Grading ============
   const openGradingList = async (assignment: Assignment) => {
@@ -236,35 +214,6 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
       );
     }
 
-    if (view === 'create') {
-      return (
-        <div className="p-8 max-w-2xl mx-auto flex flex-col gap-6 w-full">
-          <button onClick={() => setView('list')} className="w-fit text-slate-400 hover:text-slate-600 flex items-center gap-1 text-sm font-bold transition-colors">
-            <ArrowLeft size={16} /> Back
-          </button>
-          <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm flex flex-col gap-5">
-            <h2 className="text-xl font-bold text-slate-800">Create Assignment</h2>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Title</label>
-              <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. Chemistry Lab Report" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Instructions</label>
-              <textarea rows={4} value={newInstructions} onChange={(e) => setNewInstructions(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none" placeholder="What should students do?" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Due Date</label>
-              <input type="datetime-local" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
-            </div>
-            {createError && <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">{createError}</p>}
-            <button onClick={handleCreateAssignment} disabled={!newTitle.trim() || isSavingNew} className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl font-bold transition-all shadow-sm">
-              {isSavingNew ? 'Creating...' : 'Create Assignment'}
-            </button>
-          </div>
-        </div>
-      );
-    }
-
     // List view
     const totalPending = Object.values(submissionCounts).reduce((sum, c) => sum + (c.total - c.graded), 0);
 
@@ -275,7 +224,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
             <h2 className="text-2xl font-bold text-slate-800">Assessments Management</h2>
             <p className="text-sm font-medium text-slate-500 mt-1">Monitor student submissions and grading progress.</p>
           </div>
-          <button onClick={() => setView('create')} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm">
+          <button onClick={() => router.push(`/assessment-builder?classId=${classId || ''}&subject=${encodeURIComponent(subject || '')}`)} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm">
             <Plus size={16} /> New Assignment
           </button>
         </div>

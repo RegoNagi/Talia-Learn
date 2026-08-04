@@ -8,17 +8,24 @@ interface AddAssessmentModalProps {
   onClose: () => void;
   onAdd: (assessment: { title: string; type: 'quiz' | 'assignment' | 'project'; category: string; source: 'custom' }) => void;
   unitTitle: string;
+  classId?: string;
+  subject?: string;
+  unitId?: string | null;
 }
 
-export function AddAssessmentModal({ isOpen, onClose, onAdd, unitTitle }: AddAssessmentModalProps) {
+export function AddAssessmentModal({ isOpen, onClose, unitTitle, classId, subject, unitId }: AddAssessmentModalProps) {
   const router = useRouter();
 
   useEffect(() => {
     if (isOpen) {
-      router.push('/assessment-builder');
+      const params = new URLSearchParams();
+      if (classId) params.set('classId', classId);
+      if (subject) params.set('subject', subject);
+      if (unitId) params.set('unitId', unitId);
+      router.push(`/assessment-builder?${params.toString()}`);
       onClose();
     }
-  }, [isOpen, router, onClose]);
+  }, [isOpen, router, onClose, classId, subject, unitId]);
 
   return null;
 }
