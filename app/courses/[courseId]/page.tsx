@@ -50,6 +50,8 @@ export interface DemoAssessment {
   dueDate: string;
 }
 
+export const dynamic = 'force-dynamic';
+
 export default function CourseWorkspace() {
   const [language, setLanguage] = useState<'ar' | 'en'>('en');
   const [activeTab, setActiveTab] = useState('learning-path');

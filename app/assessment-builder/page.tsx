@@ -43,6 +43,8 @@ interface RubricCriterion {
   levels: RubricLevel[];
 }
 
+export const dynamic = 'force-dynamic';
+
 export default function AssessmentBuilderPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
