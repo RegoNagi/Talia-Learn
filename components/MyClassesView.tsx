@@ -89,7 +89,8 @@ export function MyClassesView({
   language,
   onLanguageChange,
   userRole,
-  defaultSubTab = 'space'
+  defaultSubTab = 'space',
+  authUser
 }: MyClassesViewProps) {
   const [activeTab, setActiveTab] = useState<'subjects' | 'space'>(defaultSubTab);
   const [activeFilter, setActiveFilter] = useState<string>('All Classes');
