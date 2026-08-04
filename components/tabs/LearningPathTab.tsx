@@ -129,6 +129,11 @@ export function LearningPathTab({
     refreshUnits();
   }, [learnScope?.classId, learnScope?.subject]);
 
+  const [expandedUnits, setExpandedUnits] = useState<string[]>([]);
+  const [activeUnitMenuId, setActiveUnitMenuId] = useState<string | null>(null);
+  const [activeLessonMenuId, setActiveLessonMenuId] = useState<string | null>(null);
+  const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
+
   useEffect(() => {
     if (!activeUnitMenuId && !activeLessonMenuId) return;
     const closeMenus = () => { setActiveUnitMenuId(null); setActiveLessonMenuId(null); };
@@ -139,10 +144,6 @@ export function LearningPathTab({
   const expandAllUnits = () => setExpandedUnits(units.map(u => u.id));
   const collapseAllUnits = () => setExpandedUnits([]);
 
-  const [expandedUnits, setExpandedUnits] = useState<string[]>([]);
-  const [activeUnitMenuId, setActiveUnitMenuId] = useState<string | null>(null);
-  const [activeLessonMenuId, setActiveLessonMenuId] = useState<string | null>(null);
-  const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
   const [activeUnitForAdd, setActiveUnitForAdd] = useState<string | null>(null);
   const [activeCompletion, setActiveCompletion] = useState<{ id: string; rect: DOMRect } | null>(null);
   const [activeMasteryUnitId, setActiveMasteryUnitId] = useState<string | null>(null);
