@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 interface AddLessonModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (lesson: { title: string; type: 'video' | 'pdf'; duration: string; source: 'custom' }) => void;
+  onAdd: (lesson: { title: string; type: 'video' | 'pdf'; duration: string; source: 'custom'; url?: string; file?: File | null }) => void;
   unitTitle: string;
 }
 
@@ -19,24 +19,31 @@ export function AddLessonModal({ isOpen, onClose, onAdd, unitTitle }: AddLessonM
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState('');
   const [url, setUrl] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!title) return; // Basic validation
-    onAdd({
+    setIsSaving(true);
+    await onAdd({
       title,
       type: contentType,
       duration: duration || '5 mins', // Default if empty
-      source: 'custom'
+      source: 'custom',
+      url: activeTab === 'link' ? url : undefined,
+      file: activeTab === 'upload' ? selectedFile : null,
     });
+    setIsSaving(false);
     // Reset form
     setTitle('');
     setDuration('');
     setUrl('');
+    setSelectedFile(null);
     onClose();
   };
 
@@ -65,7 +72,7 @@ export function AddLessonModal({ isOpen, onClose, onAdd, unitTitle }: AddLessonM
             {/* Header */}
             <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-white/50">
               <div>
-                <h3 className="text-xl font-bold text-slate-800">Add Lesson Material</h3>
+                <h3 className="text-xl font-bold text-slate-800">Add Topic Material</h3>
                 <p className="text-sm text-slate-500 mt-1">Adding to <span className="font-medium text-slate-700">{unitTitle}</span></p>
               </div>
               <button 
@@ -100,7 +107,7 @@ export function AddLessonModal({ isOpen, onClose, onAdd, unitTitle }: AddLessonM
               {/* Input Fields */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Lesson Title</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Topic Title</label>
                   <input 
                     type="text" 
                     value={title}
@@ -148,13 +155,19 @@ export function AddLessonModal({ isOpen, onClose, onAdd, unitTitle }: AddLessonM
 
                 {/* Dynamic Input based on Tab */}
                 {activeTab === 'upload' ? (
-                  <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-white hover:border-indigo-200 transition-all cursor-pointer group bg-slate-50/50">
+                  <label className="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-white hover:border-indigo-200 transition-all cursor-pointer group bg-slate-50/50 block">
                     <div className="w-12 h-12 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                       <UploadCloud size={24} />
                     </div>
-                    <p className="text-sm font-medium text-slate-700">Click to upload or drag and drop</p>
+                    <p className="text-sm font-medium text-slate-700">{selectedFile ? selectedFile.name : 'Click to upload or drag and drop'}</p>
                     <p className="text-xs text-slate-400 mt-1">PDF, MP4, or MOV (max. 50MB)</p>
-                  </div>
+                    <input
+                      type="file"
+                      accept={contentType === 'pdf' ? '.pdf' : '.mp4,.mov,video/*'}
+                      className="hidden"
+                      onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
                 ) : (
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Resource URL</label>
@@ -184,13 +197,13 @@ export function AddLessonModal({ isOpen, onClose, onAdd, unitTitle }: AddLessonM
               </button>
               <button 
                 onClick={handleSubmit}
-                disabled={!title}
+                disabled={!title || isSaving}
                 className={`px-6 py-2.5 rounded-xl text-white font-medium shadow-lg text-sm flex items-center gap-2 transition-all
-                  ${!title 
+                  ${!title || isSaving
                     ? 'bg-slate-300 cursor-not-allowed shadow-none' 
                     : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200 hover:shadow-indigo-300 hover:-translate-y-0.5'}`}
               >
-                <CheckCircle2 size={18} /> Add Lesson
+                <CheckCircle2 size={18} /> {isSaving ? 'Saving...' : 'Add Topic'}
               </button>
             </div>
           </motion.div>

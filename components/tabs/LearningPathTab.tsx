@@ -15,6 +15,8 @@ import {
   Trash2,
   Copy,
   EyeOff,
+  Eye,
+  Share2,
   Edit,
   Layout,
   Wand2,
@@ -36,7 +38,8 @@ import { AddAssessmentModal } from '@/components/LearningPath/AddAssessmentModal
 import { StudentCompletionPopover } from '@/components/LearningPath/StudentCompletionPopover';
 import { UnitMasteryBuilder } from '@/components/UnitMasteryBuilder';
 import { BrowseLibraryTab } from '@/components/tabs/BrowseLibraryTab';
-import { getUnits, createUnit, deleteUnit, updateUnit, getLessons, createLesson, deleteLesson } from '@/services/learningPathData';
+import { getUnits, createUnit, deleteUnit, updateUnit, toggleUnitHidden, updateUnitSharing, getLessons, createLesson, deleteLesson } from '@/services/learningPathData';
+import { getTeacherClassNames } from '@/services/libraryData';
 
 type ContentType = 'video' | 'pdf' | 'quiz' | 'assignment' | 'project' | 'link';
 type LessonSource = 'official' | 'custom' | 'ai';
@@ -61,6 +64,8 @@ interface Unit {
   weeks: string;
   progress: number;
   lessons: Lesson[];
+  isHidden: boolean;
+  sharedWith: string[];
 }
 
 export function LearningPathTab({ 
@@ -96,6 +101,8 @@ export function LearningPathTab({
         title: u.title,
         weeks: u.weeksLabel,
         progress: 0,
+        isHidden: u.isHidden,
+        sharedWith: u.sharedWith,
         lessons: lessons.filter(l => l.unitId === u.id).map((l) => ({
           id: l.id,
           title: l.title,
@@ -126,6 +133,25 @@ export function LearningPathTab({
   const [targetUnitTitle, setTargetUnitTitle] = useState('');
   const [targetUnitId, setTargetUnitId] = useState<string | null>(null);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
+  const [shareUnit, setShareUnit] = useState<Unit | null>(null);
+  const [unitTargetClasses, setUnitTargetClasses] = useState<{ id: string; name: string }[]>([]);
+  const [selectedUnitShareClasses, setSelectedUnitShareClasses] = useState<string[]>([]);
+
+  const openUnitShareModal = (unit: Unit) => {
+    setShareUnit(unit);
+    setSelectedUnitShareClasses(unit.sharedWith || []);
+    if (teacherId) getTeacherClassNames(teacherId).then((classes) => setUnitTargetClasses(classes.filter(c => c.id !== classId)));
+  };
+
+  const handleSaveUnitShare = async () => {
+    if (!shareUnit) return;
+    const ok = await updateUnitSharing(shareUnit.id, selectedUnitShareClasses);
+    if (ok) {
+      refreshUnits();
+      setShareUnit(null);
+    }
+  };
+
 
   // Smart Course Planner State
   const [isBuildingUnit, setIsBuildingUnit] = useState(false);
@@ -197,15 +223,21 @@ export function LearningPathTab({
     setActiveUnitForAdd(null);
   };
 
-  const handleSaveLesson = async (lessonData: { title: string; type: ContentType; source: 'custom' }) => {
+  const handleSaveLesson = async (lessonData: { title: string; type: ContentType; source: 'custom'; url?: string; file?: File | null }) => {
     if (!targetUnitId) return;
-    const id = await createLesson({
+    const { id, error } = await createLesson({
       unitId: targetUnitId,
       title: lessonData.title,
-      type: (lessonData.type === 'video' || lessonData.type === 'pdf' || lessonData.type === 'link') ? lessonData.type : 'link',
+      type: (lessonData.type === 'video' || lessonData.type === 'pdf') ? lessonData.type : (lessonData.url ? 'link' : 'link'),
       weekLabel: units.find(u => u.id === targetUnitId)?.weeks || '',
+      url: lessonData.url || null,
+      file: lessonData.file || null,
     });
-    if (id) refreshUnits();
+    if (id) {
+      refreshUnits();
+    } else {
+      alert(language === 'ar' ? `حصل خطأ أثناء إضافة الموضوع: ${error}` : `Error adding topic: ${error}`);
+    }
   };
 
   const handleSaveAssessment = (assessmentData: { title: string; type: 'quiz' | 'assignment' | 'project'; category: string; source: 'custom' }) => {
@@ -252,7 +284,7 @@ export function LearningPathTab({
       currentUnitId = `u${window.crypto.randomUUID()}`;
       setUnits(prev => [...prev, { 
         id: currentUnitId!, 
-        title: newUnitTitle || 'Untitled Unit', 
+        title: newUnitTitle || 'Untitled Module', 
         weeks: 'Week 1', 
         progress: 0, 
         lessons: [] 
@@ -359,9 +391,11 @@ export function LearningPathTab({
                 <div>
                   <div className="flex items-center gap-3">
                     <h3 className="font-bold text-slate-800 text-lg">{unit.title}</h3>
-                    <span className="flex items-center gap-1.5 bg-slate-100 text-slate-500 text-xs font-bold px-2.5 py-1 rounded-lg border border-slate-200 shadow-none">
-                      <Calendar size={12} /> {unit.weeks}
-                    </span>
+                    {unit.isHidden && (
+                      <span className="flex items-center gap-1 bg-amber-50 text-amber-700 text-[10px] font-bold px-2 py-1 rounded-lg border border-amber-200">
+                        <EyeOff size={11} /> {language === 'ar' ? 'مخفي عن الطلاب' : 'Hidden from students'}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 mt-2">
                     <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
@@ -378,6 +412,28 @@ export function LearningPathTab({
               <div className="flex items-center gap-2">
                 {!isStudent && (
                   <>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const ok = await toggleUnitHidden(unit.id, !unit.isHidden);
+                        if (ok) refreshUnits();
+                      }}
+                      className={`w-9 h-9 flex items-center justify-center border rounded-xl transition-all shadow-none
+                        ${unit.isHidden
+                          ? 'bg-amber-50 text-amber-600 border-amber-200'
+                          : 'bg-white border-slate-200 text-slate-500 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200'
+                        }`}
+                      title={unit.isHidden ? (language === 'ar' ? 'إظهار للطلاب' : 'Show to students') : (language === 'ar' ? 'إخفاء عن الطلاب' : 'Hide from students')}
+                    >
+                      {unit.isHidden ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openUnitShareModal(unit); }}
+                      className="w-9 h-9 flex items-center justify-center border rounded-xl transition-all shadow-none bg-white border-slate-200 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200"
+                      title={language === 'ar' ? 'مشاركة مع فصول تانية' : 'Share with other classes'}
+                    >
+                      <Share2 size={18} />
+                    </button>
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -422,14 +478,15 @@ export function LearningPathTab({
                         <div className="h-px bg-slate-100 my-1" />
                         <button 
                           onClick={async () => {
-                            if (window.confirm('Are you sure you want to delete this unit? This cannot be undone.')) {
-                              const ok = await deleteUnit(unit.id);
+                            if (window.confirm('Are you sure you want to delete this module? This cannot be undone.')) {
+                              const { ok, error } = await deleteUnit(unit.id);
                               if (ok) refreshUnits();
+                              else alert(language === 'ar' ? `حصل خطأ أثناء الحذف: ${error}` : `Error deleting: ${error}`);
                             }
                           }}
                           className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2 shadow-none"
                         >
-                          <Trash2 size={14} /> Delete Unit
+                          <Trash2 size={14} /> Delete Module
                         </button>
                       </div>
                     </div>
@@ -631,14 +688,14 @@ export function LearningPathTab({
           ) : (
             <div className="bg-white rounded-3xl border border-slate-200 shadow-none p-6">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-slate-800">Set Up New Unit</h3>
+                <h3 className="text-lg font-bold text-slate-800">Set Up New Module</h3>
                 <button onClick={() => { setIsBuildingUnit(false); setNewUnitMode(null); setGeneratedPlan(null); setNewUnitTitle(''); }} className="text-slate-400 hover:text-slate-600 shadow-none">
                   <X size={20} />
                 </button>
               </div>
               
               <div className="mb-6">
-                <label className="block text-sm font-medium text-slate-700 mb-2">Unit Title</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Module Title</label>
                 <input 
                   type="text" 
                   value={newUnitTitle}
@@ -741,7 +798,7 @@ export function LearningPathTab({
                                 ${item.added ? 'bg-emerald-50 text-emerald-600' : 'bg-teal-50 text-teal-600 hover:bg-teal-100'}`}
                             >
                               {item.added ? <CheckCircle2 size={14} /> : <Plus size={14} />}
-                              {item.added ? 'Added' : 'Add to Unit'}
+                              {item.added ? 'Added' : 'Add to Module'}
                             </button>
                           </div>
                         </div>
@@ -769,15 +826,19 @@ export function LearningPathTab({
                   <button 
                     onClick={async () => {
                       if (!learnScope) return;
-                      const id = await createUnit(learnScope, { title: newUnitTitle || 'Untitled Unit', weeksLabel: 'Week 1' });
-                      if (id) refreshUnits();
-                      setIsBuildingUnit(false);
-                      setNewUnitMode(null);
-                      setNewUnitTitle('');
+                      const { id, error } = await createUnit(learnScope, { title: newUnitTitle || 'Untitled Module', weeksLabel: '' });
+                      if (id) {
+                        refreshUnits();
+                        setIsBuildingUnit(false);
+                        setNewUnitMode(null);
+                        setNewUnitTitle('');
+                      } else {
+                        alert(language === 'ar' ? `حصل خطأ أثناء إنشاء الوحدة: ${error}` : `Error creating module: ${error}`);
+                      }
                     }}
                     className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-medium transition-colors shadow-none"
                   >
-                    Create Empty Unit
+                    Create Empty Module
                   </button>
                 </div>
               )}
@@ -815,7 +876,7 @@ export function LearningPathTab({
                     <Layout size={24} />
                   </div>
                   <div>
-                    <span className="block text-sm font-bold text-slate-700 mb-1">Add Lesson</span>
+                    <span className="block text-sm font-bold text-slate-700 mb-1">Add Topic</span>
                     <span className="block text-xs text-slate-500">Upload video, PDF or link</span>
                   </div>
                 </button>
@@ -963,7 +1024,7 @@ export function LearningPathTab({
               className="bg-white rounded-3xl border border-slate-100 p-6 w-full max-w-md relative shadow-none"
             >
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-slate-800">Edit Unit</h3>
+                <h3 className="text-xl font-bold text-slate-800">{language === 'ar' ? 'تعديل الوحدة' : 'Edit Module'}</h3>
                 <button 
                   onClick={() => setEditingUnit(null)}
                   className="text-slate-400 hover:text-slate-600 transition-colors shadow-none"
@@ -974,20 +1035,11 @@ export function LearningPathTab({
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Unit Title</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{language === 'ar' ? 'اسم الوحدة' : 'Module Title'}</label>
                   <input 
                     type="text" 
                     value={editingUnit.title}
                     onChange={(e) => setEditingUnit({ ...editingUnit, title: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Timeframe (Weeks)</label>
-                  <input 
-                    type="text" 
-                    value={editingUnit.weeks}
-                    onChange={(e) => setEditingUnit({ ...editingUnit, weeks: e.target.value })}
                     className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-none"
                   />
                 </div>
@@ -1003,14 +1055,66 @@ export function LearningPathTab({
                 <button 
                   onClick={async () => {
                     if (editingUnit) {
-                      const ok = await updateUnit(editingUnit.id, { title: editingUnit.title, weeksLabel: editingUnit.weeks });
-                      if (ok) refreshUnits();
+                      const { ok, error } = await updateUnit(editingUnit.id, { title: editingUnit.title });
+                      if (ok) {
+                        refreshUnits();
+                        setEditingUnit(null);
+                      } else {
+                        alert(language === 'ar' ? `حصل خطأ أثناء التعديل: ${error}` : `Error saving: ${error}`);
+                      }
+                    } else {
+                      setEditingUnit(null);
                     }
-                    setEditingUnit(null);
                   }}
                   className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-medium transition-colors shadow-none"
                 >
                   Save Changes
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Share Module Modal */}
+      <AnimatePresence>
+        {shareUnit && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl border border-slate-100 p-6 w-full max-w-md relative shadow-none"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-slate-800">{language === 'ar' ? `مشاركة "${shareUnit.title}"` : `Share "${shareUnit.title}"`}</h3>
+                <button onClick={() => setShareUnit(null)} className="text-slate-400 hover:text-slate-600 transition-colors shadow-none">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <label className="block text-xs font-bold text-slate-500 mb-2">{language === 'ar' ? 'شارك مع فصولي التانية' : 'Share with my other classes'}</label>
+              <div className="space-y-1.5 max-h-52 overflow-y-auto mb-6">
+                {unitTargetClasses.map((c) => (
+                  <label key={c.id} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      checked={selectedUnitShareClasses.includes(c.id)}
+                      onChange={() => setSelectedUnitShareClasses((prev) => prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id])}
+                      className="accent-teal-600"
+                    />
+                    <span className="text-xs font-medium text-slate-700">{c.name}</span>
+                  </label>
+                ))}
+                {unitTargetClasses.length === 0 && <p className="text-xs text-slate-400 py-2">{language === 'ar' ? 'مفيش فصول تانية عندك لسه.' : 'No other classes yet.'}</p>}
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setShareUnit(null)} className="px-5 py-2.5 text-slate-600 hover:bg-slate-50 rounded-xl font-medium transition-colors shadow-none">
+                  Cancel
+                </button>
+                <button onClick={handleSaveUnitShare} className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-medium transition-colors shadow-none">
+                  {language === 'ar' ? 'حفظ المشاركة' : 'Save Sharing'}
                 </button>
               </div>
             </motion.div>
