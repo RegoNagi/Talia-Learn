@@ -66,12 +66,20 @@ export function LearningPathTab({
   viewRole = 'TEACHER',
   demoAssessments = [],
   language = 'en',
-  onAssessmentClick = () => {}
+  onAssessmentClick = () => {},
+  teacherId,
+  classId,
+  subject,
+  grade,
 }: { 
   viewRole?: 'TEACHER' | 'STUDENT',
   demoAssessments?: any[],
   language?: 'ar' | 'en',
-  onAssessmentClick?: (id: string) => void
+  onAssessmentClick?: (id: string) => void,
+  teacherId?: string,
+  classId?: string,
+  subject?: string,
+  grade?: string,
 }) {
   const [units, setUnits] = useState<Unit[]>([
     {
@@ -368,7 +376,7 @@ export function LearningPathTab({
       </div>
 
       {contentView === 'library' ? (
-        <BrowseLibraryTab language={language} role={viewRole?.toLowerCase() || 'student'} />
+        <BrowseLibraryTab language={language} role={viewRole?.toLowerCase() || 'student'} teacherId={teacherId} classId={classId} subject={subject} />
       ) : (
         <>
           {/* Units List */}
@@ -894,6 +902,11 @@ export function LearningPathTab({
         isOpen={isLibraryOpen} 
         onClose={() => setIsLibraryOpen(false)} 
         targetUnitTitle={targetUnitTitle} 
+        language={language}
+        grade={grade}
+        subject={subject}
+        teacherId={teacherId}
+        classId={classId}
       />
 
       <AddLessonModal

@@ -1,55 +1,104 @@
 'use client';
 
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Search, FileText, PlayCircle, BrainCircuit, Plus, Check, Calendar, Layers } from 'lucide-react';
+import { 
+  X, Search, FileText, PlayCircle, Volume2, Box, Link as LinkIcon, 
+  Plus, Check, Calendar, BookOpen, Folder, Sparkles
+} from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { getOfficialCurriculumResources } from '@/services/academicData';
+import { getLibraryFiles } from '@/services/libraryData';
 
 interface LibraryDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   targetUnitTitle: string;
+  language?: 'en' | 'ar';
+  grade?: string;
+  subject?: string;
+  teacherId?: string;
+  classId?: string;
+  onInject?: (items: LibraryItem[]) => void;
 }
 
-export function LibraryDrawer({ isOpen, onClose, targetUnitTitle }: LibraryDrawerProps) {
+type FileType = 'all' | 'docs' | 'video' | 'audio' | 'scorm' | 'link';
+type SourceType = 'official' | 'my-library';
+
+interface LibraryItem {
+  id: string;
+  title: string;
+  type: 'docs' | 'video' | 'audio' | 'scorm' | 'link';
+  folder?: string;
+  size?: string;
+  url?: string;
+}
+
+// بيحوّل نوع المصدر الرسمي (من المنهج) لنفس الأنواع اللي شاشة الاستيراد بتفهمها
+function normalizeOfficialType(type: string): LibraryItem['type'] {
+  const t = (type || '').toLowerCase();
+  if (t.includes('video')) return 'video';
+  if (t.includes('link')) return 'link';
+  if (t.includes('audio')) return 'audio';
+  return 'docs';
+}
+
+export function LibraryDrawer({ isOpen, onClose, targetUnitTitle, language = 'en', grade, subject, teacherId, classId, onInject }: LibraryDrawerProps) {
+  const [source, setSource] = useState<SourceType>('official');
+  const [fileTypeFilter, setFileTypeFilter] = useState<FileType>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'unit' | 'week'>('unit');
   const [mounted, setMounted] = useState(false);
+  const [officialItems, setOfficialItems] = useState<LibraryItem[]>([]);
+  const [myLibraryItems, setMyLibraryItems] = useState<LibraryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const isRtl = language === 'ar';
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
-  const libraryItems = [
-    { id: 'lib1', title: 'Matrices in Real World Applications', type: 'video', week: 'Week 1', unit: 'Unit 1', tags: ['Core'] },
-    { id: 'lib2', title: 'Determinants Calculation Guide', type: 'pdf', week: 'Week 1', unit: 'Unit 1', tags: ['Reference'] },
-    { id: 'lib3', title: 'Practice Set: Matrix Multiplication', type: 'quiz', week: 'Week 2', unit: 'Unit 1', tags: ['Assessment'] },
-    { id: 'lib4', title: 'Vector Spaces Overview', type: 'video', week: 'Week 3', unit: 'Unit 2', tags: ['Core'] },
-    { id: 'lib5', title: 'Linear Independence Worksheet', type: 'pdf', week: 'Week 3', unit: 'Unit 2', tags: ['Reference'] },
-  ];
+  useEffect(() => {
+    if (!isOpen) return;
+    setIsLoading(true);
+    const officialPromise = grade && subject ? getOfficialCurriculumResources(grade, subject) : Promise.resolve([]);
+    const myLibraryPromise = teacherId && classId && subject ? getLibraryFiles({ teacherId, classId, subject }) : Promise.resolve([]);
+
+    Promise.all([officialPromise, myLibraryPromise]).then(([official, mine]) => {
+      setOfficialItems(official.map((r) => ({ id: r.id, title: r.title, type: normalizeOfficialType(r.type), url: r.url })));
+      setMyLibraryItems(mine.map((f) => ({ id: f.id, title: f.name, type: (f.type === 'sheet' || f.type === 'slides' ? 'docs' : (f.type as any)) || 'docs', size: f.size })));
+      setIsLoading(false);
+    });
+  }, [isOpen, grade, subject, teacherId, classId]);
 
   const toggleSelection = (id: string) => {
-    setSelectedItems(prev => 
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
+    setSelectedItems(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
 
-  const filteredItems = libraryItems.filter(item => {
-    if (activeTab === 'unit') {
-      // Simple filter logic for demo - in real app would match selected unit context
-      return true; 
-    }
+  const rawList: LibraryItem[] = source === 'official' ? officialItems : myLibraryItems;
+  const filteredItems = rawList.filter(item => {
+    if (fileTypeFilter !== 'all' && item.type !== fileTypeFilter) return false;
+    if (searchQuery.trim() && !item.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
-  // Group items for display
-  const groupedItems = filteredItems.reduce((acc, item) => {
-    const key = activeTab === 'unit' ? item.unit : item.week;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(item);
-    return acc;
-  }, {} as Record<string, typeof libraryItems>);
+  const handleInject = () => {
+    const items = rawList.filter((i) => selectedItems.includes(i.id));
+    onInject?.(items);
+    setSelectedItems([]);
+    onClose();
+  };
+
+  const fileTypeIcon = (type: LibraryItem['type']) => {
+    switch (type) {
+      case 'video': return <PlayCircle size={16} className="text-rose-500" />;
+      case 'audio': return <Volume2 size={16} className="text-amber-500" />;
+      case 'scorm': return <Box size={16} className="text-indigo-500" />;
+      case 'link': return <LinkIcon size={16} className="text-blue-500" />;
+      default: return <FileText size={16} className="text-slate-500" />;
+    }
+  };
 
   if (!mounted) return null;
 
@@ -57,139 +106,62 @@ export function LibraryDrawer({ isOpen, onClose, targetUnitTitle }: LibraryDrawe
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[90]"
-          />
-
-          {/* Drawer */}
-          <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed top-0 right-0 h-full w-[400px] bg-white shadow-2xl z-[100] overflow-y-auto flex flex-col border-l border-slate-100"
-          >
-            {/* Header */}
-            <div className="sticky top-0 z-10 p-6 border-b border-slate-100 bg-slate-50">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold text-slate-800">Official Curriculum Library</h3>
-                <button 
-                  onClick={onClose}
-                  className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-colors"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              
-              <div className="relative mb-4">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Search resources..." 
-                  className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-9 pr-4 text-sm focus:ring-2 focus:ring-indigo-100 focus:border-indigo-200 transition-all"
-                />
-              </div>
-
-              {/* Tabs */}
-              <div className="flex p-1 bg-slate-200/50 rounded-xl">
-                <button
-                  onClick={() => setActiveTab('unit')}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2
-                    ${activeTab === 'unit' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                  <Layers size={14} /> By Unit
-                </button>
-                <button
-                  onClick={() => setActiveTab('week')}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2
-                    ${activeTab === 'week' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                  <Calendar size={14} /> By Academic Week
-                </button>
-              </div>
-            </div>
-
-            {/* Content List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-slate-50/30">
-              {Object.entries(groupedItems).map(([groupTitle, items]) => (
-                <div key={groupTitle}>
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 ml-1">{groupTitle}</h4>
-                  <div className="space-y-3">
-                    {items.map((item) => {
-                      const isSelected = selectedItems.includes(item.id);
-                      return (
-                        <div 
-                          key={item.id}
-                          onClick={() => toggleSelection(item.id)}
-                          className={`p-4 rounded-2xl border cursor-pointer transition-all duration-200 group relative overflow-hidden
-                            ${isSelected 
-                              ? 'bg-indigo-50 border-indigo-200 shadow-sm' 
-                              : 'bg-white border-slate-100 hover:border-indigo-100 hover:shadow-md'
-                            }`}
-                        >
-                          <div className="flex items-start gap-3 relative z-10">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0
-                              ${item.type === 'video' ? 'bg-red-50 text-red-500' :
-                                item.type === 'pdf' ? 'bg-blue-50 text-blue-500' :
-                                'bg-purple-50 text-purple-500'
-                              }`}
-                            >
-                              {item.type === 'video' ? <PlayCircle size={20} /> :
-                               item.type === 'pdf' ? <FileText size={20} /> :
-                               <BrainCircuit size={20} />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h4 className={`font-medium text-sm truncate ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
-                                {item.title}
-                              </h4>
-                              <div className="flex items-center gap-2 mt-1">
-                                <div className="flex gap-1">
-                                  {item.tags.map(tag => (
-                                    <span key={tag} className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md">
-                                      {tag}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                            
-                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors
-                              ${isSelected 
-                                ? 'bg-indigo-500 border-indigo-500 text-white' 
-                                : 'border-slate-200 text-transparent group-hover:border-indigo-300'
-                              }`}
-                            >
-                              <Check size={14} strokeWidth={3} />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-[90]" />
+          <motion.div initial={{ x: isRtl ? '-100%' : '100%' }} animate={{ x: 0 }} exit={{ x: isRtl ? '-100%' : '100%' }} className="fixed top-0 right-0 h-full w-[440px] max-w-[92vw] bg-white shadow-2xl z-[100] flex flex-col border-slate-200">
+            <div className="p-5 border-b border-slate-100">
+              <div className="flex justify-between items-start mb-1">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="text-indigo-600" size={18} />
+                  <h3 className="font-bold text-base">{isRtl ? 'مكتبة الموارد' : 'Official Curriculum Library'}</h3>
                 </div>
-              ))}
+                <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-full"><X size={18} /></button>
+              </div>
+              <p className="text-xs text-slate-400">{isRtl ? 'الهدف: ' : 'Target: '}{targetUnitTitle}</p>
             </div>
 
-            {/* Footer Action */}
-            <div className="p-6 border-t border-slate-100 bg-white sticky bottom-0 z-10">
-              <button 
-                disabled={selectedItems.length === 0}
-                onClick={onClose}
-                className={`w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg
-                  ${selectedItems.length > 0 
-                    ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200 hover:shadow-indigo-300 hover:-translate-y-0.5' 
-                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                  }`}
-              >
-                <Plus size={20} />
-                {selectedItems.length > 0 
-                  ? `Inject ${selectedItems.length} items` 
-                  : 'Select items to inject'}
+            {/* Source Toggle */}
+            <div className="grid grid-cols-2 gap-2 p-4 pb-2">
+              <button onClick={() => setSource('official')} className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold ${source === 'official' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                <BookOpen size={14} /> {isRtl ? 'المكتبة الرسمية' : 'Official Library'}
+              </button>
+              <button onClick={() => setSource('my-library')} className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold ${source === 'my-library' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                <Folder size={14} /> {isRtl ? 'مكتبتي' : 'My Library'}
+              </button>
+            </div>
+
+            <div className="px-4">
+              <div className="relative mb-3">
+                <Search className="absolute right-3 top-2.5 text-slate-400" size={14} />
+                <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={isRtl ? 'دوّر على مورد...' : 'Search resources...'} className="w-full pr-9 pl-3 py-2 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 text-xs" />
+              </div>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {(['all', 'docs', 'video', 'audio', 'scorm', 'link'] as FileType[]).map((t) => (
+                  <button key={t} onClick={() => setFileTypeFilter(t)} className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${fileTypeFilter === t ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>{t}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 pt-0 space-y-2">
+              {isLoading ? (
+                <p className="text-center text-xs text-slate-400 py-10">{isRtl ? 'جاري التحميل...' : 'Loading...'}</p>
+              ) : filteredItems.length === 0 ? (
+                <p className="text-center text-xs text-slate-400 py-10">{isRtl ? 'مفيش موارد هنا لسه.' : 'No resources here yet.'}</p>
+              ) : (
+                filteredItems.map(item => (
+                  <div key={item.id} onClick={() => toggleSelection(item.id)} className={`p-3 rounded-2xl border cursor-pointer flex items-center gap-3 ${selectedItems.includes(item.id) ? 'bg-indigo-50 border-indigo-300' : 'bg-white border-slate-200'}`}>
+                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">{fileTypeIcon(item.type)}</div>
+                    <div className="flex-1 min-w-0">
+                      <h5 className="font-semibold text-xs text-slate-800 truncate">{item.title}</h5>
+                      <p className="text-[10px] text-slate-400 mt-0.5 uppercase">{item.type} • {item.size || item.url || ''}</p>
+                    </div>
+                    {selectedItems.includes(item.id) && <Check size={16} className="text-indigo-600 shrink-0" />}
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-100">
+              <button disabled={selectedItems.length === 0} onClick={handleInject} className="w-full py-2.5 rounded-xl font-bold text-xs bg-indigo-600 text-white disabled:opacity-50">
+                {isRtl ? `إضافة ${selectedItems.length} عنصر للوحدة` : `Inject ${selectedItems.length} Items to Unit`}
               </button>
             </div>
           </motion.div>

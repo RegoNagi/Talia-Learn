@@ -284,7 +284,7 @@ export default function CourseWorkspace() {
                 ) : (
                   <>
                     {activeTab === 'subject-space' && <SpacesView space="subject" />}
-                    {activeTab === 'learning-path' && <LearningPathTab viewRole={viewRole} demoAssessments={demoAssessments} language={language} onAssessmentClick={(id) => { setCurrentAssessmentId(id); setEngineView('ASSESSMENT_LANDING'); }} />}
+                    {activeTab === 'learning-path' && <LearningPathTab viewRole={viewRole} demoAssessments={demoAssessments} language={language} onAssessmentClick={(id) => { setCurrentAssessmentId(id); setEngineView('ASSESSMENT_LANDING'); }} teacherId={authUser?.teacherId} classId={realClassId} subject={realSubject} grade={realClassInfo?.gradeLevel} />}
                     {activeTab === 'live-sessions' && <LiveSessionsTab viewRole={viewRole} />}
                     {activeTab === 'timeline' && <TimelineTab role={viewRole.toLowerCase()} language={language} />}
                     {activeTab === 'assessments' && <AssessmentsTab role={viewRole.toLowerCase() as any} />}

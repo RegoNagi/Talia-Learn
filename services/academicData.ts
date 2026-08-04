@@ -50,3 +50,18 @@ export async function getGradeSubjects(grade: string): Promise<string[]> {
   return (data || []).map((row: any) => row.subject);
 }
 
+// بيجيب موارد المنهج الرسمية الحقيقية (المكتبة الرسمية) لصف ومادة معيّنين — نفس مصدر بيانات المنهج الدراسي في Talia 360
+export async function getOfficialCurriculumResources(grade: string, subject: string): Promise<{ id: string; title: string; type: string; url: string }[]> {
+  const { data, error } = await supabase
+    .from('curriculum_resources')
+    .select('id, title, type, url')
+    .eq('grade', grade)
+    .eq('subject', subject)
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('Error fetching official curriculum resources:', error);
+    return [];
+  }
+  return (data || []).map((row: any) => ({ id: row.id, title: row.title, type: row.type, url: row.url }));
+}
+

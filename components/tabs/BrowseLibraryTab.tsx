@@ -1,300 +1,725 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Download, Upload, FileText, Filter, Plus, File, ExternalLink, X, Book, FileArchive, LayoutGrid, List } from 'lucide-react';
+import { 
+  Search, Download, Upload, FileText, Plus, File, ExternalLink, X, Book, 
+  FileArchive, LayoutGrid, List, Folder, FolderPlus, Lock, Globe, Share2, 
+  MoreVertical, Trash2, Edit2, ChevronRight, Eye, Image as ImageIcon, Video, 
+  FileSpreadsheet, Film, Copy, Check, Palette, ArrowLeft, Layers, ShieldCheck
+} from 'lucide-react';
+import {
+  getLibraryFolders, getLibraryFiles, createLibraryFolder, deleteLibraryFolder,
+  toggleFolderPrivacy as toggleFolderPrivacyReal, updateFolderSharing,
+  uploadLibraryFile, getLibraryFileDownloadUrl, deleteLibraryFile,
+  toggleFilePrivacy as toggleFilePrivacyReal, updateFileSharing, getTeacherClassNames,
+} from '@/services/libraryData';
 
-interface LibraryDocument {
+export interface LibraryFolder {
   id: string;
-  title: string;
-  type: 'pdf' | 'doc' | 'slides';
-  size: string;
-  dateAdded: string;
-  category: 'material' | 'past-papers';
-  author: string;
+  parentId: string | null;
+  name: string;
+  color: string; // 'indigo' | 'emerald' | 'amber' | 'rose' | 'purple' | 'cyan' | 'blue' | 'slate'
+  createdAt: string;
+  isPublic: boolean;
+  sharedWith?: string[];
 }
 
-const mockDocuments: LibraryDocument[] = [
-  { id: '1', title: 'Chapter 1: Matrices Introduction', type: 'pdf', size: '2.4 MB', dateAdded: '2023-09-01', category: 'material', author: 'Dr. Smith' },
-  { id: '2', title: 'Chapter 2: Vector Spaces', type: 'pdf', size: '3.1 MB', dateAdded: '2023-09-15', category: 'material', author: 'Dr. Smith' },
-  { id: '3', title: 'Midterm 2022 Solutions', type: 'pdf', size: '1.2 MB', dateAdded: '2022-10-20', category: 'past-papers', author: 'Dept of Math' },
-  { id: '4', title: 'Final Exam 2021', type: 'pdf', size: '1.5 MB', dateAdded: '2021-12-10', category: 'past-papers', author: 'Dept of Math' },
-  { id: '5', title: 'Linear Transformations Notes', type: 'pdf', size: '4.0 MB', dateAdded: '2023-10-05', category: 'material', author: 'Dr. Smith' },
-];
+export interface LibraryFile {
+  id: string;
+  folderId: string | null;
+  name: string;
+  type: 'pdf' | 'doc' | 'slides' | 'sheet' | 'image' | 'video' | 'archive' | 'code' | 'other';
+  size: string;
+  createdAt: string;
+  isPublic: boolean;
+  author: string;
+  sharedWith?: string[];
+  storagePath?: string | null;
+}
 
-export function BrowseLibraryTab({ language = 'en', role = 'teacher' }: { language?: 'en' | 'ar', role?: string }) {
+const colorThemeMap: Record<string, { bg: string; border: string; text: string; iconBg: string; activeRing: string }> = {
+  indigo: { bg: 'bg-indigo-50/70', border: 'border-indigo-200 hover:border-indigo-400', text: 'text-indigo-700', iconBg: 'bg-indigo-100 text-indigo-600', activeRing: 'ring-indigo-500' },
+  emerald: { bg: 'bg-emerald-50/70', border: 'border-emerald-200 hover:border-emerald-400', text: 'text-emerald-700', iconBg: 'bg-emerald-100 text-emerald-600', activeRing: 'ring-emerald-500' },
+  amber: { bg: 'bg-amber-50/70', border: 'border-amber-200 hover:border-amber-400', text: 'text-amber-700', iconBg: 'bg-amber-100 text-amber-600', activeRing: 'ring-amber-500' },
+  rose: { bg: 'bg-rose-50/70', border: 'border-rose-200 hover:border-rose-400', text: 'text-rose-700', iconBg: 'bg-rose-100 text-rose-600', activeRing: 'ring-rose-500' },
+  purple: { bg: 'bg-purple-50/70', border: 'border-purple-200 hover:border-purple-400', text: 'text-purple-700', iconBg: 'bg-purple-100 text-purple-600', activeRing: 'ring-purple-500' },
+  cyan: { bg: 'bg-cyan-50/70', border: 'border-cyan-200 hover:border-cyan-400', text: 'text-cyan-700', iconBg: 'bg-cyan-100 text-cyan-600', activeRing: 'ring-cyan-500' },
+  blue: { bg: 'bg-blue-50/70', border: 'border-blue-200 hover:border-blue-400', text: 'text-blue-700', iconBg: 'bg-blue-100 text-blue-600', activeRing: 'ring-blue-500' },
+  slate: { bg: 'bg-slate-100/70', border: 'border-slate-300 hover:border-slate-400', text: 'text-slate-700', iconBg: 'bg-slate-200 text-slate-700', activeRing: 'ring-slate-500' },
+};
+
+export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId, classId, subject }: { language?: 'en' | 'ar', role?: string, teacherId?: string, classId?: string, subject?: string }) {
   const isRtl = language === 'ar';
-  const [activeSubTab, setActiveSubTab] = useState<'material' | 'past-papers'>('material');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [documents, setDocuments] = useState<LibraryDocument[]>(mockDocuments);
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   
-  // Upload form state
-  const [uploadTitle, setUploadTitle] = useState('');
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  // State
+  const [folders, setFolders] = useState<LibraryFolder[]>([]);
+  const [files, setFiles] = useState<LibraryFile[]>([]);
+  const [isLoadingLibrary, setIsLoadingLibrary] = useState(true);
+  const [targetClasses, setTargetClasses] = useState<{ id: string; name: string; arName: string }[]>([]);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
 
-  const filteredDocs = documents.filter(doc => 
-    doc.category === activeSubTab && 
-    doc.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const scope = teacherId && classId && subject ? { teacherId, classId, subject } : null;
 
-  const handleUpload = (e: React.FormEvent) => {
+  const refreshLibrary = () => {
+    if (!scope) return;
+    setIsLoadingLibrary(true);
+    Promise.all([getLibraryFolders(scope), getLibraryFiles(scope), getTeacherClassNames(scope.teacherId)]).then(([f, files_, classes]) => {
+      setFolders(f as any);
+      setFiles(files_ as any);
+      setTargetClasses(classes.map(c => ({ id: c.id, name: c.name, arName: c.name })));
+      setIsLoadingLibrary(false);
+    });
+  };
+
+  useEffect(() => {
+    refreshLibrary();
+  }, [scope?.classId, scope?.subject]);
+  
+  // Modals
+  const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [shareItem, setShareItem] = useState<{ item: LibraryFolder | LibraryFile; isFolder: boolean } | null>(null);
+  const [previewFile, setPreviewFile] = useState<LibraryFile | null>(null);
+
+  // Form State
+  const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderColor, setNewFolderColor] = useState('indigo');
+  const [newFolderPublic, setNewFolderPublic] = useState(true);
+
+  const [uploadName, setUploadName] = useState('');
+  const [uploadType, setUploadType] = useState<LibraryFile['type']>('pdf');
+  const [uploadFileObj, setUploadFileObj] = useState<File | null>(null);
+  const [uploadTargetFolder, setUploadTargetFolder] = useState<string | null>(currentFolderId);
+  const [uploadPublic, setUploadPublic] = useState(true);
+
+  // Share Modal State
+  const [selectedTargetLibs, setSelectedTargetLibs] = useState<string[]>([]);
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
+  const [shareSuccessToast, setShareSuccessToast] = useState(false);
+
+  // Active Folder Breadcrumb chain
+  const breadcrumbChain = useMemo(() => {
+    const chain: LibraryFolder[] = [];
+    let curr = currentFolderId;
+    while (curr) {
+      const f = folders.find(folder => folder.id === curr);
+      if (f) {
+        chain.unshift(f);
+        curr = f.parentId;
+      } else {
+        break;
+      }
+    }
+    return chain;
+  }, [currentFolderId, folders]);
+
+  // Current folder details
+  const activeFolder = useMemo(() => {
+    return folders.find(f => f.id === currentFolderId) || null;
+  }, [currentFolderId, folders]);
+
+  // Filtered Folders in active directory
+  const currentFolders = useMemo(() => {
+    return folders.filter(f => {
+      const matchesDir = searchQuery ? true : f.parentId === currentFolderId;
+      const matchesSearch = f.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = typeFilter === 'all' || typeFilter === 'folder';
+      return matchesDir && matchesSearch && matchesType;
+    });
+  }, [folders, currentFolderId, searchQuery, typeFilter]);
+
+  // Filtered Files in active directory
+  const currentFiles = useMemo(() => {
+    return files.filter(f => {
+      const matchesDir = searchQuery ? true : f.folderId === currentFolderId;
+      const matchesSearch = f.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = typeFilter === 'all' 
+        ? true 
+        : typeFilter === 'doc' ? ['pdf', 'doc'].includes(f.type)
+        : typeFilter === 'media' ? ['image', 'video'].includes(f.type)
+        : typeFilter === 'sheet' ? ['sheet', 'slides'].includes(f.type)
+        : f.type === typeFilter;
+      return matchesDir && matchesSearch && matchesType;
+    });
+  }, [files, currentFolderId, searchQuery, typeFilter]);
+
+  // Handlers
+  const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadTitle) return;
-    
-    const newDoc: LibraryDocument = {
-      id: Math.random().toString(36).substr(2, 9),
-      title: uploadTitle,
-      type: 'pdf', // Mocked as PDF for demo
-      size: uploadFile ? `${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB` : '1.0 MB',
-      dateAdded: new Date().toISOString().split('T')[0],
-      category: activeSubTab,
-      author: role === 'teacher' ? 'You' : 'Student',
-    };
-    
-    setDocuments([newDoc, ...documents]);
-    setIsUploadModalOpen(false);
-    setUploadTitle('');
-    setUploadFile(null);
+    if (!newFolderName.trim() || !scope) return;
+
+    const id = await createLibraryFolder(scope, {
+      parentId: currentFolderId,
+      name: newFolderName.trim(),
+      color: newFolderColor,
+      isPublic: newFolderPublic,
+    });
+
+    if (id) {
+      refreshLibrary();
+      setIsNewFolderOpen(false);
+      setNewFolderName('');
+      setNewFolderColor('indigo');
+      setNewFolderPublic(true);
+    }
   };
 
-  const downloadFile = (doc: LibraryDocument) => {
-    alert(isRtl ? `جاري تحميل ${doc.title}...` : `Downloading ${doc.title}...`);
+  const handleUploadFile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!scope) return;
+    const fname = uploadName.trim() || (uploadFileObj ? uploadFileObj.name : 'Untitled Document');
+    
+    let detectedType: LibraryFile['type'] = uploadType;
+    if (uploadFileObj) {
+      const ext = uploadFileObj.name.split('.').pop()?.toLowerCase();
+      if (ext === 'pdf') detectedType = 'pdf';
+      else if (['doc', 'docx'].includes(ext || '')) detectedType = 'doc';
+      else if (['ppt', 'pptx'].includes(ext || '')) detectedType = 'slides';
+      else if (['xls', 'xlsx', 'csv'].includes(ext || '')) detectedType = 'sheet';
+      else if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext || '')) detectedType = 'image';
+      else if (['mp4', 'mov', 'avi', 'mkv'].includes(ext || '')) detectedType = 'video';
+      else if (['zip', 'rar', '7z', 'tar'].includes(ext || '')) detectedType = 'archive';
+    }
+
+    const id = await uploadLibraryFile(scope, {
+      folderId: uploadTargetFolder,
+      name: fname,
+      type: detectedType,
+      isPublic: uploadPublic,
+      author: role === 'teacher' ? 'You (Teacher)' : 'Student',
+      file: uploadFileObj,
+    });
+
+    if (id) {
+      refreshLibrary();
+      setIsUploadOpen(false);
+      setUploadName('');
+      setUploadFileObj(null);
+      setUploadPublic(true);
+    }
   };
 
-  const openFile = (doc: LibraryDocument) => {
-    alert(isRtl ? `جاري فتح ${doc.title}...` : `Opening ${doc.title}...`);
+  const toggleFolderPrivacy = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const folder = folders.find(f => f.id === id);
+    if (!folder) return;
+    setFolders(prev => prev.map(f => f.id === id ? { ...f, isPublic: !f.isPublic } : f));
+    await toggleFolderPrivacyReal(id, !folder.isPublic);
+  };
+
+  const toggleFilePrivacy = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const file = files.find(f => f.id === id);
+    if (!file) return;
+    setFiles(prev => prev.map(f => f.id === id ? { ...f, isPublic: !f.isPublic } : f));
+    await toggleFilePrivacyReal(id, !file.isPublic);
+  };
+
+  const deleteFolder = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (confirm(isRtl ? 'هل أنت تأكد من حذف هذا المجلد وجميع محتوياته؟' : 'Are you sure you want to delete this folder and its content?')) {
+      const ok = await deleteLibraryFolder(id);
+      if (ok) refreshLibrary();
+    }
+  };
+
+  const deleteFile = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (confirm(isRtl ? 'هل أنت تأكد من حذف هذا الملف؟' : 'Are you sure you want to delete this file?')) {
+      const file = files.find(f => f.id === id);
+      const ok = await deleteLibraryFile(id, file?.storagePath || null);
+      if (ok) refreshLibrary();
+    }
+  };
+
+  const openShareModal = (item: LibraryFolder | LibraryFile, isFolder: boolean, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setShareItem({ item, isFolder });
+    setSelectedTargetLibs(item.sharedWith || []);
+    setShareLinkCopied(false);
+  };
+
+  const handleSaveShare = async () => {
+    if (!shareItem) return;
+    const { item, isFolder } = shareItem;
+    const ok = isFolder
+      ? await updateFolderSharing(item.id, selectedTargetLibs)
+      : await updateFileSharing(item.id, selectedTargetLibs);
+    if (ok) {
+      refreshLibrary();
+      setShareSuccessToast(true);
+      setTimeout(() => {
+        setShareSuccessToast(false);
+        setShareItem(null);
+      }, 1200);
+    }
+  };
+
+  const renderFileIcon = (type: LibraryFile['type']) => {
+    switch (type) {
+      case 'pdf': return <FileText className="text-rose-500 shrink-0" size={20} />;
+      case 'doc': return <FileText className="text-blue-500 shrink-0" size={20} />;
+      case 'slides': return <Film className="text-amber-500 shrink-0" size={20} />;
+      case 'sheet': return <FileSpreadsheet className="text-emerald-500 shrink-0" size={20} />;
+      case 'image': return <ImageIcon className="text-purple-500 shrink-0" size={20} />;
+      case 'video': return <Video className="text-rose-600 shrink-0" size={20} />;
+      case 'archive': return <FileArchive className="text-cyan-600 shrink-0" size={20} />;
+      default: return <File className="text-slate-500 shrink-0" size={20} />;
+    }
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto flex flex-col h-full" dir={isRtl ? 'rtl' : 'ltr'}>
-      {/* Header & Sub-tabs */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-        <div className="flex border-b border-slate-200 w-full sm:w-auto">
-          <button
-            onClick={() => setActiveSubTab('material')}
-            className={`px-6 py-3 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeSubTab === 'material' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+    <div className="p-6 md:p-8 max-w-7xl mx-auto flex flex-col h-full bg-white" dir={isRtl ? 'rtl' : 'ltr'}>
+      {/* Notification Toast */}
+      <AnimatePresence>
+        {shareSuccessToast && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold"
           >
-            <Book size={18} />
-            {isRtl ? 'المحتوى' : 'Content'}
-          </button>
-          <button
-            onClick={() => setActiveSubTab('past-papers')}
-            className={`px-6 py-3 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeSubTab === 'past-papers' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
-          >
-            <FileArchive size={18} />
-            {isRtl ? 'اختبارات سابقة' : 'Past Papers'}
-          </button>
+            <ShieldCheck className="text-emerald-400" size={18} />
+            {isRtl ? 'تم تحديث مشاركة المجلد/الملف بنجاح!' : 'Library folder/file shared successfully!'}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Create Folder Modal */}
+      <AnimatePresence>
+        {isNewFolderOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4">
+            <motion.form onSubmit={handleCreateFolder} initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl">
+              <div className="flex justify-between items-center mb-5">
+                <div className="flex items-center gap-2">
+                  <FolderPlus className="text-indigo-600" size={20} />
+                  <h3 className="font-bold text-lg text-slate-900">{isRtl ? 'إنشاء مجلد جديد' : 'Create New Folder'}</h3>
+                </div>
+                <button type="button" onClick={() => setIsNewFolderOpen(false)} className="text-slate-400 hover:text-slate-700"><X size={20} /></button>
+              </div>
+
+              <label className="block text-xs font-bold text-slate-500 mb-1.5">{isRtl ? 'اسم المجلد' : 'Folder Title'}</label>
+              <input autoFocus type="text" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder={isRtl ? 'مثال: أوراق الفصل الأول' : 'e.g. Chapter 1 Handouts'} className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 mb-5" />
+
+              <label className="block text-xs font-bold text-slate-500 mb-2 flex items-center gap-1.5"><Palette size={13} /> {isRtl ? 'لون المجلد' : 'Folder Color Theme'}</label>
+              <div className="grid grid-cols-4 gap-2 mb-5">
+                {Object.keys(colorThemeMap).map((c) => (
+                  <button type="button" key={c} onClick={() => setNewFolderColor(c)} className={`px-2 py-2.5 rounded-xl border text-xs font-bold capitalize flex items-center justify-center gap-1.5 ${newFolderColor === c ? `ring-2 ${colorThemeMap[c].activeRing} ${colorThemeMap[c].bg} ${colorThemeMap[c].text}` : 'border-slate-200 text-slate-500'}`}>
+                    <span className={`w-2.5 h-2.5 rounded-full ${colorThemeMap[c].iconBg}`} />
+                    {c}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 mb-6">
+                <div>
+                  <p className="text-sm font-bold text-slate-800">{isRtl ? 'الظهور' : 'Visibility Setting'}</p>
+                  <p className="text-[11px] text-slate-400">{newFolderPublic ? (isRtl ? 'ظاهر للطلاب' : 'Visible to students') : (isRtl ? 'خاص بيك بس' : 'Private to you')}</p>
+                </div>
+                <button type="button" onClick={() => setNewFolderPublic(!newFolderPublic)} className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 ${newFolderPublic ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                  {newFolderPublic ? <Globe size={13} /> : <Lock size={13} />} {newFolderPublic ? 'Public' : 'Private'}
+                </button>
+              </div>
+
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setIsNewFolderOpen(false)} className="flex-1 py-3 rounded-xl border border-slate-200 font-bold text-sm text-slate-600">{isRtl ? 'إلغاء' : 'Cancel'}</button>
+                <button type="submit" className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm">{isRtl ? 'إنشاء المجلد' : 'Create Folder'}</button>
+              </div>
+            </motion.form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Upload File Modal */}
+      <AnimatePresence>
+        {isUploadOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4">
+            <motion.form onSubmit={handleUploadFile} initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl">
+              <div className="flex justify-between items-center mb-5">
+                <div className="flex items-center gap-2">
+                  <Upload className="text-indigo-600" size={20} />
+                  <h3 className="font-bold text-lg text-slate-900">{isRtl ? 'رفع ملف للمكتبة' : 'Upload File to Library'}</h3>
+                </div>
+                <button type="button" onClick={() => setIsUploadOpen(false)} className="text-slate-400 hover:text-slate-700"><X size={20} /></button>
+              </div>
+
+              <label className="border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/40 transition-colors block mb-5">
+                <Upload className="mx-auto text-indigo-500 mb-3" size={26} />
+                <p className="font-bold text-sm text-slate-800">{isRtl ? 'اضغط لاختيار ملف أو اسحبه هنا' : 'Click to browse or drag file here'}</p>
+                <p className="text-[11px] text-slate-400 mt-1">{isRtl ? 'كل الصيغ متاحة: PDF, DOCX, PPTX, XLSX, صور, فيديو' : 'Supports all file formats: PDF, DOCX, PPTX, XLSX, Images, Video'}</p>
+                <input type="file" className="hidden" onChange={(e) => setUploadFileObj(e.target.files?.[0] || null)} />
+              </label>
+              {uploadFileObj && <p className="text-xs text-slate-500 -mt-3 mb-4">{uploadFileObj.name}</p>}
+
+              <label className="block text-xs font-bold text-slate-500 mb-1.5">{isRtl ? 'اسم الملف' : 'Document Title'}</label>
+              <input type="text" value={uploadName} onChange={(e) => setUploadName(e.target.value)} placeholder={isRtl ? 'اسم الملف اللي هيظهر' : 'File display title...'} className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 mb-5" />
+
+              <label className="block text-xs font-bold text-slate-500 mb-1.5">{isRtl ? 'المجلد الهدف' : 'Destination Folder'}</label>
+              <select value={uploadTargetFolder || ''} onChange={(e) => setUploadTargetFolder(e.target.value || null)} className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 bg-white mb-5">
+                <option value="">{isRtl ? 'المكتبة الرئيسية (بدون مجلد)' : 'Root Library (No Folder)'}</option>
+                {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 mb-6">
+                <div>
+                  <p className="text-sm font-bold text-slate-800">{isRtl ? 'الظهور' : 'Privacy'}</p>
+                  <p className="text-[11px] text-slate-400">{uploadPublic ? (isRtl ? 'ظاهر للطلاب' : 'Public to students') : (isRtl ? 'خاص بيك بس' : 'Private to you')}</p>
+                </div>
+                <button type="button" onClick={() => setUploadPublic(!uploadPublic)} className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 ${uploadPublic ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                  {uploadPublic ? <Globe size={13} /> : <Lock size={13} />} {uploadPublic ? 'Public' : 'Private'}
+                </button>
+              </div>
+
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setIsUploadOpen(false)} className="flex-1 py-3 rounded-xl border border-slate-200 font-bold text-sm text-slate-600">{isRtl ? 'إلغاء' : 'Cancel'}</button>
+                <button type="submit" className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm">{isRtl ? 'رفع الملف' : 'Upload Document'}</button>
+              </div>
+            </motion.form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Share Modal */}
+      <AnimatePresence>
+        {shareItem && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4">
+            <motion.div initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl">
+              <div className="flex justify-between items-center mb-5">
+                <div className="flex items-center gap-2">
+                  <Share2 className="text-indigo-600" size={20} />
+                  <h3 className="font-bold text-lg text-slate-900">{isRtl ? 'مشاركة' : 'Share'}</h3>
+                </div>
+                <button onClick={() => setShareItem(null)} className="text-slate-400 hover:text-slate-700"><X size={20} /></button>
+              </div>
+
+              <div className="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 mb-5">
+                {shareItem.isFolder ? <Folder className={colorThemeMap[(shareItem.item as LibraryFolder).color]?.text} size={20} /> : renderFileIcon((shareItem.item as LibraryFile).type)}
+                <div>
+                  <p className="font-bold text-sm text-slate-800">{shareItem.item.name}</p>
+                  <p className="text-[11px] text-slate-400">{shareItem.isFolder ? (isRtl ? 'مجلد' : 'Library Folder') : (isRtl ? 'ملف' : 'File')}</p>
+                </div>
+              </div>
+
+              <label className="block text-xs font-bold text-slate-500 mb-2">{isRtl ? 'شارك مع فصولي' : 'Share with Classes'}</label>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto mb-2">
+                <label className="flex items-center gap-2.5 p-2.5 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-50">
+                  <input type="checkbox" checked={targetClasses.length > 0 && targetClasses.every((c) => selectedTargetLibs.includes(c.id))} onChange={(e) => setSelectedTargetLibs(e.target.checked ? targetClasses.map((c) => c.id) : [])} className="accent-indigo-600" />
+                  <span className="text-xs font-bold text-slate-700">{isRtl ? 'كل فصولي' : 'All my classes'}</span>
+                </label>
+                {targetClasses.map((c) => (
+                  <label key={c.id} className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-50">
+                    <span className="flex items-center gap-2.5 text-xs font-medium text-slate-700">
+                      <input type="checkbox" checked={selectedTargetLibs.includes(c.id)} onChange={() => setSelectedTargetLibs((prev) => prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id])} className="accent-indigo-600" />
+                      {isRtl ? c.arName : c.name}
+                    </span>
+                  </label>
+                ))}
+                {targetClasses.length === 0 && <p className="text-xs text-slate-400 py-2">{isRtl ? 'مفيش فصول تانية عندك لسه.' : 'No other classes yet.'}</p>}
+              </div>
+
+              <label className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 mb-6 cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={16} className="text-slate-400" />
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">{isRtl ? 'عام' : 'Public'}</p>
+                    <p className="text-[11px] text-slate-400">{isRtl ? 'يظهر في مكتبات المعلمين التانيين' : 'Visible in other teachers’ libraries'}</p>
+                  </div>
+                </div>
+                <input type="checkbox" checked={selectedTargetLibs.includes('public')} onChange={() => setSelectedTargetLibs((prev) => prev.includes('public') ? prev.filter((x) => x !== 'public') : [...prev, 'public'])} className="accent-indigo-600 w-4 h-4" />
+              </label>
+
+              <div className="flex gap-3">
+                <button onClick={() => setShareItem(null)} className="flex-1 py-3 rounded-xl border border-slate-200 font-bold text-sm text-slate-600">{isRtl ? 'إلغاء' : 'Cancel'}</button>
+                <button onClick={handleSaveShare} className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm">{isRtl ? 'حفظ المشاركة' : 'Save & Update Sharing'}</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <div className="flex flex-col gap-2.5 mb-3">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h3 className="text-lg font-bold text-slate-800">
+              {isRtl ? 'مكتبتي' : 'My Library'}
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              {folders.length} {isRtl ? 'مجلدات' : 'folders'} • {files.length} {isRtl ? 'ملفات' : 'files'}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <button
+              onClick={() => setIsNewFolderOpen(true)}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-slate-200"
+            >
+              <FolderPlus size={16} className="text-indigo-600" />
+              <span>{isRtl ? 'مجلد جديد' : 'New Folder'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setUploadTargetFolder(currentFolderId);
+                setIsUploadOpen(true);
+              }}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm"
+            >
+              <Upload size={16} />
+              <span>{isRtl ? 'رفع ملفات' : 'Upload File'}</span>
+            </button>
+          </div>
         </div>
-        
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:flex-none sm:min-w-[250px]">
-            <Search className="absolute top-1/2 -translate-y-1/2 start-3 text-slate-400" size={18} />
+
+        {/* Search, Filters & View Toggle */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80">
+          <div className="relative flex-1">
+            <Search className="absolute top-1/2 -translate-y-1/2 start-3.5 text-slate-400" size={18} />
             <input 
               type="text" 
-              placeholder={isRtl ? 'ابحث في المكتبة...' : 'Search library...'}
+              placeholder={isRtl ? 'البحث في المجلدات والملفات...' : 'Search folders and files...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+              className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
             />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute top-1/2 -translate-y-1/2 end-3 text-slate-400 hover:text-slate-600">
+                <X size={14} />
+              </button>
+            )}
           </div>
-          
-          <div className="flex bg-slate-100 rounded-xl p-1 shrink-0">
-             <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-lg ${viewMode === 'grid' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}>
-                <LayoutGrid size={18} />
-             </button>
-             <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-lg ${viewMode === 'list' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}>
-                <List size={18} />
-             </button>
+
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
+            {[
+              { id: 'all', label: isRtl ? 'الكل' : 'All' },
+              { id: 'folder', label: isRtl ? 'المجلدات' : 'Folders' },
+              { id: 'doc', label: isRtl ? 'المستندات' : 'Docs & PDFs' },
+              { id: 'media', label: isRtl ? 'وسائط' : 'Images & Video' },
+              { id: 'sheet', label: isRtl ? 'جداول وعروض' : 'Sheets & Slides' },
+            ].map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setTypeFilter(f.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                  typeFilter === f.id
+                    ? 'bg-slate-800 text-white shadow-xs'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
-          
-          <button 
-            onClick={() => setIsUploadModalOpen(true)}
-            className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all shrink-0 shadow-sm"
-          >
-            <Upload size={18} />
-            <span className="hidden sm:inline">{isRtl ? 'رفع ملف' : 'Upload'}</span>
-          </button>
+
+          <div className="flex bg-white rounded-xl p-1 border border-slate-200 shrink-0 self-end md:self-auto">
+            <button 
+              onClick={() => setViewMode('grid')} 
+              className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-indigo-50 text-indigo-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}
+              title={isRtl ? 'عرض شبكي' : 'Grid View'}
+            >
+              <LayoutGrid size={16} />
+            </button>
+            <button 
+              onClick={() => setViewMode('list')} 
+              className={`p-1.5 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-indigo-50 text-indigo-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}
+              title={isRtl ? 'عرض قائمة' : 'List View'}
+            >
+              <List size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Breadcrumb Trail */}
+        <div className="flex items-center justify-between text-xs font-medium text-slate-600 border-b border-slate-100 pb-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide py-0.5">
+            <button 
+              onClick={() => setCurrentFolderId(null)}
+              className={`flex items-center gap-1 hover:text-indigo-600 transition-colors ${currentFolderId === null ? 'font-bold text-slate-900' : 'text-slate-500'}`}
+            >
+              <Folder size={14} className="text-indigo-500" />
+              <span>{isRtl ? 'المكتبة الرئيسية' : 'My Library'}</span>
+            </button>
+
+            {breadcrumbChain.map((crumb) => (
+              <React.Fragment key={crumb.id}>
+                <ChevronRight size={12} className="text-slate-300 shrink-0" />
+                <button
+                  onClick={() => setCurrentFolderId(crumb.id)}
+                  className={`hover:text-indigo-600 transition-colors whitespace-nowrap ${currentFolderId === crumb.id ? 'font-bold text-slate-900' : 'text-slate-500'}`}
+                >
+                  {crumb.name}
+                </button>
+              </React.Fragment>
+            ))}
+          </div>
+
+          {currentFolderId && (
+            <button
+              onClick={() => setCurrentFolderId(activeFolder?.parentId || null)}
+              className="flex items-center gap-1 text-slate-500 hover:text-indigo-600 transition-colors font-semibold shrink-0"
+            >
+              <ArrowLeft size={14} />
+              <span>{isRtl ? 'رجوع' : 'Back'}</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Content Area */}
-      <div className="flex-1 overflow-y-auto min-h-0 pb-10 custom-scrollbar pr-2">
-        {filteredDocs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 bg-slate-50/50 rounded-2xl border border-slate-100 border-dashed">
-             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 mb-4">
-               <FileText size={24} />
-             </div>
-             <h3 className="text-lg font-bold text-slate-700 mb-1">{isRtl ? 'لا توجد ملفات' : 'No files found'}</h3>
-             <p className="text-sm text-slate-500 text-center max-w-sm">
-               {isRtl ? 'لم يتم العثور على ملفات تطابق بحثك. يمكنك رفع ملف جديد.' : 'We could not find any files matching your search. You can upload a new file.'}
-             </p>
+      {/* File & Folder Grid / List Display */}
+      <div className="flex-1 overflow-y-auto min-h-0 pb-12 custom-scrollbar pr-1">
+        {currentFolders.length === 0 && currentFiles.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 rounded-3xl border border-dashed border-slate-200 text-center">
+            <div className="w-16 h-16 bg-white rounded-2xl border border-slate-200 flex items-center justify-center text-slate-400 mb-4 shadow-xs">
+              <FolderPlus size={28} className="text-indigo-500" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-800 mb-1">
+              {searchQuery ? (isRtl ? 'لا توجد نتائج بحث' : 'No matching items') : (isRtl ? 'المجلد فارغ' : 'This folder is empty')}
+            </h3>
+            <p className="text-xs text-slate-400 max-w-sm mb-6">
+              {searchQuery ? (isRtl ? 'لم نتمكن من العثور على أي ملفات.' : 'Try adjusting your search terms.') : (isRtl ? 'يمكنك إنشاء مجلد جديد.' : 'Start by creating a folder or uploading course files.')}
+            </p>
           </div>
         ) : (
           viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredDocs.map(doc => (
-                <div key={doc.id} className="bg-white border border-slate-200 hover:border-indigo-300 rounded-2xl p-5 transition-all shadow-sm group flex flex-col h-full">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
-                      doc.category === 'material' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
-                    }`}>
-                      {doc.category === 'material' ? <Book size={24} /> : <FileArchive size={24} />}
-                    </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => downloadFile(doc)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title={isRtl ? 'تحميل' : 'Download'}>
-                        <Download size={16} />
-                      </button>
-                      <button onClick={() => openFile(doc)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title={isRtl ? 'فتح' : 'Open'}>
-                        <ExternalLink size={16} />
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <h3 className="font-bold text-slate-800 line-clamp-2 mb-1">{doc.title}</h3>
-                  <div className="mt-auto pt-4 flex items-center justify-between text-xs text-slate-500">
-                    <span className="truncate max-w-[120px]">{doc.author}</span>
-                    <div className="flex items-center gap-2">
-                       <span>{doc.size}</span>
-                       <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                       <span>{new Date(doc.dateAdded).toLocaleDateString()}</span>
-                    </div>
+            <div className="space-y-8">
+              {/* Folder Cards */}
+              {currentFolders.length > 0 && (
+                <div>
+                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <Folder size={14} />
+                    <span>{isRtl ? 'المجلدات' : 'Folders'} ({currentFolders.length})</span>
+                  </h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {currentFolders.map((folder) => {
+                      const theme = colorThemeMap[folder.color] || colorThemeMap.indigo;
+                      const folderFilesCount = files.filter(f => f.folderId === folder.id).length;
+                      return (
+                        <div
+                          key={folder.id}
+                          onClick={() => setCurrentFolderId(folder.id)}
+                          className={`group relative p-4 rounded-2xl border ${theme.border} ${theme.bg} transition-all duration-200 shadow-2xs hover:shadow-md cursor-pointer flex flex-col justify-between h-[135px]`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${theme.iconBg} shadow-xs`}>
+                                <Folder size={20} />
+                              </div>
+                              <div className="min-w-0">
+                                <h3 className={`font-bold text-sm ${theme.text} truncate`}>{folder.name}</h3>
+                                <p className="text-[11px] text-slate-400 font-medium">{folderFilesCount} items</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="pt-3 border-t border-black/5 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+                            <div className="flex items-center gap-1.5">
+                              <button onClick={(e) => toggleFolderPrivacy(folder.id, e)} className="p-1 rounded-md transition-colors bg-slate-200/80 hover:bg-slate-300">
+                                {folder.isPublic ? <Globe size={12} /> : <Lock size={12} />}
+                              </button>
+                              <span>Created {folder.createdAt}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button onClick={(e) => openShareModal(folder, true, e)} className="p-1 text-slate-500 hover:text-indigo-600 rounded-md">
+                                <Share2 size={13} />
+                              </button>
+                              <button onClick={(e) => deleteFolder(folder.id, e)} className="p-1 text-slate-400 hover:text-rose-600 rounded-md">
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              ))}
+              )}
+
+              {/* File Cards */}
+              {currentFiles.length > 0 && (
+                <div>
+                  <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <FileText size={14} />
+                    <span>{isRtl ? 'الملفات والمستندات' : 'Files & Documents'} ({currentFiles.length})</span>
+                  </h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {currentFiles.map((file) => (
+                      <div key={file.id} className="group bg-white border border-slate-200 hover:border-indigo-300 rounded-2xl p-4 transition-all duration-200 shadow-2xs hover:shadow-md flex flex-col justify-between h-[150px]">
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 shadow-xs">
+                              {renderFileIcon(file.type)}
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="font-bold text-xs text-slate-800 line-clamp-2 leading-tight group-hover:text-indigo-600 transition-colors">{file.name}</h3>
+                              <p className="text-[10px] text-slate-400 font-medium mt-0.5">{file.size} • {file.author}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                          <button onClick={(e) => toggleFilePrivacy(file.id, e)} className="p-1 px-2 rounded-md text-[10px] font-bold flex items-center gap-1 bg-slate-100">
+                            {file.isPublic ? <Globe size={11} /> : <Lock size={11} />}
+                            <span>{file.isPublic ? 'Public' : 'Private'}</span>
+                          </button>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => file.storagePath ? window.open(getLibraryFileDownloadUrl(file.storagePath), '_blank') : setPreviewFile(file)} className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg">
+                              <Eye size={14} />
+                            </button>
+                            <button onClick={(e) => openShareModal(file, false, e)} className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg">
+                              <Share2 size={14} />
+                            </button>
+                            <button onClick={(e) => deleteFile(file.id, e)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
-            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-               <table className="w-full text-left border-collapse" dir={isRtl ? 'rtl' : 'ltr'}>
-                 <thead>
-                   <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-bold">
-                     <th className="px-6 py-4">{isRtl ? 'الاسم' : 'Name'}</th>
-                     <th className="px-6 py-4 hidden sm:table-cell">{isRtl ? 'الحجم' : 'Size'}</th>
-                     <th className="px-6 py-4 hidden md:table-cell">{isRtl ? 'المؤلف' : 'Author'}</th>
-                     <th className="px-6 py-4 hidden sm:table-cell">{isRtl ? 'تاريخ الإضافة' : 'Date Added'}</th>
-                     <th className="px-6 py-4 text-end">{isRtl ? 'إجراءات' : 'Actions'}</th>
-                   </tr>
-                 </thead>
-                 <tbody className="divide-y divide-slate-100">
-                   {filteredDocs.map(doc => (
-                     <tr key={doc.id} className="hover:bg-slate-50 transition-colors group">
-                       <td className="px-6 py-4">
-                         <div className="flex items-center gap-3">
-                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                             doc.category === 'material' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
-                           }`}>
-                             {doc.category === 'material' ? <Book size={16} /> : <FileArchive size={16} />}
-                           </div>
-                           <span className="font-bold text-sm text-slate-800 line-clamp-1">{doc.title}</span>
-                         </div>
-                       </td>
-                       <td className="px-6 py-4 text-sm text-slate-500 hidden sm:table-cell">{doc.size}</td>
-                       <td className="px-6 py-4 text-sm text-slate-500 hidden md:table-cell">{doc.author}</td>
-                       <td className="px-6 py-4 text-sm text-slate-500 hidden sm:table-cell">{new Date(doc.dateAdded).toLocaleDateString()}</td>
-                       <td className="px-6 py-4 text-end">
-                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                           <button onClick={() => openFile(doc)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title={isRtl ? 'فتح' : 'Open'}>
-                             <ExternalLink size={16} />
-                           </button>
-                           <button onClick={() => downloadFile(doc)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title={isRtl ? 'تحميل' : 'Download'}>
-                             <Download size={16} />
-                           </button>
-                         </div>
-                       </td>
-                     </tr>
-                   ))}
-                 </tbody>
-               </table>
+            /* Tabular List View */
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+              <table className="w-full text-left border-collapse" dir={isRtl ? 'rtl' : 'ltr'}>
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+                    <th className="px-5 py-3.5">Name</th>
+                    <th className="px-5 py-3.5 hidden sm:table-cell">Type / Size</th>
+                    <th className="px-5 py-3.5 hidden md:table-cell">Date Created</th>
+                    <th className="px-5 py-3.5">Privacy</th>
+                    <th className="px-5 py-3.5 text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                  {currentFiles.map((file) => (
+                    <tr key={file.id} className="hover:bg-slate-50/80 transition-colors group">
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                            {renderFileIcon(file.type)}
+                          </div>
+                          <span className="font-bold text-slate-800">{file.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-500 uppercase hidden sm:table-cell">{file.type} • {file.size}</td>
+                      <td className="px-5 py-3.5 text-slate-500 hidden md:table-cell">{file.createdAt}</td>
+                      <td className="px-5 py-3.5">
+                        <span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold">{file.isPublic ? 'Public' : 'Private'}</span>
+                      </td>
+                      <td className="px-5 py-3.5 text-end">
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => file.storagePath ? window.open(getLibraryFileDownloadUrl(file.storagePath), '_blank') : setPreviewFile(file)} className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg"><Eye size={14} /></button>
+                          <button onClick={(e) => deleteFile(file.id, e)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg"><Trash2 size={14} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )
         )}
       </div>
-
-      {/* Upload Modal */}
-      <AnimatePresence>
-        {isUploadModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-              onClick={() => setIsUploadModalOpen(false)}
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="relative w-full max-w-md bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xl"
-            >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white">
-                 <h2 className="text-lg font-bold text-slate-900">
-                   {isRtl ? 'رفع ملف جديد' : 'Upload New File'}
-                 </h2>
-                 <button 
-                   onClick={() => setIsUploadModalOpen(false)} 
-                   className="text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full p-1.5 transition-colors"
-                 >
-                   <X size={20} />
-                 </button>
-              </div>
-              
-              <form onSubmit={handleUpload} className="p-6">
-                 <div className="mb-5">
-                   <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                     {isRtl ? 'اسم الملف' : 'File Name'}
-                   </label>
-                   <input 
-                     type="text" 
-                     value={uploadTitle}
-                     onChange={(e) => setUploadTitle(e.target.value)}
-                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-colors"
-                     placeholder={isRtl ? 'أدخل اسم الملف...' : 'Enter file name...'}
-                     required
-                   />
-                 </div>
-                 
-                 <div className="mb-6">
-                   <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                     {isRtl ? 'الملف' : 'File'}
-                   </label>
-                   <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors cursor-pointer relative overflow-hidden">
-                     <input 
-                       type="file" 
-                       onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                       className="absolute inset-0 opacity-0 cursor-pointer"
-                       accept=".pdf,.doc,.docx,.ppt,.pptx"
-                     />
-                     <Upload className="text-indigo-400 mb-2" size={24} />
-                     <p className="text-sm font-bold text-slate-700 mb-1">
-                       {uploadFile ? uploadFile.name : (isRtl ? 'اختر ملفاً أو اسحبه هنا' : 'Choose a file or drag it here')}
-                     </p>
-                     <p className="text-xs text-slate-500">
-                       {isRtl ? 'PDF, DOC, PPT حتى 50 ميغابايت' : 'PDF, DOC, PPT up to 50MB'}
-                     </p>
-                   </div>
-                 </div>
-                 
-                 <div className="flex items-center justify-end gap-3 pt-2">
-                   <button 
-                     type="button"
-                     onClick={() => setIsUploadModalOpen(false)}
-                     className="px-5 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-                   >
-                     {isRtl ? 'إلغاء' : 'Cancel'}
-                   </button>
-                   <button 
-                     type="submit"
-                     disabled={!uploadTitle}
-                     className="px-6 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors shadow-sm"
-                   >
-                     {isRtl ? 'رفع الملف' : 'Upload File'}
-                   </button>
-                 </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
