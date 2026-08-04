@@ -177,7 +177,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
                           <button
                             key={lvl.id}
                             onClick={() => {
-                              const next = { ...selectedRubricLevels, [crit.id]: lvl.id };
+                              const next: Record<string, string> = { ...selectedRubricLevels, [crit.id]: lvl.id };
                               setSelectedRubricLevels(next);
                               const total = activeAssignment.rubric.reduce((sum: number, c: any) => {
                                 const selectedLvlId = next[c.id];
