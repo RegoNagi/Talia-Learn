@@ -121,7 +121,7 @@ export async function updateFolderSharing(id: string, sharedWith: string[]): Pro
 export async function uploadLibraryFile(
   scope: LibraryScope,
   input: { folderId: string | null; name: string; type: LibraryFile['type']; isPublic: boolean; author: string; file: File | null }
-): Promise<string | null> {
+): Promise<{ id: string | null; error: string | null }> {
   let storagePath: string | null = null;
   let sizeLabel = '1.5 MB';
 
@@ -131,7 +131,7 @@ export async function uploadLibraryFile(
     const { error: uploadError } = await supabase.storage.from('library-files').upload(storagePath, input.file);
     if (uploadError) {
       console.error('Error uploading file to storage:', uploadError);
-      return null;
+      return { id: null, error: uploadError.message };
     }
     sizeLabel = `${(input.file.size / (1024 * 1024)).toFixed(1)} MB`;
   }
@@ -155,9 +155,9 @@ export async function uploadLibraryFile(
 
   if (error || !data) {
     console.error('Error saving library file record:', error);
-    return null;
+    return { id: null, error: error?.message || 'Unknown error saving file record' };
   }
-  return data.id;
+  return { id: data.id, error: null };
 }
 
 export function getLibraryFileDownloadUrl(storagePath: string): string {

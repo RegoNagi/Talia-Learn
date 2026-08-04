@@ -59,6 +59,8 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  // material = اللي بيبان للطلاب (عام)، my-library = مساحة المعلم الخاصة (كل حاجة، عام وخاص)
+  const [libraryMode, setLibraryMode] = useState<'material' | 'my-library'>(role === 'teacher' ? 'my-library' : 'material');
 
   const scope = teacherId && classId && subject ? { teacherId, classId, subject } : null;
 
@@ -93,6 +95,8 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   const [uploadFileObj, setUploadFileObj] = useState<File | null>(null);
   const [uploadTargetFolder, setUploadTargetFolder] = useState<string | null>(currentFolderId);
   const [uploadPublic, setUploadPublic] = useState(true);
+  const [uploadError, setUploadError] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   // Share Modal State
   const [selectedTargetLibs, setSelectedTargetLibs] = useState<string[]>([]);
@@ -126,9 +130,10 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
       const matchesDir = searchQuery ? true : f.parentId === currentFolderId;
       const matchesSearch = f.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesType = typeFilter === 'all' || typeFilter === 'folder';
-      return matchesDir && matchesSearch && matchesType;
+      const matchesMode = libraryMode === 'my-library' ? true : f.isPublic;
+      return matchesDir && matchesSearch && matchesType && matchesMode;
     });
-  }, [folders, currentFolderId, searchQuery, typeFilter]);
+  }, [folders, currentFolderId, searchQuery, typeFilter, libraryMode]);
 
   // Filtered Files in active directory
   const currentFiles = useMemo(() => {
@@ -141,9 +146,10 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
         : typeFilter === 'media' ? ['image', 'video'].includes(f.type)
         : typeFilter === 'sheet' ? ['sheet', 'slides'].includes(f.type)
         : f.type === typeFilter;
-      return matchesDir && matchesSearch && matchesType;
+      const matchesMode = libraryMode === 'my-library' ? true : f.isPublic;
+      return matchesDir && matchesSearch && matchesType && matchesMode;
     });
-  }, [files, currentFolderId, searchQuery, typeFilter]);
+  }, [files, currentFolderId, searchQuery, typeFilter, libraryMode]);
 
   // Handlers
   const handleCreateFolder = async (e: React.FormEvent) => {
@@ -169,6 +175,8 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   const handleUploadFile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!scope) return;
+    setUploadError('');
+    setIsUploading(true);
     const fname = uploadName.trim() || (uploadFileObj ? uploadFileObj.name : 'Untitled Document');
     
     let detectedType: LibraryFile['type'] = uploadType;
@@ -183,7 +191,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
       else if (['zip', 'rar', '7z', 'tar'].includes(ext || '')) detectedType = 'archive';
     }
 
-    const id = await uploadLibraryFile(scope, {
+    const { id, error } = await uploadLibraryFile(scope, {
       folderId: uploadTargetFolder,
       name: fname,
       type: detectedType,
@@ -192,12 +200,15 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
       file: uploadFileObj,
     });
 
+    setIsUploading(false);
     if (id) {
       refreshLibrary();
       setIsUploadOpen(false);
       setUploadName('');
       setUploadFileObj(null);
       setUploadPublic(true);
+    } else {
+      setUploadError(error || (isRtl ? 'حصل خطأ أثناء الرفع.' : 'Upload failed.'));
     }
   };
 
@@ -372,9 +383,13 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
                 </button>
               </div>
 
+              {uploadError && (
+                <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 mb-4">{uploadError}</p>
+              )}
+
               <div className="flex gap-3">
                 <button type="button" onClick={() => setIsUploadOpen(false)} className="flex-1 py-3 rounded-xl border border-slate-200 font-bold text-sm text-slate-600">{isRtl ? 'إلغاء' : 'Cancel'}</button>
-                <button type="submit" className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm">{isRtl ? 'رفع الملف' : 'Upload Document'}</button>
+                <button type="submit" disabled={isUploading} className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm disabled:opacity-60">{isUploading ? (isRtl ? 'جاري الرفع...' : 'Uploading...') : (isRtl ? 'رفع الملف' : 'Upload Document')}</button>
               </div>
             </motion.form>
           </motion.div>
@@ -439,19 +454,29 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
         )}
       </AnimatePresence>
       <div className="flex flex-col gap-2.5 mb-3">
+        {role === 'teacher' && (
+          <div className="flex gap-2">
+            <button onClick={() => setLibraryMode('material')} className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 ${libraryMode === 'material' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+              <Globe size={13} /> {isRtl ? 'Material (يشوفها الطلاب)' : 'Material (students see this)'}
+            </button>
+            <button onClick={() => setLibraryMode('my-library')} className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 ${libraryMode === 'my-library' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+              <Lock size={13} /> {isRtl ? 'My Library (خاص بيك بس)' : 'My Library (private to you)'}
+            </button>
+          </div>
+        )}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h3 className="text-lg font-bold text-slate-800">
-              {isRtl ? 'مكتبتي' : 'My Library'}
+              {libraryMode === 'material' ? (isRtl ? 'Material' : 'Material') : (isRtl ? 'مكتبتي' : 'My Library')}
             </h3>
             <p className="text-xs text-slate-500 mt-1">
-              {folders.length} {isRtl ? 'مجلدات' : 'folders'} • {files.length} {isRtl ? 'ملفات' : 'files'}
+              {currentFolders.length} {isRtl ? 'مجلدات' : 'folders'} • {currentFiles.length} {isRtl ? 'ملفات' : 'files'}
             </p>
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <button
-              onClick={() => setIsNewFolderOpen(true)}
+              onClick={() => { setNewFolderPublic(libraryMode === 'material'); setIsNewFolderOpen(true); }}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-slate-200"
             >
               <FolderPlus size={16} className="text-indigo-600" />
@@ -461,6 +486,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
             <button
               onClick={() => {
                 setUploadTargetFolder(currentFolderId);
+                setUploadPublic(libraryMode === 'material');
                 setIsUploadOpen(true);
               }}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm"
