@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Book, 
@@ -36,6 +36,7 @@ import { AddAssessmentModal } from '@/components/LearningPath/AddAssessmentModal
 import { StudentCompletionPopover } from '@/components/LearningPath/StudentCompletionPopover';
 import { UnitMasteryBuilder } from '@/components/UnitMasteryBuilder';
 import { BrowseLibraryTab } from '@/components/tabs/BrowseLibraryTab';
+import { getUnits, createUnit, deleteUnit, updateUnit, getLessons, createLesson, deleteLesson } from '@/services/learningPathData';
 
 type ContentType = 'video' | 'pdf' | 'quiz' | 'assignment' | 'project' | 'link';
 type LessonSource = 'official' | 'custom' | 'ai';
@@ -81,69 +82,39 @@ export function LearningPathTab({
   subject?: string,
   grade?: string,
 }) {
-  const [units, setUnits] = useState<Unit[]>([
-    {
-      id: 'u1',
-      title: 'Unit 1: System of Linear Equations',
-      weeks: 'Week 1 - 2',
-      progress: 82,
-      lessons: [
-        { id: 'l1.1', title: '1.1 Introduction to Linear Systems', type: 'video', source: 'official', week: 'Week 1', completedCount: 22, totalCount: 22, status: 'success' },
-        { id: 'l1.2', title: '1.2 Matrix Notation and Gaussian Elimination', type: 'pdf', source: 'official', week: 'Week 1', completedCount: 20, totalCount: 22, status: 'ongoing' },
-        { id: 'l1.3', title: 'Quiz: Row Operations', type: 'quiz', source: 'custom', week: 'Week 2', completedCount: 18, totalCount: 22, status: 'overdue' },
-        { id: 'math-quiz', title: 'Unit 1: Mathematics Quiz', type: 'quiz', source: 'official', week: 'Week 2', completedCount: 0, totalCount: 22, status: 'upcoming' },
-        { id: 'phys-lab', title: 'Assignment: Physics Lab Report', type: 'assignment', source: 'official', week: 'Week 2', completedCount: 0, totalCount: 22, status: 'upcoming' },
-        { id: 'l1.4', title: 'Applications of Linear Systems', type: 'video', source: 'ai', week: 'Week 2', completedCount: 10, totalCount: 22, status: 'urgent' },
-        { id: 'l1.5', title: 'Additional Resources', type: 'link', source: 'official', week: 'Week 2', completedCount: 22, totalCount: 22, status: 'success' },
-      ]
-    },
-    {
-      id: 'u2',
-      title: 'Unit 2: Matrix Algebra',
-      weeks: 'Week 3 - 4',
-      progress: 45,
-      lessons: [
-        { id: 'l2.1', title: '2.1 Matrix Operations', type: 'video', source: 'official', week: 'Week 3', completedCount: 0, totalCount: 22, status: 'upcoming' },
-        { id: 'l2.2', title: '2.2 The Inverse of a Matrix', type: 'assignment', source: 'official', week: 'Week 3', completedCount: 22, totalCount: 22, status: 'grading' },
-        { id: 'l2.3', title: 'Summary of Properties', type: 'pdf', source: 'custom', week: 'Week 4', completedCount: 15, totalCount: 22, status: 'ongoing' },
-        { id: 'l2.4', title: 'Solved Examples', type: 'video', source: 'official', week: 'Week 4', completedCount: 5, totalCount: 22, status: 'upcoming' },
-      ]
-    },
-    {
-      id: 'u3',
-      title: 'Unit 3: Determinants',
-      weeks: 'Week 5 - 6',
-      progress: 15,
-      lessons: [
-        { id: 'l3.1', title: '3.1 Properties of Determinants', type: 'video', source: 'official', week: 'Week 5', completedCount: 12, totalCount: 22, status: 'ongoing' },
-        { id: 'l3.2', title: 'Applied Assignment', type: 'assignment', source: 'custom', week: 'Week 5', completedCount: 0, totalCount: 22, status: 'upcoming' },
-        { id: 'l3.3', title: 'Cramer\'s Rule', type: 'video', source: 'official', week: 'Week 6', completedCount: 0, totalCount: 22, status: 'upcoming' },
-        { id: 'l3.4', title: 'Interactive Review', type: 'link', source: 'ai', week: 'Week 6', completedCount: 0, totalCount: 22, status: 'upcoming' },
-      ]
-    },
-    {
-      id: 'u4',
-      title: 'Unit 4: Vector Spaces',
-      weeks: 'Week 7 - 8',
-      progress: 0,
-      lessons: [
-        { id: 'l4.1', title: '4.1 Subspaces and Spanning Sets', type: 'video', source: 'official', week: 'Week 7', completedCount: 0, totalCount: 22, status: 'upcoming' },
-        { id: 'l4.2', title: 'Unit Notes', type: 'pdf', source: 'custom', week: 'Week 7', completedCount: 0, totalCount: 22, status: 'upcoming' },
-        { id: 'l4.3', title: 'Midterm Evaluation Project', type: 'project', source: 'official', week: 'Week 8', completedCount: 0, totalCount: 22, status: 'upcoming' },
-      ]
-    },
-    {
-      id: 'u5',
-      title: 'Unit 5: Eigenvalues and Eigenvectors',
-      weeks: 'Week 9 - 10',
-      progress: 0,
-      lessons: [
-        { id: 'l5.1', title: 'Introduction to Eigenvalues', type: 'video', source: 'official', week: 'Week 9', completedCount: 0, totalCount: 22, status: 'upcoming' },
-        { id: 'l5.2', title: 'Explanation File', type: 'pdf', source: 'official', week: 'Week 9', completedCount: 0, totalCount: 22, status: 'upcoming' },
-        { id: 'l5.3', title: 'Comprehensive Unit Quiz', type: 'quiz', source: 'custom', week: 'Week 10', completedCount: 0, totalCount: 22, status: 'upcoming' },
-      ]
-    }
-  ]);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [isLoadingUnits, setIsLoadingUnits] = useState(true);
+  const learnScope = teacherId && classId && subject ? { teacherId, classId, subject } : null;
+
+  const refreshUnits = () => {
+    if (!learnScope) return;
+    setIsLoadingUnits(true);
+    getUnits(learnScope).then(async (realUnits) => {
+      const lessons = await getLessons(realUnits.map(u => u.id));
+      const mapped: Unit[] = realUnits.map((u) => ({
+        id: u.id,
+        title: u.title,
+        weeks: u.weeksLabel,
+        progress: 0,
+        lessons: lessons.filter(l => l.unitId === u.id).map((l) => ({
+          id: l.id,
+          title: l.title,
+          type: l.type as ContentType,
+          source: 'custom' as LessonSource,
+          week: l.weekLabel,
+          completedCount: 0,
+          totalCount: 0,
+          status: 'upcoming' as LessonStatus,
+        })),
+      }));
+      setUnits(mapped);
+      setIsLoadingUnits(false);
+    });
+  };
+
+  useEffect(() => {
+    refreshUnits();
+  }, [learnScope?.classId, learnScope?.subject]);
 
   const [expandedUnits, setExpandedUnits] = useState<string[]>(['u1']);
   const [activeUnitForAdd, setActiveUnitForAdd] = useState<string | null>(null);
@@ -226,27 +197,15 @@ export function LearningPathTab({
     setActiveUnitForAdd(null);
   };
 
-  const handleSaveLesson = (lessonData: { title: string; type: ContentType; source: 'custom' }) => {
+  const handleSaveLesson = async (lessonData: { title: string; type: ContentType; source: 'custom' }) => {
     if (!targetUnitId) return;
-
-    const newLesson: Lesson = {
-      id: `l${window.crypto.randomUUID()}`,
-      ...lessonData,
-      week: 'Week 1', // Default for new items
-      completedCount: 0,
-      totalCount: 22,
-      status: 'upcoming'
-    };
-
-    setUnits(prevUnits => prevUnits.map(unit => {
-      if (unit.id === targetUnitId) {
-        return {
-          ...unit,
-          lessons: [...unit.lessons, newLesson]
-        };
-      }
-      return unit;
-    }));
+    const id = await createLesson({
+      unitId: targetUnitId,
+      title: lessonData.title,
+      type: (lessonData.type === 'video' || lessonData.type === 'pdf' || lessonData.type === 'link') ? lessonData.type : 'link',
+      weekLabel: units.find(u => u.id === targetUnitId)?.weeks || '',
+    });
+    if (id) refreshUnits();
   };
 
   const handleSaveAssessment = (assessmentData: { title: string; type: 'quiz' | 'assignment' | 'project'; category: string; source: 'custom' }) => {
@@ -462,9 +421,10 @@ export function LearningPathTab({
                         </button>
                         <div className="h-px bg-slate-100 my-1" />
                         <button 
-                          onClick={() => {
+                          onClick={async () => {
                             if (window.confirm('Are you sure you want to delete this unit? This cannot be undone.')) {
-                              setUnits(prev => prev.filter(u => u.id !== unit.id));
+                              const ok = await deleteUnit(unit.id);
+                              if (ok) refreshUnits();
                             }
                           }}
                           className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2 shadow-none"
@@ -807,9 +767,10 @@ export function LearningPathTab({
                   <h4 className="font-bold text-slate-800 mb-2">Manual Build</h4>
                   <p className="text-sm text-slate-500 mb-6">Drag and drop files or create items from scratch.</p>
                   <button 
-                    onClick={() => {
-                      const newUnitId = `u${window.crypto.randomUUID()}`;
-                      setUnits([...units, { id: newUnitId, title: newUnitTitle || 'Untitled Unit', weeks: 'Week 1', progress: 0, lessons: [] }]);
+                    onClick={async () => {
+                      if (!learnScope) return;
+                      const id = await createUnit(learnScope, { title: newUnitTitle || 'Untitled Unit', weeksLabel: 'Week 1' });
+                      if (id) refreshUnits();
                       setIsBuildingUnit(false);
                       setNewUnitMode(null);
                       setNewUnitTitle('');
@@ -915,6 +876,20 @@ export function LearningPathTab({
         subject={subject}
         teacherId={teacherId}
         classId={classId}
+        onInject={async (items: any[]) => {
+          if (!targetUnitId) return;
+          for (const item of items) {
+            await createLesson({
+              unitId: targetUnitId,
+              title: item.title,
+              type: 'library',
+              weekLabel: units.find(u => u.id === targetUnitId)?.weeks || '',
+              libraryFileId: item.id,
+              url: item.url || null,
+            });
+          }
+          refreshUnits();
+        }}
       />
 
       <AddLessonModal
@@ -1026,8 +1001,11 @@ export function LearningPathTab({
                   Cancel
                 </button>
                 <button 
-                  onClick={() => {
-                    setUnits(prev => prev.map(u => u.id === editingUnit.id ? editingUnit : u));
+                  onClick={async () => {
+                    if (editingUnit) {
+                      const ok = await updateUnit(editingUnit.id, { title: editingUnit.title, weeksLabel: editingUnit.weeks });
+                      if (ok) refreshUnits();
+                    }
                     setEditingUnit(null);
                   }}
                   className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-medium transition-colors shadow-none"
