@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   Settings, Clock, Shuffle, Eye, Calendar,
   UploadCloud, Scale, Layout, 
-  Info, ShieldCheck, Lock, Type, ChevronLeft, ChevronRight, Shield, Filter
+  Info, ShieldCheck, Lock, Type, ChevronLeft, ChevronRight, Shield, Filter, AlertCircle
 } from 'lucide-react';
 
 interface RubricCriterion {
@@ -345,6 +345,7 @@ export function AssessmentSidebar({
                   </select>
                 </div>
 
+                {activeTab === 'quiz' && (
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <label className="text-xs font-bold text-slate-600">{t.maxScore}</label>
@@ -365,6 +366,7 @@ export function AssessmentSidebar({
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold text-slate-700 disabled:opacity-50 focus:ring-2 focus:ring-orange-100 outline-none"
                   />
                 </div>
+                )}
 
                 <div className="space-y-4">
                   <div>
@@ -736,19 +738,37 @@ export function AssessmentSidebar({
               </h4>
               
               <div className="space-y-4">
-                {gradingMethod === 'Points' && (
-                  <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 flex justify-between items-center">
-                    <span className="text-xs font-bold text-orange-800">{t.totalPoints}</span>
-                    <span className="text-lg font-black text-orange-600">
-                      {rubric?.reduce((sum, crit) => {
-                        const maxLevelScore = Math.max(...crit.levels.map(l => l.score));
-                        return sum + maxLevelScore;
-                      }, 0) || 0}
-                    </span>
-                  </div>
-                )}
-                <div>
-                  <div className="flex justify-between items-center mb-1.5">
+                {gradingMethod === 'Points' && (() => {
+                  const rubricSum = rubric?.reduce((sum, crit) => {
+                    const maxLevelScore = Math.max(...crit.levels.map(l => l.score));
+                    return sum + maxLevelScore;
+                  }, 0) || 0;
+                  const hasMismatch = rubric && rubric.length > 0 && rubricSum !== maxScore;
+                  return (
+                    <>
+                      <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 flex justify-between items-center">
+                        <span className="text-xs font-bold text-orange-800">{t.totalPoints}</span>
+                        <input
+                          type="number"
+                          value={maxScore}
+                          onChange={(e) => setMaxScore(e.target.value === '' ? 0 : (parseInt(e.target.value) || 0))}
+                          className="w-20 bg-transparent border-none text-right text-lg font-black text-orange-600 focus:ring-0 p-0 outline-none"
+                        />
+                      </div>
+                      {hasMismatch && (
+                        <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-xl p-3">
+                          <AlertCircle size={14} className="text-rose-500 shrink-0 mt-0.5" />
+                          <p className="text-[11px] font-bold text-rose-600 leading-snug">
+                            {isRtl
+                              ? `مجموع الروبريك (${rubricSum}) مش متطابق مع إجمالي النقاط (${maxScore}).`
+                              : `Rubric total (${rubricSum}) doesn't match Total Points (${maxScore}).`}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+                <div>                  <div className="flex justify-between items-center mb-1.5">
                     <label className="text-xs font-bold text-slate-600">{t.passPercentage}</label>
                     <span className="text-xs font-bold text-orange-600">{passPercentage}%</span>
                   </div>
