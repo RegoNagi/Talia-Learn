@@ -72,6 +72,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
   };
 
   const [gradeInput, setGradeInput] = useState('');
+  const [selectedRubricLevels, setSelectedRubricLevels] = useState<Record<string, string>>({});
   const [feedbackInput, setFeedbackInput] = useState('');
   const [isSavingGrade, setIsSavingGrade] = useState(false);
 
@@ -79,6 +80,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
     setActiveSubmission(sub);
     setGradeInput(sub.grade !== null ? String(sub.grade) : '');
     setFeedbackInput(sub.feedback || '');
+    setSelectedRubricLevels({});
     setView('grading-student');
   };
 
@@ -163,10 +165,44 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
             </div>
           </div>
           <div className="w-[350px] shrink-0 flex flex-col gap-6 mt-11">
+            {activeAssignment.rubric && activeAssignment.rubric.length > 0 && (
+              <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6">
+                <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><FileText size={18} className="text-indigo-500"/> Rubric</h3>
+                <div className="space-y-4">
+                  {activeAssignment.rubric.map((crit: any) => (
+                    <div key={crit.id}>
+                      <p className="text-sm font-bold text-slate-700 mb-2">{crit.title} <span className="text-xs text-slate-400">({crit.weight} pts)</span></p>
+                      <div className="grid grid-cols-1 gap-1.5">
+                        {crit.levels.map((lvl: any) => (
+                          <button
+                            key={lvl.id}
+                            onClick={() => {
+                              const next = { ...selectedRubricLevels, [crit.id]: lvl.id };
+                              setSelectedRubricLevels(next);
+                              const total = activeAssignment.rubric.reduce((sum: number, c: any) => {
+                                const selectedLvlId = next[c.id];
+                                const selectedLvl = c.levels.find((l: any) => l.id === selectedLvlId);
+                                return sum + (selectedLvl ? selectedLvl.score : 0);
+                              }, 0);
+                              setGradeInput(String(total));
+                            }}
+                            className={`text-left px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                              selectedRubricLevels[crit.id] === lvl.id ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            {lvl.title} ({lvl.score} pts)
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6">
               <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2"><PenTool size={18} className="text-indigo-500"/> Grade Submission</h3>
               <div className="mb-6">
-                <label className="block text-sm font-bold text-slate-500 mb-2">Score (out of 100)</label>
+                <label className="block text-sm font-bold text-slate-500 mb-2">Score (out of {activeAssignment.settings?.maxScore || 100})</label>
                 <input type="number" value={gradeInput} onChange={(e) => setGradeInput(e.target.value)} className="w-full text-2xl font-black text-slate-800 px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
               </div>
               <div className="mb-8">

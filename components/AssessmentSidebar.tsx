@@ -43,6 +43,8 @@ interface AssessmentSidebarProps {
   setDueTime: (val: string) => void;
   prohibitLateSubmissions: boolean;
   setProhibitLateSubmissions: (val: boolean) => void;
+  allowLateSubmission?: boolean;
+  setAllowLateSubmission?: (val: boolean) => void;
   shuffleQuestions: boolean;
   setShuffleQuestions: (val: boolean) => void;
   oneAtATime: boolean;
@@ -106,6 +108,8 @@ export function AssessmentSidebar({
   setNoDueDate = () => {},
   prohibitLateSubmissions,
   setProhibitLateSubmissions,
+  allowLateSubmission = false,
+  setAllowLateSubmission = () => {},
   prohibitNewAttemptsAfterDueDate = false,
   setProhibitNewAttemptsAfterDueDate = () => {},
   shuffleQuestions,
@@ -357,7 +361,7 @@ export function AssessmentSidebar({
                     type="number" 
                     value={maxScore}
                     disabled={activeTab === 'quiz' && isAutoCalc}
-                    onChange={(e) => setMaxScore(parseInt(e.target.value))}
+                    onChange={(e) => setMaxScore(e.target.value === '' ? 0 : (parseInt(e.target.value) || 0))}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold text-slate-700 disabled:opacity-50 focus:ring-2 focus:ring-orange-100 outline-none"
                   />
                 </div>
@@ -753,11 +757,22 @@ export function AssessmentSidebar({
                     min="0" 
                     max="100" 
                     value={passPercentage}
-                    onChange={(e) => setPassPercentage(parseInt(e.target.value))}
+                    onChange={(e) => setPassPercentage(e.target.value === '' ? 0 : (parseInt(e.target.value) || 0))}
                     className="w-full accent-orange-500"
                   />
                 </div>
 
+                <label className="flex items-center justify-between group cursor-pointer">
+                  <span className="text-xs font-bold text-slate-600">{isRtl ? 'السماح بالتسليم المتأخر' : 'Allow Late Submission'}</span>
+                  <button 
+                    onClick={() => setAllowLateSubmission(!allowLateSubmission)}
+                    className={`w-8 h-4 rounded-full relative transition-colors ${allowLateSubmission ? 'bg-orange-500' : 'bg-slate-200'}`}
+                  >
+                    <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${allowLateSubmission ? (isRtl ? '-translate-x-4' : 'translate-x-4') : (isRtl ? 'translate-x-0' : 'translate-x-0.5')}`} />
+                  </button>
+                </label>
+
+                {allowLateSubmission && (
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1.5">{t.latePenalty}</label>
                   <select 
@@ -771,45 +786,7 @@ export function AssessmentSidebar({
                     <option value="zero credit">{t.penZero}</option>
                   </select>
                 </div>
-              </div>
-            </section>
-
-            {/* Security & Integrity */}
-            <section className="space-y-4 pt-4 border-t border-slate-100">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <ShieldCheck size={12} /> {t.securityIntegrity}
-              </h4>
-              
-              <div className="space-y-3">
-                <label className="flex items-center justify-between group cursor-pointer">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-slate-50 rounded-lg text-slate-400 group-hover:text-orange-600 group-hover:bg-orange-50 transition-all">
-                      <ShieldCheck size={14} />
-                    </div>
-                    <span className="text-xs font-medium text-slate-600">{t.plagiarismScan}</span>
-                  </div>
-                  <button 
-                    onClick={() => setAiPlagiarism(!aiPlagiarism)}
-                    className={`w-8 h-4 rounded-full relative transition-colors ${aiPlagiarism ? 'bg-orange-500' : 'bg-slate-200'}`}
-                  >
-                    <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${aiPlagiarism ? (isRtl ? '-translate-x-4' : 'translate-x-4') : (isRtl ? 'translate-x-0' : 'translate-x-0.5')}`} />
-                  </button>
-                </label>
-
-                <label className="flex items-center justify-between group cursor-pointer">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-slate-50 rounded-lg text-slate-400 group-hover:text-orange-600 group-hover:bg-orange-50 transition-all">
-                      <Lock size={14} />
-                    </div>
-                    <span className="text-xs font-medium text-slate-600">{t.lockModule}</span>
-                  </div>
-                  <button 
-                    onClick={() => setLockModule(!lockModule)}
-                    className={`w-8 h-4 rounded-full relative transition-colors ${lockModule ? 'bg-orange-500' : 'bg-slate-200'}`}
-                  >
-                    <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${lockModule ? (isRtl ? '-translate-x-4' : 'translate-x-4') : (isRtl ? 'translate-x-0' : 'translate-x-0.5')}`} />
-                  </button>
-                </label>
+                )}
               </div>
             </section>
           </>

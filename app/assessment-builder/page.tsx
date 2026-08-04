@@ -128,9 +128,14 @@ function AssessmentBuilderContent() {
   const [allowFileUpload, setAllowFileUpload] = useState(true);
   const [allowTextEntry, setAllowTextEntry] = useState(true);
   const [passPercentage, setPassPercentage] = useState(65);
-  const [latePenalty, setLatePenalty] = useState('-10% per day');
+  const [latePenalty, setLatePenalty] = useState('none');
+  const [allowLateSubmission, setAllowLateSubmission] = useState(false);
   const [lockModule, setLockModule] = useState(false);
-  const [gradingMethod, setGradingMethod] = useState<'Points' | 'Percentage' | 'Scale'>('Percentage');
+  const [gradingMethod, setGradingMethod] = useState<'Points' | 'Percentage' | 'Scale'>('Points');
+
+  useEffect(() => {
+    if (activeTab === 'assignment') setGradingMethod('Points');
+  }, [activeTab]);
 
   const [isGeneratingRubric, setIsGeneratingRubric] = useState(false);
   const [rubric, setRubric] = useState<RubricCriterion[]>([
@@ -179,11 +184,10 @@ function AssessmentBuilderContent() {
       const dueDateTime = dueDate ? `${dueDate}T${dueTime || '23:59'}` : null;
       const assignmentSettings = {
         maxScore,
-        isAutoCalc,
         attemptLimit,
-        prohibitLateSubmissions,
+        allowLateSubmission,
+        latePenalty: allowLateSubmission ? latePenalty : 'none',
         feedbackTiming,
-        aiPlagiarism,
         publishToTimeline,
         allowFileUpload,
         allowTextEntry,
@@ -690,6 +694,7 @@ function AssessmentBuilderContent() {
                     <div>
                       <div className="flex items-center gap-4">
                         <h2 className="text-2xl font-bold text-slate-800">Grading Rubric</h2>
+                        {activeTab !== 'assignment' && (
                         <div className="flex items-center bg-slate-100 p-1 rounded-xl">
                           {(['Points', 'Percentage', 'Scale'] as const).map(method => (
                             <button
@@ -701,6 +706,7 @@ function AssessmentBuilderContent() {
                             </button>
                           ))}
                         </div>
+                        )}
                       </div>
                       <p className="text-slate-500 mt-1">Define how student work will be evaluated.</p>
                     </div>
@@ -743,10 +749,10 @@ function AssessmentBuilderContent() {
                               <input 
                                 type="number" 
                                 value={crit.weight}
-                                onChange={(e) => updateRubricCriterion(crit.id, { weight: parseInt(e.target.value) })}
+                                onChange={(e) => updateRubricCriterion(crit.id, { weight: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) })}
                                 className="w-8 bg-transparent border-none p-0 text-left text-[10px] font-bold text-blue-600 focus:ring-0"
                               />
-                              <span className="text-[10px] font-bold text-blue-600 uppercase mr-4">%</span>
+                              <span className="text-[10px] font-bold text-blue-600 uppercase mr-4">{gradingMethod === 'Points' ? 'PTS' : '%'}</span>
                               <Pencil size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-400 opacity-0 group-hover/weight:opacity-100 transition-opacity pointer-events-none" />
                             </div>
                             <button 
@@ -788,7 +794,7 @@ function AssessmentBuilderContent() {
                                       type="number" 
                                       value={lvl.score}
                                       onChange={(e) => {
-                                        const newLevels = crit.levels.map(l => l.id === lvl.id ? { ...l, score: parseInt(e.target.value) } : l);
+                                        const newLevels = crit.levels.map(l => l.id === lvl.id ? { ...l, score: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) } : l);
                                         updateRubricCriterion(crit.id, { levels: newLevels });
                                       }}
                                       className={`w-8 bg-transparent border-none p-0 text-center text-sm font-bold focus:ring-0 ${textColors[lvl.color]}`}
@@ -889,6 +895,8 @@ function AssessmentBuilderContent() {
           setPassPercentage={setPassPercentage}
           latePenalty={latePenalty}
           setLatePenalty={setLatePenalty}
+          allowLateSubmission={allowLateSubmission}
+          setAllowLateSubmission={setAllowLateSubmission}
           lockModule={lockModule}
           setLockModule={setLockModule}
         />
