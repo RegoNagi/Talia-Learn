@@ -567,7 +567,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
               className={`flex items-center gap-1 hover:text-indigo-600 transition-colors ${currentFolderId === null ? 'font-bold text-slate-900' : 'text-slate-500'}`}
             >
               <Folder size={14} className="text-indigo-500" />
-              <span>{isRtl ? 'المكتبة الرئيسية' : 'My Library'}</span>
+              <span>{libraryMode === 'material' ? (isRtl ? 'المحتوى' : 'Material') : (isRtl ? 'المكتبة الرئيسية' : 'My Library')}</span>
             </button>
 
             {breadcrumbChain.map((crumb) => (
@@ -619,7 +619,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
                     <Folder size={14} />
                     <span>{isRtl ? 'المجلدات' : 'Folders'} ({currentFolders.length})</span>
                   </h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                     {currentFolders.map((folder) => {
                       const theme = colorThemeMap[folder.color] || colorThemeMap.indigo;
                       const folderFilesCount = files.filter(f => f.folderId === folder.id).length;
@@ -627,34 +627,24 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
                         <div
                           key={folder.id}
                           onClick={() => setCurrentFolderId(folder.id)}
-                          className={`group relative p-4 rounded-2xl border ${theme.border} ${theme.bg} transition-all duration-200 shadow-2xs hover:shadow-md cursor-pointer flex flex-col justify-between h-[135px]`}
+                          className="group relative p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition-all cursor-pointer flex flex-col items-center text-center gap-2"
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${theme.iconBg} shadow-xs`}>
-                                <Folder size={20} />
-                              </div>
-                              <div className="min-w-0">
-                                <h3 className={`font-bold text-sm ${theme.text} truncate`}>{folder.name}</h3>
-                                <p className="text-[11px] text-slate-400 font-medium">{folderFilesCount} items</p>
-                              </div>
-                            </div>
+                          <Folder size={44} className={theme.text} fill="currentColor" fillOpacity={0.15} strokeWidth={1.5} />
+                          <div className="min-w-0 w-full">
+                            <h3 className="font-bold text-sm text-slate-800 truncate">{folder.name}</h3>
+                            <p className="text-[11px] text-slate-400">{folderFilesCount} {isRtl ? 'عنصر' : 'items'}</p>
                           </div>
-                          <div className="pt-3 border-t border-black/5 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-                            <div className="flex items-center gap-1.5">
-                              <button onClick={(e) => toggleFolderPrivacy(folder.id, e)} className="p-1 rounded-md transition-colors bg-slate-200/80 hover:bg-slate-300">
-                                {folder.isPublic ? <Globe size={12} /> : <Lock size={12} />}
-                              </button>
-                              <span>Created {folder.createdAt}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button onClick={(e) => openShareModal(folder, true, e)} className="p-1 text-slate-500 hover:text-indigo-600 rounded-md">
-                                <Share2 size={13} />
-                              </button>
-                              <button onClick={(e) => deleteFolder(folder.id, e)} className="p-1 text-slate-400 hover:text-rose-600 rounded-md">
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
+
+                          <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                            <button onClick={(e) => toggleFolderPrivacy(folder.id, e)} className="p-1.5 rounded-lg bg-white shadow-sm border border-slate-100 text-slate-500 hover:text-slate-800">
+                              {folder.isPublic ? <Globe size={12} /> : <Lock size={12} />}
+                            </button>
+                            <button onClick={(e) => openShareModal(folder, true, e)} className="p-1.5 rounded-lg bg-white shadow-sm border border-slate-100 text-slate-500 hover:text-indigo-600">
+                              <Share2 size={12} />
+                            </button>
+                            <button onClick={(e) => deleteFolder(folder.id, e)} className="p-1.5 rounded-lg bg-white shadow-sm border border-slate-100 text-slate-500 hover:text-rose-600">
+                              <Trash2 size={12} />
+                            </button>
                           </div>
                         </div>
                       );
