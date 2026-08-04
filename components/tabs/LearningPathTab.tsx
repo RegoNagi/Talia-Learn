@@ -903,31 +903,6 @@ export function LearningPathTab({
                     </div>
                   )}
                 </div>
-              ) : (
-                <div className="text-center py-8">
-                  <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-slate-400">
-                    <Layout size={32} />
-                  </div>
-                  <h4 className="font-bold text-slate-800 mb-2">Manual Build</h4>
-                  <p className="text-sm text-slate-500 mb-6">Drag and drop files or create items from scratch.</p>
-                  <button 
-                    onClick={async () => {
-                      if (!learnScope) return;
-                      const { id, error } = await createUnit(learnScope, { title: newUnitTitle || 'Untitled Module', weeksLabel: '' });
-                      if (id) {
-                        refreshUnits();
-                        setIsBuildingUnit(false);
-                        setNewUnitMode(null);
-                        setNewUnitTitle('');
-                      } else {
-                        alert(language === 'ar' ? `حصل خطأ أثناء إنشاء الوحدة: ${error}` : `Error creating module: ${error}`);
-                      }
-                    }}
-                    className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-medium transition-colors shadow-none"
-                  >
-                    Create Empty Module
-                  </button>
-                </div>
               )}
             </div>
           )
