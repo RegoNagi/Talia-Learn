@@ -13,7 +13,7 @@ import { ClassRoster } from '@/components/ClassRoster';
 import { EducationalCalendar } from '@/components/EducationalCalendar';
 import { TeacherDashboard } from '@/components/TeacherDashboard';
 import { TakeAttendance } from '@/components/TakeAttendance';
-import { loginToTaliaLearn, AuthenticatedUser } from '@/services/auth';
+import { useAuth } from '@/contexts/AuthContext';
 import { ArrowRight, Clock, Globe, Laptop, BookOpen, Layers, BrainCircuit, Building, BarChart2, Calendar, AlertCircle, Compass, Zap, Sun, CalendarRange, Users, ChevronRight, ChevronLeft, Bell, Menu, X, CheckCircle2, CheckSquare, Filter } from 'lucide-react';
 
 import taliaLogo from '@/assets/talia-learn-logo.png';
@@ -132,9 +132,8 @@ export default function Dashboard() {
   
   // Auth & Global State
   const [language, setLanguage] = useState<'ar' | 'en'>('en');
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState<'teacher' | 'student' | 'parent' | null>(null);
-  const [authUser, setAuthUser] = useState<AuthenticatedUser | null>(null);
+  const { authUser, isLoggedIn, isAuthLoading, login, logout } = useAuth();
+  const userRole = authUser?.role || null;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -144,9 +143,7 @@ export default function Dashboard() {
   const t = dict[language];
 
   const handleLogout = () => {
-    setIsLoggedIn(false);
-    setUserRole(null);
-    setAuthUser(null);
+    logout();
     setUsername('');
     setPassword('');
     setLoginError('');
@@ -156,15 +153,12 @@ export default function Dashboard() {
     if (e) e.preventDefault();
     setLoginError('');
     setIsLoggingIn(true);
-    const user = await loginToTaliaLearn(username.trim(), password);
+    const user = await login(username.trim(), password);
     setIsLoggingIn(false);
     if (!user) {
       setLoginError(language === 'ar' ? 'الإيميل أو كلمة المرور غلط.' : 'Incorrect email or password.');
       return;
     }
-    setAuthUser(user);
-    setUserRole(user.role);
-    setIsLoggedIn(true);
   };
 
   const courses = [
@@ -182,7 +176,9 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen w-full bg-white overflow-hidden" dir={language === 'ar' ? 'rtl' : 'ltr'} style={{ fontFamily: "'Cairo', sans-serif" }}>
-      {!isLoggedIn ? (
+      {isAuthLoading ? (
+        <div className="w-full h-full flex items-center justify-center text-gray-400">جاري التحميل...</div>
+      ) : !isLoggedIn ? (
         // --- LOGIN PAGE ---
         <div className="w-screen h-screen flex relative">
           {/* Form Side (Pure White Panel) */}

@@ -138,14 +138,14 @@ export function MyClassesView({
   // بطاقات المواد الحقيقية: لكل فصل حقيقي × مادة حقيقية بيدرّسها المعلم فيه، أو مواد صف الطالب/الابن الحقيقية
   const courses = userRole === 'teacher'
     ? myClasses.flatMap((cls) => (authUser.subjects || []).map((subject) => ({
-        id: `${cls.id}-${subject}`,
+        id: `${cls.id}__${encodeURIComponent(subject)}`,
         title: subject,
         className: cls.name,
         studentCount: cls.students.length,
       })))
     : myClassInfo
       ? mySubjects.map((subject) => ({
-          id: subject,
+          id: `${myClassInfo!.id}__${encodeURIComponent(subject)}`,
           title: subject,
           className: myClassInfo!.name,
           studentCount: myClassInfo!.studentCount,
@@ -286,7 +286,8 @@ export function MyClassesView({
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 {filteredCourses.map((course) => (
-                  <div key={course.id} className="bg-white rounded-3xl border border-slate-100 overflow-hidden h-[200px] flex flex-col relative w-full">
+                  <Link href={`/courses/${course.id}`} key={course.id} className="group block h-[200px]">
+                  <div className="bg-white rounded-3xl border border-slate-100 hover:bg-gray-50 transition-all overflow-hidden h-full flex flex-col relative w-full">
                     <div className="h-[55%] relative overflow-hidden bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center">
                       <BookOpen size={40} className="text-white/90" />
                       {userRole === 'teacher' && (
@@ -309,6 +310,7 @@ export function MyClassesView({
                       </div>
                     </div>
                   </div>
+                  </Link>
                 ))}
                 {filteredCourses.length === 0 && (
                   <p className="col-span-full text-center text-slate-400 py-16">

@@ -1,6 +1,7 @@
 import type {Metadata} from 'next';
 import { Cairo } from 'next/font/google';
 import './globals.css';
+import { AuthProvider } from '@/contexts/AuthContext';
 
 const cairo = Cairo({
   subsets: ['arabic', 'latin'],
@@ -16,7 +17,9 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="ar" dir="rtl" className={`${cairo.variable}`} suppressHydrationWarning>
       <body className="font-cairo" suppressHydrationWarning>
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

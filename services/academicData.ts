@@ -33,6 +33,13 @@ export async function getStudentClassSection(studentId: string): Promise<LearnCl
   };
 }
 
+// بيجيب اسم وصف فصل معيّن بالـ id بتاعه (مستخدم في عرض عنوان المادة الحقيقي)
+export async function getClassSectionById(classId: string): Promise<{ id: string; name: string; gradeLevel: string } | null> {
+  const { data, error } = await supabase.from('class_sections').select('id, name, grade_level').eq('id', classId).maybeSingle();
+  if (error || !data) return null;
+  return { id: data.id, name: data.name, gradeLevel: data.grade_level ?? '' };
+}
+
 // بيجيب مواد المنهج الحقيقية لصف معيّن (نفس مصدر البيانات في المنهج الدراسي بـ Talia 360)
 export async function getGradeSubjects(grade: string): Promise<string[]> {
   const { data, error } = await supabase.from('curriculum_subjects').select('subject').eq('grade', grade);
@@ -42,3 +49,4 @@ export async function getGradeSubjects(grade: string): Promise<string[]> {
   }
   return (data || []).map((row: any) => row.subject);
 }
+

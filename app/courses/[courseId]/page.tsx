@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
 import { DailyCompass, ActionAlert } from '@/components/DailyCompass';
 import { ActionItem, MagicButton } from '@/components/MagicButton';
@@ -17,32 +17,17 @@ import { User, Task } from '@/types/course';
 import { motion } from 'motion/react';
 import { Plus, Wand2, FileText, PenTool, Video, Book, Layout, MessageSquare, ArrowLeft, Calendar, Sparkles, Globe, Clock, AlertCircle, BookOpen, Compass, Zap, Sun, CalendarRange, CheckCircle, ChevronRight, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useParams, useRouter } from 'next/navigation';
 
 import { useSmartToDo } from '@/hooks/useSmartToDo';
 import { ScheduleSessionPopup } from '@/components/ScheduleSessionPopup';
+import { useAuth } from '@/contexts/AuthContext';
+import { getClassSectionById } from '@/services/academicData';
 
-// Mock Data
-const currentUser: User = {
-  id: 'u1',
-  name: 'Alex Johnson',
-  avatarUrl: 'https://picsum.photos/seed/alex/200',
-  role: 'teacher', // Changed to teacher for this demo
-  level: 12,
-  coins: 450,
-};
+// ملحوظة: بيانات المستخدم بقت حقيقية (من AuthContext) بدل الاسم الثابت اللي كان هنا
+const mockTasks: Task[] = [];
 
-const mockTasks: Task[] = [
-  { id: 't1', title: 'Grade Linear Algebra Quiz', type: 'grading', dueDate: new Date().toISOString(), completed: false, courseId: 'c1', priority: 'high' },
-  { id: 't2', title: 'Review Chapter 4 Content', type: 'reading', dueDate: new Date(Date.now() + 86400000).toISOString(), completed: false, courseId: 'c1', priority: 'medium' }, // Tomorrow
-  { id: 't3', title: 'Live Session: Q&A', type: 'live_session', dueDate: new Date(Date.now() + 172800000).toISOString(), completed: false, courseId: 'c1', priority: 'high' }, // Day after tomorrow
-  { id: 't4', title: 'Post Announcement', type: 'assignment', dueDate: '2023-10-20T23:59:00', completed: true, courseId: 'c1' },
-];
-
-const mockAlerts: ActionAlert[] = [
-  { id: 'a1', type: 'critical', message: "⚠️ Critical: Week 2 Quiz has <50% completion with 5 hours left." },
-  { id: 'a2', type: 'overdue', message: "🚨 Overdue: 4 students missed 'Matrix Basics' deadline." },
-];
+const mockAlerts: ActionAlert[] = [];
 
 const tabs = [
   { id: 'subject-space', label: 'Subject Space' },
@@ -78,8 +63,31 @@ export default function CourseWorkspace() {
   const [currentAssessmentId, setCurrentAssessmentId] = useState<string | null>(null);
 
   const searchParams = useSearchParams();
-  const viewRole = (searchParams.get('role')?.toUpperCase() === 'STUDENT' ? 'STUDENT' : 'TEACHER') as 'TEACHER' | 'STUDENT';
+  const params = useParams();
+  const router = useRouter();
+  const { authUser, logout, isAuthLoading } = useAuth();
+
+  const handleLogoutAndRedirect = () => {
+    logout();
+    router.push('/');
+  };
+
+  useEffect(() => {
+    if (!isAuthLoading && !authUser) router.push('/');
+  }, [authUser, isAuthLoading, router]);
+  const viewRole = ((authUser?.role || '').toUpperCase() === 'TEACHER' ? 'TEACHER' : 'STUDENT') as 'TEACHER' | 'STUDENT';
+
+  // courseId الحقيقي شكله classId__subject (بيتبني من نفس الصيغة في شاشة "فصولي")
+  const rawCourseId = (params?.courseId as string) || '';
+  const [realClassId, encodedSubject] = rawCourseId.split('__');
+  const realSubject = encodedSubject ? decodeURIComponent(encodedSubject) : '';
+
   const smartTasks = useSmartToDo(mockTasks);
+  const [realClassInfo, setRealClassInfo] = useState<{ id: string; name: string; gradeLevel: string } | null>(null);
+
+  useEffect(() => {
+    if (realClassId) getClassSectionById(realClassId).then(setRealClassInfo);
+  }, [realClassId]);
 
   const [demoAssessments, setDemoAssessments] = useState<DemoAssessment[]>([
     {
@@ -170,6 +178,7 @@ export default function CourseWorkspace() {
         language={language}
         onLanguageChange={setLanguage}
         userRole={viewRole.toLowerCase() as 'student' | 'teacher' | 'parent'}
+        onLogout={handleLogoutAndRedirect}
       />
 
       {/* 2. Main Course Area */}
@@ -199,10 +208,9 @@ export default function CourseWorkspace() {
                         <ArrowLeft size={14} />
                         {language === 'ar' ? 'المواد' : 'Subjects'}
                       </Link>
-                      <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">MATH 301</span>
-                      <span className="text-slate-400 text-xs">Fall 2023</span>
+                      <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">{realClassInfo?.name || '...'}</span>
                     </div>
-                    <h1 className="text-2xl font-bold text-slate-800">Advanced Linear Algebra</h1>
+                    <h1 className="text-2xl font-bold text-slate-800">{realSubject || '...'}</h1>
                   </div>
                 </div>
                 
