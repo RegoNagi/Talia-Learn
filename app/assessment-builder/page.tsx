@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, BrainCircuit, CheckCircle2, ChevronDown, Plus, 
@@ -45,7 +45,7 @@ interface RubricCriterion {
 
 export const dynamic = 'force-dynamic';
 
-export default function AssessmentBuilderPage() {
+function AssessmentBuilderContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { authUser } = useAuth();
@@ -1352,5 +1352,13 @@ export default function AssessmentBuilderPage() {
         </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+export default function AssessmentBuilderPage() {
+  return (
+    <Suspense fallback={<div className="w-full h-screen flex items-center justify-center text-slate-400">Loading...</div>}>
+      <AssessmentBuilderContent />
+    </Suspense>
   );
 }

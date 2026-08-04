@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
 import { DailyCompass, ActionAlert } from '@/components/DailyCompass';
 import { ActionItem, MagicButton } from '@/components/MagicButton';
@@ -52,7 +52,7 @@ export interface DemoAssessment {
 
 export const dynamic = 'force-dynamic';
 
-export default function CourseWorkspace() {
+function CourseWorkspaceContent() {
   const [language, setLanguage] = useState<'ar' | 'en'>('en');
   const [activeTab, setActiveTab] = useState('learning-path');
   const [activeSpace, setActiveSpace] = useState<string | null>(null);
@@ -479,5 +479,13 @@ export default function CourseWorkspace() {
         language={language} 
       />
     </div>
+  );
+}
+
+export default function CourseWorkspace() {
+  return (
+    <Suspense fallback={<div className="w-full h-screen flex items-center justify-center text-slate-400">Loading...</div>}>
+      <CourseWorkspaceContent />
+    </Suspense>
   );
 }
