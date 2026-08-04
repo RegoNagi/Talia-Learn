@@ -13,10 +13,10 @@ import {
   addFolderToMaterial, addFileToMaterial, removeFolderFromMaterial, removeFileFromMaterial,
   updateFolderSharing, updateFileSharing,
   uploadLibraryFile, getLibraryFileDownloadUrl, deleteLibraryFile,
-  getTeacherClassNames, getTeachersForSubject, addOfficialResourceToMaterial,
+  getTeacherClassNames, getTeachersForSubject, getClassesForSubject, addOfficialResourceToMaterial,
   LibraryFolder, LibraryFile,
 } from '@/services/libraryData';
-import { getOfficialCurriculumResources } from '@/services/academicData';
+import { LibraryDrawer } from '@/components/LearningPath/LibraryDrawer';
 
 const colorThemeMap: Record<string, { bg: string; border: string; text: string; iconBg: string; activeRing: string }> = {
   indigo: { bg: 'bg-indigo-50/70', border: 'border-indigo-200 hover:border-indigo-400', text: 'text-indigo-700', iconBg: 'bg-indigo-100 text-indigo-600', activeRing: 'ring-indigo-500' },
@@ -45,20 +45,26 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   // material = اللي بيبان للطلاب، my-library = مساحة المعلم الخاصة
   const [libraryMode, setLibraryMode] = useState<'material' | 'my-library'>(forcedMode || (role === 'teacher' ? 'my-library' : 'material'));
   const [isOfficialPickerOpen, setIsOfficialPickerOpen] = useState(false);
-  const [officialResources, setOfficialResources] = useState<{ id: string; title: string; type: string; url: string }[]>([]);
 
   useEffect(() => {
     if (forcedMode) setLibraryMode(forcedMode);
   }, [forcedMode]);
 
   const scope = teacherId && classId && subject ? { teacherId, classId, subject } : null;
+  const requestIdRef = React.useRef(0);
 
   const refreshLibrary = () => {
     if (!scope) return;
+    const thisRequestId = ++requestIdRef.current;
     setIsLoadingLibrary(true);
-    const foldersPromise = libraryMode === 'material' ? getMaterialFolders(scope) : getMyLibraryFolders(scope);
-    const filesPromise = libraryMode === 'material' ? getMaterialFiles(scope) : getMyLibraryFiles(scope);
-    Promise.all([foldersPromise, filesPromise, getTeacherClassNames(scope.teacherId), getTeachersForSubject(scope.subject, scope.teacherId)]).then(([f, files_, classes, teachers]) => {
+    const modeAtRequestTime = libraryMode;
+    const foldersPromise = modeAtRequestTime === 'material' ? getMaterialFolders(scope) : getMyLibraryFolders(scope);
+    const filesPromise = modeAtRequestTime === 'material' ? getMaterialFiles(scope) : getMyLibraryFiles(scope);
+    // Material: فصولي أنا بس (لنفس المادة اللي أنا مدرّسها). My Library: أي فصل بيدرّس نفس المادة، مش مقصور عليّا
+    const classesPromise = modeAtRequestTime === 'material' ? getTeacherClassNames(scope.teacherId) : getClassesForSubject(scope.subject, scope.classId);
+    Promise.all([foldersPromise, filesPromise, classesPromise, getTeachersForSubject(scope.subject, scope.teacherId)]).then(([f, files_, classes, teachers]) => {
+      // لو طلب تاني اتبعت بعد ده (مثلًا اتبدّل التاب بسرعة)، تجاهل النتيجة القديمة دي عشان ميحصلش "فلاش" لبيانات غلط
+      if (thisRequestId !== requestIdRef.current) return;
       setFolders(f);
       setFiles(files_);
       setTargetClasses(classes.map(c => ({ id: c.id, name: c.name, arName: c.name })));
@@ -397,37 +403,56 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
                 </div>
               </div>
 
-              <label className="block text-xs font-bold text-slate-500 mb-2">{isRtl ? 'شارك مع فصولي' : 'Share with Classes'}</label>
-              <div className="space-y-1.5 max-h-40 overflow-y-auto mb-2">
-                <label className="flex items-center gap-2.5 p-2.5 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-50">
-                  <input type="checkbox" checked={targetClasses.length > 0 && targetClasses.every((c) => selectedTargetLibs.includes(c.id))} onChange={(e) => setSelectedTargetLibs(e.target.checked ? targetClasses.map((c) => c.id) : [])} className="accent-indigo-600" />
-                  <span className="text-xs font-bold text-slate-700">{isRtl ? 'كل فصولي' : 'All my classes'}</span>
-                </label>
-                {targetClasses.map((c) => (
-                  <label key={c.id} className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-50">
-                    <span className="flex items-center gap-2.5 text-xs font-medium text-slate-700">
-                      <input type="checkbox" checked={selectedTargetLibs.includes(c.id)} onChange={() => setSelectedTargetLibs((prev) => prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id])} className="accent-indigo-600" />
-                      {isRtl ? c.arName : c.name}
-                    </span>
-                  </label>
-                ))}
-                {targetClasses.length === 0 && <p className="text-xs text-slate-400 py-2">{isRtl ? 'مفيش فصول تانية عندك لسه.' : 'No other classes yet.'}</p>}
-              </div>
+              {libraryMode === 'material' ? (
+                <>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">{isRtl ? 'شارك مع فصولي (لنفس المادة)' : 'Share with my classes (same subject)'}</label>
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto mb-2">
+                    <label className="flex items-center gap-2.5 p-2.5 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-50">
+                      <input type="checkbox" checked={targetClasses.length > 0 && targetClasses.every((c) => selectedTargetLibs.includes(c.id))} onChange={(e) => setSelectedTargetLibs(e.target.checked ? targetClasses.map((c) => c.id) : [])} className="accent-indigo-600" />
+                      <span className="text-xs font-bold text-slate-700">{isRtl ? 'كل فصولي' : 'All my classes'}</span>
+                    </label>
+                    {targetClasses.map((c) => (
+                      <label key={c.id} className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-50">
+                        <span className="flex items-center gap-2.5 text-xs font-medium text-slate-700">
+                          <input type="checkbox" checked={selectedTargetLibs.includes(c.id)} onChange={() => setSelectedTargetLibs((prev) => prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id])} className="accent-indigo-600" />
+                          {isRtl ? c.arName : c.name}
+                        </span>
+                      </label>
+                    ))}
+                    {targetClasses.length === 0 && <p className="text-xs text-slate-400 py-2">{isRtl ? 'مفيش فصول تانية عندك لسه.' : 'No other classes yet.'}</p>}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">{isRtl ? 'شارك مع فصول (لنفس المادة)' : 'Share with classes (same subject)'}</label>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto mb-4">
+                    {targetClasses.map((c) => (
+                      <label key={c.id} className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-50">
+                        <span className="flex items-center gap-2.5 text-xs font-medium text-slate-700">
+                          <input type="checkbox" checked={selectedTargetLibs.includes(c.id)} onChange={() => setSelectedTargetLibs((prev) => prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id])} className="accent-indigo-600" />
+                          {isRtl ? c.arName : c.name}
+                        </span>
+                      </label>
+                    ))}
+                    {targetClasses.length === 0 && <p className="text-xs text-slate-400 py-2">{isRtl ? 'مفيش فصول تانية بتدرّس نفس المادة لسه.' : 'No other classes teaching this subject yet.'}</p>}
+                  </div>
 
-              <label className="block text-xs font-bold text-slate-500 mb-2">{isRtl ? 'شارك مع معلمين (نفس المادة)' : 'Share with Teachers (same subject)'}</label>
-              <div className="space-y-1.5 max-h-40 overflow-y-auto mb-6">
-                {targetTeachers.map((t) => (
-                  <label key={t.id} className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-50">
-                    <span className="flex items-center gap-2.5 text-xs font-medium text-slate-700">
-                      <input type="checkbox" checked={selectedTargetTeachers.includes(t.id)} onChange={() => setSelectedTargetTeachers((prev) => prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id])} className="accent-indigo-600" />
-                      {t.name}
-                    </span>
-                  </label>
-                ))}
-                {targetTeachers.length === 0 && <p className="text-xs text-slate-400 py-2">{isRtl ? 'مفيش معلمين تانيين بيدرّسوا نفس المادة لسه.' : 'No other teachers of this subject yet.'}</p>}
-              </div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">{isRtl ? 'شارك مع معلمين (نفس المادة)' : 'Share with Teachers (same subject)'}</label>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto mb-2">
+                    {targetTeachers.map((t) => (
+                      <label key={t.id} className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-50">
+                        <span className="flex items-center gap-2.5 text-xs font-medium text-slate-700">
+                          <input type="checkbox" checked={selectedTargetTeachers.includes(t.id)} onChange={() => setSelectedTargetTeachers((prev) => prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id])} className="accent-indigo-600" />
+                          {t.name}
+                        </span>
+                      </label>
+                    ))}
+                    {targetTeachers.length === 0 && <p className="text-xs text-slate-400 py-2">{isRtl ? 'مفيش معلمين تانيين بيدرّسوا نفس المادة لسه.' : 'No other teachers of this subject yet.'}</p>}
+                  </div>
+                </>
+              )}
 
-              <div className="flex gap-3">
+              <div className="flex gap-3 mt-4">
                 <button onClick={() => setShareItem(null)} className="flex-1 py-3 rounded-xl border border-slate-200 font-bold text-sm text-slate-600">{isRtl ? 'إلغاء' : 'Cancel'}</button>
                 <button onClick={handleSaveShare} className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm">{isRtl ? 'حفظ المشاركة' : 'Save & Update Sharing'}</button>
               </div>
@@ -436,45 +461,24 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
         )}
       </AnimatePresence>
 
-      {/* Official Library Picker */}
-      <AnimatePresence>
-        {isOfficialPickerOpen && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4">
-            <motion.div initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[80vh] flex flex-col">
-              <div className="flex justify-between items-center mb-5">
-                <div className="flex items-center gap-2">
-                  <Book className="text-indigo-600" size={20} />
-                  <h3 className="font-bold text-lg text-slate-900">{isRtl ? 'المكتبة الرسمية' : 'Official Library'}</h3>
-                </div>
-                <button onClick={() => setIsOfficialPickerOpen(false)} className="text-slate-400 hover:text-slate-700"><X size={20} /></button>
-              </div>
-              <div className="flex-1 overflow-y-auto space-y-2">
-                {officialResources.length === 0 && (
-                  <p className="text-center text-sm text-slate-400 py-10">{isRtl ? 'مفيش موارد رسمية للمادة دي لسه.' : 'No official resources for this subject yet.'}</p>
-                )}
-                {officialResources.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50">
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-800 truncate">{r.title}</p>
-                      <p className="text-[11px] text-slate-400 uppercase">{r.type}</p>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        if (!scope) return;
-                        const id = await addOfficialResourceToMaterial(scope, r);
-                        if (id) refreshLibrary();
-                      }}
-                      className="shrink-0 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold"
-                    >
-                      {isRtl ? 'إضافة' : 'Add'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* من المكتبة الرسمية — نفس تصميم الـ Drawer الجانبي المستخدم في Learning Path بالظبط */}
+      <LibraryDrawer
+        isOpen={isOfficialPickerOpen}
+        onClose={() => setIsOfficialPickerOpen(false)}
+        targetUnitTitle={isRtl ? 'المادة' : 'Material'}
+        language={language}
+        grade={grade}
+        subject={subject}
+        teacherId={teacherId}
+        classId={classId}
+        onInject={async (items: any[]) => {
+          if (!scope) return;
+          for (const item of items) {
+            await addOfficialResourceToMaterial(scope, { title: item.title, type: item.type, url: item.url || '' });
+          }
+          refreshLibrary();
+        }}
+      />
       <div className="flex flex-col gap-2.5 mb-3">
         {role === 'teacher' && !forcedMode && (
           <div className="flex gap-2">
@@ -499,10 +503,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
           <div className="flex items-center gap-3 w-full sm:w-auto">
             {libraryMode === 'material' && role === 'teacher' && (
               <button
-                onClick={() => {
-                  if (grade && subject) getOfficialCurriculumResources(grade, subject).then(setOfficialResources);
-                  setIsOfficialPickerOpen(true);
-                }}
+                onClick={() => setIsOfficialPickerOpen(true)}
                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-indigo-700 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-indigo-200"
               >
                 <Book size={16} />

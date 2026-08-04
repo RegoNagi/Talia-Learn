@@ -290,6 +290,15 @@ export async function getTeacherClassNames(teacherId: string): Promise<{ id: str
   return data || [];
 }
 
+// بيجيب كل الفصول (أي معلم) اللي بتدرّس نفس المادة دي — لمشاركة محتوى Material مع فصول تانية لنفس المادة
+export async function getClassesForSubject(subject: string, excludeClassId: string): Promise<{ id: string; name: string }[]> {
+  const { data: subjectRows, error } = await supabase.from('curriculum_subjects').select('grade').eq('subject', subject);
+  if (error || !subjectRows || subjectRows.length === 0) return [];
+  const grades = Array.from(new Set(subjectRows.map((r: any) => r.grade)));
+  const { data: classRows } = await supabase.from('class_sections').select('id, name').in('grade_level', grades);
+  return (classRows || []).filter((c: any) => c.id !== excludeClassId);
+}
+
 // بيجيب باقي المعلمين اللي بيدرّسوا نفس المادة (في أي صف) — لخيار "شير مع معلم بالاسم"
 export async function getTeachersForSubject(subject: string, excludeTeacherId: string): Promise<{ id: string; name: string }[]> {
   const { data: subjectRows, error } = await supabase.from('teacher_subjects').select('teacher_id').eq('subject', subject);
