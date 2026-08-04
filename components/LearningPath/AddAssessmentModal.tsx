@@ -22,6 +22,7 @@ export function AddAssessmentModal({ isOpen, onClose, unitTitle, classId, subjec
       if (classId) params.set('classId', classId);
       if (subject) params.set('subject', subject);
       if (unitId) params.set('unitId', unitId);
+      if (typeof window !== 'undefined') params.set('from', encodeURIComponent(window.location.pathname + window.location.search));
       router.push(`/assessment-builder?${params.toString()}`);
       onClose();
     }

@@ -224,7 +224,10 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
             <h2 className="text-2xl font-bold text-slate-800">Assessments Management</h2>
             <p className="text-sm font-medium text-slate-500 mt-1">Monitor student submissions and grading progress.</p>
           </div>
-          <button onClick={() => router.push(`/assessment-builder?classId=${classId || ''}&subject=${encodeURIComponent(subject || '')}`)} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm">
+          <button onClick={() => {
+            const from = typeof window !== 'undefined' ? encodeURIComponent(window.location.pathname + window.location.search) : '';
+            router.push(`/assessment-builder?classId=${classId || ''}&subject=${encodeURIComponent(subject || '')}&from=${from}`);
+          }} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm">
             <Plus size={16} /> New Assignment
           </button>
         </div>

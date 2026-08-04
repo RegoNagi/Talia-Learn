@@ -7,6 +7,9 @@ export interface Assignment {
   dueDate: string | null;
   status: 'Active' | 'Closed' | 'Draft';
   createdAt: string;
+  settings: Record<string, any>;
+  rubric: any[];
+  attachments: { name: string; storagePath: string }[];
 }
 
 export interface AssignmentSubmission {
@@ -29,10 +32,26 @@ interface AssignmentScope {
   subject: string;
 }
 
+const ASSIGNMENT_SELECT = 'id, title, instructions, due_date, status, created_at, settings, rubric, attachments';
+
+function mapAssignment(row: any): Assignment {
+  return {
+    id: row.id,
+    title: row.title,
+    instructions: row.instructions || '',
+    dueDate: row.due_date,
+    status: row.status,
+    createdAt: row.created_at,
+    settings: row.settings || {},
+    rubric: row.rubric || [],
+    attachments: row.attachments || [],
+  };
+}
+
 export async function getAssignments(scope: AssignmentScope): Promise<Assignment[]> {
   const { data, error } = await supabase
     .from('assignments')
-    .select('id, title, instructions, due_date, status, created_at')
+    .select(ASSIGNMENT_SELECT)
     .eq('class_id', scope.classId)
     .eq('subject', scope.subject)
     .eq('type', 'assignment')
@@ -41,17 +60,16 @@ export async function getAssignments(scope: AssignmentScope): Promise<Assignment
     console.error('Error fetching assignments:', error);
     return [];
   }
-  return (data || []).map((row: any) => ({
-    id: row.id,
-    title: row.title,
-    instructions: row.instructions || '',
-    dueDate: row.due_date,
-    status: row.status,
-    createdAt: row.created_at,
-  }));
+  return (data || []).map(mapAssignment);
 }
 
-export async function createAssignment(scope: AssignmentScope, input: { title: string; instructions: string; dueDate: string | null }): Promise<{ id: string | null; error: string | null }> {
+export async function getAssignmentById(id: string): Promise<Assignment | null> {
+  const { data, error } = await supabase.from('assignments').select(ASSIGNMENT_SELECT).eq('id', id).maybeSingle();
+  if (error || !data) return null;
+  return mapAssignment(data);
+}
+
+export async function createAssignment(scope: AssignmentScope, input: { title: string; instructions: string; dueDate: string | null; settings?: Record<string, any>; rubric?: any[]; attachments?: { name: string; storagePath: string }[] }): Promise<{ id: string | null; error: string | null }> {
   const { data, error } = await supabase
     .from('assignments')
     .insert({
@@ -63,6 +81,9 @@ export async function createAssignment(scope: AssignmentScope, input: { title: s
       instructions: input.instructions,
       due_date: input.dueDate,
       status: 'Active',
+      settings: input.settings || {},
+      rubric: input.rubric || [],
+      attachments: input.attachments || [],
     })
     .select('id')
     .single();
@@ -149,6 +170,18 @@ export async function getMySubmission(assessmentId: string, studentId: string): 
 }
 
 // بيرفع الملف فعليًا (لو موجود) لنفس bucket المكتبة، وبيسجّل التسليم
+// بيرفع مرفق حقيقي للواجب نفسه (بيضاف عليه المعلم، زي ورقة تعليمات أو نموذج)
+export async function uploadAssignmentAttachment(file: File): Promise<{ name: string; storagePath: string } | null> {
+  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+  const storagePath = `assignment-attachments/${Date.now()}_${safeName}`;
+  const { error } = await supabase.storage.from('library-files').upload(storagePath, file);
+  if (error) {
+    console.error('Error uploading assignment attachment:', error);
+    return null;
+  }
+  return { name: file.name, storagePath };
+}
+
 export async function submitAssignment(input: { assessmentId: string; studentId: string; file?: File | null; textContent?: string }): Promise<{ ok: boolean; error: string | null }> {
   let storagePath: string | null = null;
   let fileName: string | null = null;

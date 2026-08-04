@@ -18,7 +18,7 @@ import { createPortal } from 'react-dom';
 import { FloatingPortal } from '@floating-ui/react';
 import { AssessmentSidebar } from '@/components/AssessmentSidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { createAssignment } from '@/services/assignmentData';
+import { createAssignment, uploadAssignmentAttachment, getSubmissionFileUrl } from '@/services/assignmentData';
 
 interface Question {
   id: string;
@@ -52,6 +52,12 @@ function AssessmentBuilderContent() {
   const scopeClassId = searchParams.get('classId') || '';
   const scopeSubject = searchParams.get('subject') || '';
   const scopeUnitId = searchParams.get('unitId') || '';
+  const returnTo = searchParams.get('from') || '';
+
+  const goBack = () => {
+    if (returnTo) router.push(decodeURIComponent(returnTo));
+    else router.back();
+  };
   const [isSavingReal, setIsSavingReal] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [activeTab, setActiveTab] = useState<'quiz' | 'assignment'>('assignment');
@@ -116,6 +122,9 @@ function AssessmentBuilderContent() {
 
   // Assignment State
   const [instructionsText, setInstructionsText] = useState('');
+  const [attachments, setAttachments] = useState<{ name: string; storagePath: string }[]>([]);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [allowFileUpload, setAllowFileUpload] = useState(true);
   const [allowTextEntry, setAllowTextEntry] = useState(true);
   const [passPercentage, setPassPercentage] = useState(65);
@@ -168,14 +177,27 @@ function AssessmentBuilderContent() {
       setIsSavingReal(true);
       setSaveError('');
       const dueDateTime = dueDate ? `${dueDate}T${dueTime || '23:59'}` : null;
+      const assignmentSettings = {
+        maxScore,
+        isAutoCalc,
+        attemptLimit,
+        prohibitLateSubmissions,
+        feedbackTiming,
+        aiPlagiarism,
+        publishToTimeline,
+        allowFileUpload,
+        allowTextEntry,
+        gradingMethod,
+        passPercentage,
+      };
       const { id, error } = await createAssignment(
         { teacherId: authUser.teacherId, classId: scopeClassId, subject: scopeSubject },
-        { title: title.trim(), instructions: instructionsText, dueDate: dueDateTime }
+        { title: title.trim(), instructions: instructionsText, dueDate: dueDateTime, settings: assignmentSettings, rubric, attachments }
       );
       setIsSavingReal(false);
       if (id) {
         addToast('Assignment Saved & Published!');
-        setTimeout(() => router.back(), 1000);
+        setTimeout(() => goBack(), 1000);
       } else {
         setSaveError(error || 'Unknown error');
         addToast(`حصل خطأ أثناء الحفظ: ${error}`);
@@ -184,7 +206,7 @@ function AssessmentBuilderContent() {
     }
     // الكويز لسه مش متوصّل بالحفظ الحقيقي (خطوة قادمة منفصلة)
     addToast('Assessment Saved & Published!');
-    setTimeout(() => router.back(), 1000);
+    setTimeout(() => goBack(), 1000);
   };
 
   const handleGenerateRubric = () => {
@@ -325,9 +347,10 @@ function AssessmentBuilderContent() {
         <div className="flex items-center gap-3 flex-1 justify-end">
           {saveError && <span className="text-xs text-rose-600 font-bold">{saveError}</span>}
           <button 
-            className="text-slate-500 hover:text-slate-700 font-bold text-sm px-4 py-2 rounded-xl hover:bg-slate-100 transition-all"
+            onClick={() => setIsPreviewMode((p) => !p)}
+            className={`font-bold text-sm px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${isPreviewMode ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
           >
-            Preview
+            <Eye size={16} /> {isPreviewMode ? 'Exit Preview' : 'Preview'}
           </button>
           <button 
             onClick={handleSave}
@@ -339,6 +362,63 @@ function AssessmentBuilderContent() {
         </div>
       </header>
 
+      {/* Student Preview Overlay (نفس شكل الطالب بالظبط، مش بوب أب) */}
+      {isPreviewMode && (
+        <div className="flex-1 overflow-y-auto bg-[#FAFAFA]">
+          <div className="p-8 max-w-2xl mx-auto flex flex-col gap-6 w-full">
+            <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2">
+              <Eye size={14} /> {language === 'ar' ? 'معاينة كطالب — كده هيشوفها الطالب بالظبط' : 'Student Preview — this is exactly what a student will see'}
+            </div>
+            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+              <h2 className="text-2xl font-bold text-slate-800 mb-2">{title || (language === 'ar' ? 'بدون عنوان' : 'Untitled Assignment')}</h2>
+              {dueDate && (
+                <div className="flex items-center gap-4 text-sm text-slate-500 mb-8 font-medium">
+                  <span className="flex items-center gap-1"><AlertCircle size={16}/> Due: {new Date(`${dueDate}T${dueTime || '23:59'}`).toLocaleString()}</span>
+                </div>
+              )}
+              <div className="mb-8">
+                <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-2">Instructions</h3>
+                <p className="text-slate-600 leading-relaxed text-lg whitespace-pre-wrap">{instructionsText || (language === 'ar' ? 'مفيش تعليمات لسه.' : 'No instructions yet.')}</p>
+              </div>
+              {attachments.length > 0 && (
+                <div className="mb-8">
+                  <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-2">Attachments</h3>
+                  <div className="space-y-2">
+                    {attachments.map((a, i) => (
+                      <div key={i} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-indigo-600">
+                        <FileText size={16} /> {a.name}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="border-t border-slate-100 pt-6 space-y-6">
+                {allowTextEntry && (
+                  <div>
+                    <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-3">Written Response</h3>
+                    <textarea disabled rows={5} className="w-full border border-slate-200 rounded-2xl p-5 text-slate-400 bg-slate-50 resize-none" placeholder="Type your answer or paste your links here..."></textarea>
+                  </div>
+                )}
+                {allowFileUpload && (
+                  <div>
+                    <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-3">File Upload</h3>
+                    <div className="w-full border-2 border-dashed border-slate-200 rounded-2xl p-10 flex flex-col items-center justify-center text-slate-400 bg-slate-50">
+                      <UploadCloud size={36} className="mb-4" />
+                      <p className="font-bold">Drag & drop files here</p>
+                    </div>
+                  </div>
+                )}
+                <button disabled className="w-full py-4 bg-indigo-300 cursor-not-allowed text-white rounded-xl font-bold text-lg">
+                  Submit Assignment
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isPreviewMode && (
+      <>
       {/* Main Content Grid */}
       <div className="flex-1 flex overflow-hidden">
         
@@ -542,13 +622,41 @@ function AssessmentBuilderContent() {
                   
                   <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-8 space-y-6">
                     {/* Dropzone */}
-                    <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center text-center hover:bg-slate-50 hover:border-indigo-300 transition-all cursor-pointer group">
+                    <label className="border-2 border-dashed border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center text-center hover:bg-slate-50 hover:border-indigo-300 transition-all cursor-pointer group block">
                       <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                         <UploadCloud size={24} />
                       </div>
-                      <h3 className="text-sm font-bold text-slate-700 mb-1">Upload Instructions or Drag & Drop</h3>
+                      <h3 className="text-sm font-bold text-slate-700 mb-1">{isUploadingAttachment ? 'Uploading...' : 'Upload Instructions or Drag & Drop'}</h3>
                       <p className="text-xs text-slate-400">PDF, DOCX, or plain text up to 10MB</p>
-                    </div>
+                      <input
+                        type="file"
+                        className="hidden"
+                        disabled={isUploadingAttachment}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (!file) return;
+                          setIsUploadingAttachment(true);
+                          const uploaded = await uploadAssignmentAttachment(file);
+                          setIsUploadingAttachment(false);
+                          if (uploaded) setAttachments((prev) => [...prev, uploaded]);
+                          else addToast('حصل خطأ أثناء رفع المرفق.');
+                        }}
+                      />
+                    </label>
+
+                    {attachments.length > 0 && (
+                      <div className="space-y-2">
+                        {attachments.map((a, i) => (
+                          <div key={i} className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">
+                            <span className="text-sm font-bold text-slate-700 truncate">{a.name}</span>
+                            <button onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))} className="text-slate-400 hover:text-rose-600">
+                              <X size={16} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     <div className="flex items-center gap-4">
                       <div className="h-px bg-slate-100 flex-1"></div>
@@ -785,6 +893,8 @@ function AssessmentBuilderContent() {
           setLockModule={setLockModule}
         />
       </div>
+      </>
+      )}
 
       {/* Portals: AI Sidebar & Bank Drawer */}
       <FloatingPortal>
