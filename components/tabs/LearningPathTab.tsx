@@ -691,7 +691,7 @@ export function LearningPathTab({
             <div className="bg-white rounded-3xl border border-slate-200 shadow-none p-6">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-slate-800">Set Up New Module</h3>
-                <button onClick={() => { setIsBuildingUnit(false); setNewUnitMode(null); setGeneratedPlan(null); setNewUnitTitle(''); }} className="text-slate-400 hover:text-slate-600 shadow-none">
+                <button onClick={() => { setIsBuildingUnit(false); setNewUnitMode(null); setNewUnitTitle(''); }} className="text-slate-400 hover:text-slate-600 shadow-none">
                   <X size={20} />
                 </button>
               </div>
