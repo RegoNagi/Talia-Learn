@@ -45,6 +45,7 @@ export function GlobalSidebar({
   onLanguageChange,
   onLogout,
   userRole = 'teacher',
+  canUseQuestionBank = false,
   isMobileOpen = false,
   onMobileClose
 }: { 
@@ -56,6 +57,7 @@ export function GlobalSidebar({
   onLanguageChange?: (lang: 'ar' | 'en') => void,
   onLogout?: () => void,
   userRole?: 'student' | 'teacher' | 'parent' | 'qb_supervisor',
+  canUseQuestionBank?: boolean,
   isMobileOpen?: boolean,
   onMobileClose?: () => void
 }) {
@@ -231,7 +233,7 @@ export function GlobalSidebar({
           />
         )}
 
-        {userRole === 'qb_supervisor' && (
+        {(userRole === 'qb_supervisor' || (isTeacher && canUseQuestionBank)) && (
           <NavItem 
             icon={<Database size={20} />} 
             label={t.questionBank} 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
 import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
 import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCircuit, PenTool, LayoutTemplate, MoreVertical, Edit2, Trash2, BookOpen, ListChecks, CheckCircle2, AlignRight, Type, Image as ImageIcon, Video, Mic, Copy, Eye, Search, ChevronDown, ChevronUp, MessageSquare, GitMerge, ListOrdered, MinusSquare, Map, Layers, LineChart, Move, Calculator, BarChart, MoreHorizontal, FileText, LayoutGrid, MoveHorizontal, Headphones, Signal, Award, Play, X, Paperclip, Binary, Atom, FlaskConical, Microscope, Languages, Text, Landmark, Globe, Monitor, Flag, Check, Sparkles, Loader2, Bot, MousePointerClick, Settings2, RefreshCw, ShieldCheck, Calendar, Clock, Sigma } from 'lucide-react';
@@ -240,7 +241,12 @@ function FormSelect({
 }
 
 export default function QuestionBank() {
-  const { authUser, isLoggedIn, isAuthLoading } = useAuth();
+  const { authUser, isLoggedIn, isAuthLoading, logout } = useAuth();
+  const router = useRouter();
+  const handleLogout = () => {
+    logout();
+    router.push('/');
+  };
   const [language, setLanguage] = useState<'ar' | 'en'>('en');
   const [isSidebarPinned, setIsSidebarPinned] = useState(false);
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'MANAGEMENT' | 'ASSESSMENTS' | 'APPROVAL_HUB'>(authUser?.role === 'teacher' ? 'MANAGEMENT' : 'DASHBOARD');
@@ -543,6 +549,9 @@ export default function QuestionBank() {
         setIsPinned={setIsSidebarPinned}
         language={language}
         onLanguageChange={setLanguage}
+        userRole={authUser?.role as any}
+        canUseQuestionBank={authUser?.canUseQuestionBank}
+        onLogout={handleLogout}
       />
       
       <main className="flex-1 overflow-y-auto bg-gray-50/30">

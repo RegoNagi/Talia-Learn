@@ -344,6 +344,7 @@ export default function Dashboard() {
             onLanguageChange={setLanguage}
             onLogout={handleLogout}
             userRole={userRole || 'student'}
+            canUseQuestionBank={authUser?.canUseQuestionBank}
             isMobileOpen={isMobileSidebarOpen}
             onMobileClose={() => setIsMobileSidebarOpen(false)}
           />
