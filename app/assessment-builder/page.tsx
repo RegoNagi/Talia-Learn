@@ -27,6 +27,13 @@ interface Question {
   points: number;
   imageUrl?: string;
   options?: { id: string; text: string; isCorrect: boolean; imageUrl?: string }[];
+  sectionId?: string | null;
+}
+
+interface QuizSection {
+  id: string;
+  title: string;
+  description?: string;
 }
 
 interface RubricLevel {
@@ -262,12 +269,34 @@ function AssessmentBuilderContent() {
     }, 2000);
   };
 
+  const [sections, setSections] = useState<QuizSection[]>([]);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const [draggedQId, setDraggedQId] = useState<string | null>(null);
+
+  const addSection = () => {
+    const newSection: QuizSection = { id: `sec-${window.crypto.randomUUID()}`, title: `Section ${sections.length + 1}` };
+    setSections(prev => [...prev, newSection]);
+    setActiveSectionId(newSection.id);
+    addToast('Section Added');
+  };
+
+  const deleteSection = (id: string) => {
+    setSections(prev => prev.filter(s => s.id !== id));
+    setQuestions(prev => prev.map(q => q.sectionId === id ? { ...q, sectionId: null } : q));
+    if (activeSectionId === id) setActiveSectionId(null);
+  };
+
+  const updateSection = (id: string, updates: Partial<QuizSection>) => {
+    setSections(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+  };
+
   const addQuestion = (type: Question['type']) => {
     const newQuestion: Question = {
       id: `q-${window.crypto.randomUUID()}`,
       type,
       text: '',
       points: 10,
+      sectionId: activeSectionId,
       options: type === 'multiple_choice' ? [
         { id: `opt-${window.crypto.randomUUID()}`, text: 'Option 1', isCorrect: false },
         { id: `opt-${window.crypto.randomUUID()}`, text: 'Option 2', isCorrect: false }
@@ -276,7 +305,22 @@ function AssessmentBuilderContent() {
         { id: `opt-${window.crypto.randomUUID()}`, text: 'False', isCorrect: false }
       ] : undefined
     };
-    setQuestions(prev => [...prev, newQuestion]);
+    setQuestions(prev => {
+      if (!activeSectionId) {
+        // لو مفيش قسم نشط، حطها في الآخر بعد كل حاجة مالهاش قسم
+        const lastUngroupedIdx = prev.map(q => !q.sectionId).lastIndexOf(true);
+        if (lastUngroupedIdx === -1) return [newQuestion, ...prev];
+        return [...prev.slice(0, lastUngroupedIdx + 1), newQuestion, ...prev.slice(lastUngroupedIdx + 1)];
+      }
+      // حطها بعد آخر سؤال في نفس القسم النشط
+      const lastInSectionIdx = prev.map(q => q.sectionId === activeSectionId).lastIndexOf(true);
+      if (lastInSectionIdx === -1) {
+        const sectionOrderIdx = sections.findIndex(s => s.id === activeSectionId);
+        // لو القسم ده جديد ومفيهوش أسئلة، حطها في الآخر
+        return [...prev, newQuestion];
+      }
+      return [...prev.slice(0, lastInSectionIdx + 1), newQuestion, ...prev.slice(lastInSectionIdx + 1)];
+    });
     addToast('Question Added');
   };
 
@@ -417,6 +461,59 @@ function AssessmentBuilderContent() {
       {/* Main Content Grid */}
       <div className="flex-1 flex overflow-hidden">
         
+        {/* 1.5 Question Type Panel (quiz only, opposite side from Settings) */}
+        {activeTab === 'quiz' && (
+          <aside className="w-56 shrink-0 border-r border-slate-200 bg-white overflow-y-auto p-4 space-y-5">
+            <div>
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Add Question</h4>
+              <div className="space-y-2">
+                {[
+                  { type: 'multiple_choice', icon: ListChecks, label: 'Multiple Choice' },
+                  { type: 'true_false', icon: CheckSquare, label: 'True/False' },
+                  { type: 'short_answer', icon: Type, label: 'Short Answer' },
+                  { type: 'file_upload', icon: UploadCloud, label: 'File Upload' }
+                ].map((item) => (
+                  <button 
+                    key={item.type}
+                    onClick={() => addQuestion(item.type as any)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                  >
+                    <item.icon size={16} />
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 space-y-2">
+              <button
+                onClick={() => addSection()}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-teal-300 hover:text-teal-600 hover:bg-teal-50 transition-all"
+              >
+                <Layout size={16} />
+                Add Section
+              </button>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 space-y-2">
+              <button 
+                onClick={() => setIsBankDrawerOpen(true)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 transition-all"
+              >
+                <Book size={16} />
+                From Question Bank
+              </button>
+              <button 
+                onClick={() => setIsAIDraftRoomOpen(true)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl text-xs font-bold shadow-sm hover:shadow-md transition-all relative overflow-hidden"
+              >
+                <Sparkles size={16} className="animate-pulse" />
+                Ask Faheem
+              </button>
+            </div>
+          </aside>
+        )}
+
         {/* 2. Left Canvas (Builder) */}
         <main className="flex-1 overflow-y-auto custom-scrollbar p-12 bg-[#FAFAFA] relative">
           <div className="max-w-4xl mx-auto">
@@ -445,14 +542,51 @@ function AssessmentBuilderContent() {
                 })()}
                 {/* Question List */}
                 <AnimatePresence mode="popLayout">
-                  {questions.map((q, idx) => (
+                  {questions.map((q, idx) => {
+                    const prevQ = questions[idx - 1];
+                    const showSectionHeader = q.sectionId && (!prevQ || prevQ.sectionId !== q.sectionId);
+                    const section = q.sectionId ? sections.find(s => s.id === q.sectionId) : null;
+                    return (
+                    <React.Fragment key={q.id}>
+                      {showSectionHeader && section && (
+                        <div
+                          onClick={() => setActiveSectionId(section.id)}
+                          className={`flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-all ${activeSectionId === section.id ? 'border-teal-500 bg-teal-50' : 'border-slate-200 bg-white hover:border-teal-300'}`}
+                        >
+                          <input
+                            type="text"
+                            value={section.title}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => updateSection(section.id, { title: e.target.value })}
+                            className="text-lg font-bold text-slate-800 bg-transparent border-none p-0 focus:ring-0 flex-1"
+                          />
+                          <button onClick={(e) => { e.stopPropagation(); deleteSection(section.id); }} className="text-slate-300 hover:text-rose-500 transition-colors shrink-0">
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      )}
                     <motion.div 
-                      key={q.id}
                       layout
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.95 }}
-                      className="bg-white rounded-[24px] border-2 border-blue-500 p-8 relative group transition-all"
+                      draggable
+                      onDragStart={() => setDraggedQId(q.id)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => {
+                        if (!draggedQId || draggedQId === q.id) return;
+                        setQuestions(prev => {
+                          const fromIdx = prev.findIndex(x => x.id === draggedQId);
+                          const toIdx = prev.findIndex(x => x.id === q.id);
+                          if (fromIdx === -1 || toIdx === -1) return prev;
+                          const next = [...prev];
+                          const [moved] = next.splice(fromIdx, 1);
+                          next.splice(toIdx, 0, { ...moved, sectionId: q.sectionId });
+                          return next;
+                        });
+                        setDraggedQId(null);
+                      }}
+                      className={`bg-white rounded-[24px] border-2 border-blue-500 p-8 relative group transition-all ${draggedQId === q.id ? 'opacity-40' : ''}`}
                     >
                       {/* Drag Handle */}
                       <div className="absolute -left-12 top-1/2 -translate-y-1/2 text-slate-300 cursor-grab opacity-0 group-hover:opacity-100 transition-opacity">
@@ -637,49 +771,11 @@ function AssessmentBuilderContent() {
                       </div>
                       )}
                     </motion.div>
-                  ))}
+                    </React.Fragment>
+                    );
+                  })}
                 </AnimatePresence>
 
-                {/* Creation Tools */}
-                <div className="pt-12 border-t border-slate-200">
-                  <div className="flex flex-col items-center gap-6">
-                    <div className="flex gap-3">
-                      {[
-                        { type: 'multiple_choice', icon: ListChecks, label: 'Multiple Choice' },
-                        { type: 'true_false', icon: CheckSquare, label: 'True/False' },
-                        { type: 'short_answer', icon: Type, label: 'Short Answer' },
-                        { type: 'file_upload', icon: UploadCloud, label: 'File Upload' }
-                      ].map((item) => (
-                        <button 
-                          key={item.type}
-                          onClick={() => addQuestion(item.type as any)}
-                          className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-xl hover:-translate-y-0.5 transition-all"
-                        >
-                          <item.icon size={18} />
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                    
-                    <div className="flex gap-4">
-                      <button 
-                        onClick={() => setIsBankDrawerOpen(true)}
-                        className="flex items-center gap-2 px-6 py-3 bg-slate-800 text-white rounded-2xl text-sm font-bold hover:bg-slate-900 transition-all shadow-lg shadow-slate-200"
-                      >
-                        <Book size={18} />
-                        From Question Bank
-                      </button>
-                      <button 
-                        onClick={() => setIsAIDraftRoomOpen(true)}
-                        className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-2xl text-sm font-bold shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 hover:-translate-y-0.5 transition-all relative overflow-hidden group"
-                      >
-                        <div className="absolute inset-0 bg-white/20 group-hover:translate-x-full transition-transform duration-1000 -skew-x-12 -translate-x-full"></div>
-                        <Sparkles size={18} className="animate-pulse" />
-                        ✨ Ask Faheem to Strategize
-                      </button>
-                    </div>
-                  </div>
-                </div>
               </div>
             ) : (
               /* Assignment Builder Content */
