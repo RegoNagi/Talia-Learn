@@ -321,7 +321,7 @@ export function AssessmentSidebar({
   const t = content[language];
 
   return (
-    <aside className={`w-80 bg-white border-slate-200 flex flex-col shrink-0 ${isRtl ? 'border-r' : 'border-l'} ${t.font}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <aside className={`w-80 bg-white border-slate-200 flex flex-col shrink-0 sticky top-0 self-start max-h-screen ${isRtl ? 'border-r' : 'border-l'} ${t.font}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <div className="p-6 border-b border-slate-100 bg-slate-50/30">
         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{t.assessmentName}</label>
         <input 

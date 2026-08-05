@@ -671,11 +671,11 @@ function AssessmentBuilderContent() {
       {!isPreviewMode && (
       <>
       {/* Main Content Grid */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex">
         
         {/* 1.5 Question Type Panel (quiz only, opposite side from Settings) */}
         {activeTab === 'quiz' && (
-          <aside className="w-56 shrink-0 border-r border-slate-200 bg-white overflow-y-auto p-4 space-y-5 sticky top-0 h-screen">
+          <aside className="w-56 shrink-0 border-r border-slate-200 bg-white p-4 space-y-5 sticky top-0 self-start max-h-screen overflow-y-auto">
             <div>
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Add Question</h4>
               <div className="space-y-2">
@@ -727,7 +727,7 @@ function AssessmentBuilderContent() {
         )}
 
         {/* 2. Left Canvas (Builder) */}
-        <main className="flex-1 overflow-y-auto custom-scrollbar p-12 bg-[#FAFAFA] relative">
+        <main className="flex-1 p-12 bg-[#FAFAFA] relative">
           <div className="max-w-4xl mx-auto">
             {activeTab === 'quiz' ? (
               <div className="space-y-8 pb-32">
@@ -1025,6 +1025,28 @@ function AssessmentBuilderContent() {
                     );
                   })}
                 </AnimatePresence>
+
+                {sections.filter((sec) => !questions.some((q) => q.sectionId === sec.id)).map((sec) => (
+                  <div
+                    key={sec.id}
+                    onClick={() => setActiveSectionId(sec.id)}
+                    className={`flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-all ${activeSectionId === sec.id ? 'border-teal-500 bg-teal-50' : 'border-slate-200 bg-white hover:border-teal-300'}`}
+                  >
+                    <div className="flex items-center gap-3 flex-1">
+                      <input
+                        type="text"
+                        value={sec.title}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => updateSection(sec.id, { title: e.target.value })}
+                        className="text-lg font-bold text-slate-800 bg-transparent border-none p-0 focus:ring-0 flex-1"
+                      />
+                      <span className="text-xs text-slate-400 shrink-0">مفيش أسئلة لسه</span>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); deleteSection(sec.id); }} className="text-slate-300 hover:text-rose-500 transition-colors shrink-0">
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                ))}
 
               </div>
             ) : (
