@@ -11,46 +11,16 @@ import {
   PieChart, Pie, Cell, Sector, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
 
-// --- MOCK DATA ---
-const bloomData = [
-  { name: 'تذكر', value: 1250 },
-  { name: 'فهم', value: 3420 },
-  { name: 'تطبيق', value: 2150 },
-  { name: 'تحليل', value: 1840 },
-  { name: 'تقييم', value: 1050 },
-  { name: 'ابتكار', value: 740 },
-];
+import { getBankAnalytics } from '@/services/questionBankData';
+import { getGradeLevels, getSubjectGradeCombos } from '@/services/academicData';
 
-const difficultyData = [
-  { name: 'سهل', value: 3450, color: '#10b981' }, 
-  { name: 'متوسط', value: 6800, color: '#f59e0b' },
-  { name: 'صعب', value: 2200, color: '#f43f5e' },
-];
-
-const typeData = [
-  { subject: 'اختيار متعدد', A: 65, fullMark: 100 },
-  { subject: 'صح/خطأ', A: 45, fullMark: 100 },
-  { subject: 'إجابة قصيرة', A: 35, fullMark: 100 },
-  { subject: 'مقال', A: 50, fullMark: 100 },
-  { subject: 'أكمل', A: 25, fullMark: 100 },
-  { subject: 'توصيل', A: 15, fullMark: 100 },
-];
-
-const recentQuestions = [
-  { title: 'ما هي عاصمة الإمبراطورية البيزنطية؟', type: 'اختيار من متعدد', time: 'منذ 2 ساعة', icon: AlignRight, subject: 'التاريخ' },
-  { title: 'اشرح نظرية الانفجار العظيم باختصار.', type: 'سؤال مقالي', time: 'منذ 5 ساعات', icon: FileText, subject: 'الفيزياء' },
-  { title: 'يغلي الماء عند درجة حرارة 100 درجة مئوية.', type: 'صح أم خطأ', time: 'منذ 1 يوم', icon: BrainCircuit, subject: 'العلوم' },
-  { title: 'حل المعادلة التربيعية التالية: س² - 5س + 6 = 0', type: 'إجابة قصيرة', time: 'منذ 2 يوم', icon: AlignRight, subject: 'الرياضيات' },
-  { title: 'أكمل: مكتشف البنسلين هو العالم __________.', type: 'أكمل الفراغ', time: 'منذ 2 يوم', icon: FileText, subject: 'العلوم' },
-];
-
-const topSubjects = [
-  { name: 'الرياضيات', count: 3240, percent: 85 },
-  { name: 'العلوم', count: 2800, percent: 70 },
-  { name: 'اللغة العربية', count: 2150, percent: 55 },
-  { name: 'التاريخ', count: 1600, percent: 40 },
-  { name: 'الفيزياء', count: 1200, percent: 30 },
-];
+// أيقونات افتراضية للأسئلة الحديثة حسب النوع (البيانات نفسها حقيقية، الأيقونة بس شكلية)
+const typeIcons: Record<string, any> = {
+  'اختيار من متعدد': AlignRight,
+  'سؤال مقالي': FileText,
+  'صح أم خطأ': BrainCircuit,
+  'أكمل الفراغ': FileText,
+};
 
 // --- CUSTOM DROPDOWN COMPONENT ---
 function FilterDropdown({ label, options, value, onChange }: { label: string, options: string[], value: string, onChange: (v: string) => void }) {
@@ -109,6 +79,41 @@ export function AnalyticsDashboard() {
   const [subject, setSubject] = useState('كل المواد');
   const [timeRange, setTimeRange] = useState('أخر 30 يوم');
 
+  const [bloomData, setBloomData] = useState<{ name: string; value: number }[]>([]);
+  const [difficultyData, setDifficultyData] = useState<{ name: string; value: number; color: string }[]>([]);
+  const [typeData, setTypeData] = useState<{ subject: string; A: number; fullMark: number }[]>([]);
+  const [recentQuestions, setRecentQuestions] = useState<{ title: string; type: string; time: string; subject: string }[]>([]);
+  const [topSubjects, setTopSubjects] = useState<{ name: string; count: number; percent: number }[]>([]);
+  const [totalQuestions, setTotalQuestions] = useState(0);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(true);
+  const [gradeOptions, setGradeOptions] = useState<string[]>(['كل الصفوف']);
+  const [subjectOptions, setSubjectOptions] = useState<string[]>(['كل المواد']);
+
+  useEffect(() => {
+    getGradeLevels().then((grades) => setGradeOptions(['كل الصفوف', ...grades]));
+    getSubjectGradeCombos({ isSupervisor: true }).then((combos) => {
+      setSubjectOptions(['كل المواد', ...Array.from(new Set(combos.map((c) => c.subject)))]);
+    });
+  }, []);
+
+  useEffect(() => {
+    setIsLoadingAnalytics(true);
+    const daysBack = timeRange === 'أخر 7 أيام' ? 7 : timeRange === 'أخر 30 يوم' ? 30 : timeRange === 'أخر 3 شهور' ? 90 : undefined;
+    getBankAnalytics({
+      grade: grade === 'كل الصفوف' ? undefined : grade,
+      subject: subject === 'كل المواد' ? undefined : subject,
+      daysBack,
+    }).then((result) => {
+      setBloomData(result.bloomData);
+      setDifficultyData(result.difficultyData);
+      setTypeData(result.typeData);
+      setRecentQuestions(result.recentQuestions);
+      setTopSubjects(result.topSubjects);
+      setTotalQuestions(result.totalQuestions);
+      setIsLoadingAnalytics(false);
+    });
+  }, [grade, subject, timeRange]);
+
   // Calculate generic total string 
   const totalQuestionsDifficulty = difficultyData.reduce((acc, curr) => acc + curr.value, 0).toLocaleString('en-US');
 
@@ -124,13 +129,13 @@ export function AnalyticsDashboard() {
          <FilterDropdown 
            label="الصف الدراسي" 
            value={grade} 
-           options={['كل الصفوف', 'الصف العاشر', 'الصف الحادي عشر', 'الصف الثاني عشر']} 
+           options={gradeOptions} 
            onChange={setGrade} 
          />
          <FilterDropdown 
            label="المادة" 
            value={subject} 
-           options={['كل المواد', 'الرياضيات', 'العلوم', 'اللغة العربية', 'التاريخ']} 
+           options={subjectOptions} 
            onChange={setSubject} 
          />
          <FilterDropdown 
@@ -298,7 +303,7 @@ export function AnalyticsDashboard() {
            </h3>
            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
              {recentQuestions.map((q, i) => {
-               const Icon = q.icon;
+               const Icon = typeIcons[q.type] || FileText;
                return (
                  <div key={i} className="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-colors group cursor-pointer">
                    <div className="w-10 h-10 rounded-lg bg-slate-50 group-hover:bg-violet-50 text-slate-400 group-hover:text-violet-600 flex items-center justify-center shrink-0 transition-colors">

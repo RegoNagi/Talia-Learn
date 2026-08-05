@@ -471,32 +471,7 @@ export async function gradeQuizManualQuestion(attemptId: string, extraScore: num
   return { ok: !error, error: error?.message || null };
 }
 
-// ============ بنك الأسئلة (Question Bank) ============
-
-export interface BankQuestion {
-  id: string;
-  question: any;
-  createdAt: string;
-}
-
-export async function saveQuestionToBank(teacherId: string, subject: string, question: any): Promise<{ ok: boolean; error: string | null }> {
-  const { error } = await supabase.from('question_bank').insert({ teacher_id: teacherId, subject, question });
-  return { ok: !error, error: error?.message || null };
-}
-
-export async function getQuestionBank(teacherId: string, subject: string): Promise<BankQuestion[]> {
-  const { data, error } = await supabase
-    .from('question_bank')
-    .select('id, question, created_at')
-    .eq('teacher_id', teacherId)
-    .eq('subject', subject)
-    .order('created_at', { ascending: false });
-  if (error) {
-    console.error('Error fetching question bank:', error);
-    return [];
-  }
-  return (data || []).map((row: any) => ({ id: row.id, question: row.question, createdAt: row.created_at }));
-}
+// بنك الأسئلة الحقيقي بقى في services/questionBankData.ts (الجدول القديم البسيط اتستبدل بموديل أشمل)
 
 export async function deleteQuestionFromBank(id: string): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('question_bank').delete().eq('id', id);

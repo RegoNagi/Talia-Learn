@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { CheckCircle2, XCircle, Clock, Search, ShieldCheck, HelpCircle, FileText, Flag, ChevronDown, ListChecks, Calendar, PieChart, Activity, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { getPendingQuestions, approveQuestion, rejectQuestion } from '@/services/questionBankData';
 
 function SmartDropdown({ label, options, value, onChange }: { label: string, options: string[], value: string, onChange: (v: string) => void }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -78,17 +79,31 @@ export function ApprovalHub() {
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectNote, setRejectNote] = useState('');
   
-  // Mock Data
-  const questions = [
-    { id: 'q1', type: 'اختيار من متعدد', subject: 'الرياضيات', title: 'أوجد مساحة الدائرة التي نصف قطرها 5 سم', author: 'أحمد محمود', date: 'منذ ساعتين' },
-    { id: 'q2', type: 'سؤال مقالي', subject: 'الفيزياء', title: 'اشرح تأثير الجاذبية على الأجسام في الفضاء السحيق', author: 'سارة خالد', date: 'منذ 5 ساعات' },
-    { id: 'q3', type: 'صح أم خطأ', subject: 'الكيمياء', title: 'الرقم الهيدروجيني للماء النقي هو 7', author: 'منى كريم', date: 'منذ 8 ساعات' }
-  ];
-  
-  const assessments = [
-    { id: 'a1', subject: 'اللغة العربية', title: 'اختبار القواعد النحوية - منتصف الفصل', author: 'محمد علي', date: 'منذ يوم' },
-    { id: 'a2', subject: 'التاريخ', title: 'تقييم تاريخ الحرب العالمية الثانية', author: 'خالد يوسف', date: 'منذ يومين' }
-  ];
+  // الأسئلة المعلّقة الحقيقية (بانتظار اعتماد المشرف)
+  const [questions, setQuestions] = useState<{ id: string; type: string; subject: string; title: string; author: string; date: string }[]>([]);
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(true);
+
+  const refreshPending = () => {
+    setIsLoadingQuestions(true);
+    getPendingQuestions().then((qs) => {
+      setQuestions(qs.map((q) => ({
+        id: q.id,
+        type: q.type,
+        subject: q.subject,
+        title: q.title,
+        author: q.creatorName,
+        date: new Date(q.createdAt).toLocaleDateString(),
+      })));
+      setIsLoadingQuestions(false);
+    });
+  };
+
+  useEffect(() => {
+    refreshPending();
+  }, []);
+
+  // مركز اعتماد التقييمات الكاملة (المولّدة من مخطط تلقائي) لسه مش مبني — يحتاج نظام المخطط نفسه الأول
+  const assessments: { id: string; subject: string; title: string; author: string; date: string }[] = [];
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>('q1');
   const [statusMap, setStatusMap] = useState<Record<string, 'APPROVED' | 'REJECTED'>>({});
@@ -96,13 +111,19 @@ export function ApprovalHub() {
   const activeList = subTab === 'QUESTIONS' ? questions : assessments;
   const activeItem = activeList.find(i => i.id === selectedItemId) || activeList[0];
 
-  const handleAction = (id: string, action: 'APPROVED' | 'REJECTED') => {
+  const handleAction = async (id: string, action: 'APPROVED' | 'REJECTED', note?: string) => {
+    if (action === 'APPROVED') {
+      await approveQuestion(id);
+    } else {
+      await rejectQuestion(id, note || '');
+    }
     setStatusMap(prev => ({ ...prev, [id]: action }));
+    refreshPending();
   };
 
   const submitRejection = () => {
     if (activeItem) {
-      handleAction(activeItem.id, 'REJECTED');
+      handleAction(activeItem.id, 'REJECTED', rejectNote);
     }
     setRejectNote('');
     setRejectModalOpen(false);
@@ -155,7 +176,11 @@ export function ApprovalHub() {
           </div>
           
           <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-            {activeList.map(item => {
+            {subTab === 'QUESTIONS' && isLoadingQuestions ? (
+              <p className="text-center text-sm text-slate-400 py-10">جاري التحميل...</p>
+            ) : activeList.length === 0 ? (
+              <p className="text-center text-sm text-slate-400 py-10">{subTab === 'QUESTIONS' ? 'لا توجد أسئلة بانتظار الاعتماد' : 'مركز اعتماد التقييمات لسه مش شغّال — محتاج نظام مخطط التقييمات الأول'}</p>
+            ) : activeList.map(item => {
               const isApproved = statusMap[item.id] === 'APPROVED';
               const isRejected = statusMap[item.id] === 'REJECTED';
               const isActive = selectedItemId === item.id;
@@ -232,10 +257,7 @@ export function ApprovalHub() {
                         إرسال للتعديل
                       </button>
                       <button 
-                        onClick={() => {
-                          handleAction(activeItem.id, 'APPROVED');
-                          alert('تم الاعتماد بنجاح!');
-                        }}
+                        onClick={() => handleAction(activeItem.id, 'APPROVED')}
                         disabled={statusMap[activeItem.id] === 'APPROVED'}
                         className="px-5 py-2 rounded-lg bg-violet-600 text-white font-bold text-sm hover:bg-violet-700 transition-colors shadow-none disabled:opacity-50"
                       >

@@ -8,6 +8,10 @@ import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCi
 import { motion, AnimatePresence } from 'motion/react';
 import { ApprovalHub } from '@/components/ApprovalHub';
 import { useAuth } from '@/contexts/AuthContext';
+import { getVisibleQuestions, createQuestion, deleteQuestion, linkQuestionsToQuiz, unlinkAllQuestionsFromQuiz, generateBlueprintQuestions, getBlueprintAssessments, getQuestionsForQuiz, BankQuestion } from '@/services/questionBankData';
+import { getQuizById, updateQuiz, createQuiz } from '@/services/assignmentData';
+import { getSubjectGradeCombos, getAllClassSections } from '@/services/academicData';
+import { getMyClassSections } from '@/services/attendanceData';
 
 // --- CUSTOM DROPDOWN COMPONENT FOR THE SWAP MENU ---
 const DropdownMenu = ({ options, onSelect }: { options: {label: string, icon: any}[], onSelect: (opt: string) => void }) => {
@@ -275,6 +279,12 @@ export default function QuestionBank() {
   const bloomTotal = Number(bloomRemember) + Number(bloomUnderstand) + Number(bloomApply) + Number(bloomAnalyze) + Number(bloomEvaluate) + Number(bloomCreate);
 
   const [TotalQuestions, setTotalQuestions] = useState(20);
+  const [blueprintTitle, setBlueprintTitle] = useState('');
+  const [blueprintSubject, setBlueprintSubject] = useState('');
+  const [blueprintGrade, setBlueprintGrade] = useState('');
+  const [blueprintClassId, setBlueprintClassId] = useState('');
+  const [blueprintUnit, setBlueprintUnit] = useState('كل الوحدات');
+  const [teacherClasses, setTeacherClasses] = useState<{ id: string; name: string; gradeLevel: string }[]>([]);
 
   const [objVsEssay, setObjVsEssay] = useState(80);
 
@@ -320,31 +330,23 @@ export default function QuestionBank() {
     setExpandedQuestions(prev => prev.includes(id) ? prev.filter(qId => qId !== id) : [...prev, id]);
   };
 
-  const handleSwapBlueprintQuestion = (id: string) => {
+  const handleSwapBlueprintQuestion = async (id: string) => {
     setSwappingIds(prev => [...prev, id]);
-    setTimeout(() => {
-      const mockTitles = [
-        'قارن بين طاقة الوضع وطاقة الحركة في نظام مغلق.',
-        'أي من القوانين التالية يمثل قانون نيوتن الثالث؟',
-        'استنتج سرعة جسم يسقط سقوطا حرا بعد 5 ثواني.',
-        'ما هي العوامل المؤثرة على قوة الاحتكاك السكوني؟'
-      ];
-      setSavedQuestions(prev => prev.map(q => {
-         if (q.id === id) {
-            return {
-               ...q,
-               title: mockTitles[Math.floor(Math.random() * mockTitles.length)]
-            };
-         }
-         return q;
-      }));
-      setSwappingIds(prev => prev.filter(qId => qId !== id));
-      
-      setHighlightedIds(prev => [...prev, id]);
-      setTimeout(() => {
-         setHighlightedIds(prev => prev.filter(qId => qId !== id));
-      }, 1500);
-    }, 1000);
+    const current = blueprintQuestions.find((q) => q.id === id);
+    if (current) {
+      const pool = await getVisibleQuestions({ subject: current.subject, grade: current.grade, isSupervisor: true });
+      const usedIds = new Set(blueprintQuestions.map((q) => q.id));
+      const alternative = pool.find((q) => q.status === 'approved' && q.difficulty === current.difficulty && q.bloomLevel === current.bloomLevel && !usedIds.has(q.id))
+        || pool.find((q) => q.status === 'approved' && q.difficulty === current.difficulty && !usedIds.has(q.id));
+      if (alternative) {
+        setBlueprintQuestions(prev => prev.map((q) => q.id === id ? alternative : q));
+        setHighlightedIds(prev => [...prev, alternative.id]);
+        setTimeout(() => {
+          setHighlightedIds(prev => prev.filter(qId => qId !== alternative.id));
+        }, 1500);
+      }
+    }
+    setSwappingIds(prev => prev.filter(qId => qId !== id));
   };
 
 
@@ -381,19 +383,12 @@ export default function QuestionBank() {
 
   // Management States
   const [mgtStep, setMgtStep] = useState<'HUB' | 'WORKSPACE' | 'FACTORY'>('HUB');
-  const [activeSubject, setActiveSubject] = useState<{id: string, name: string} | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([
-    { id: '1', title: 'ما هي عاصمة جمهورية مصر العربية؟', type: 'اختيار من متعدد', unit: 'الجغرافيا', lesson: 'العواصم العربية', bloomLevel: 'تذكر', difficulty: 'سهل' },
-    { id: '2', title: 'اشرح تأثير الجاذبية على تسارع الأجسام الساقطة.', type: 'سؤال مقالي', unit: 'الفيزياء', lesson: 'قوانين نيوتن', bloomLevel: 'فهم', difficulty: 'متوسط' },
-    { id: '3', title: 'تتكون جزيئات الماء من ذرتي هيدروجين وذرة أكسجين.', type: 'صح أم خطأ', unit: 'الكيمياء', lesson: 'الروابط الجزيئية', bloomLevel: 'تذكر', difficulty: 'سهل' },
-    { id: '4', title: 'إذا كان س + 5 = 12، فإن قيمة س تساوي ___', type: 'أكمل الفراغ', unit: 'الجبر', lesson: 'المعادلات الخطية', bloomLevel: 'تطبيق', difficulty: 'متوسط' },
-    { id: '5', title: 'قارن بين الخلايا النباتية والحيوانية من حيث التركيب.', type: 'سؤال مقالي', unit: 'الأحياء', lesson: 'بيولوجيا الخلية', bloomLevel: 'تحليل', difficulty: 'صعب' },
-    { id: '6', title: 'النباتات الخضراء تقوم بعملية البناء الضوئي لإنتاج الغذاء.', type: 'صح أم خطأ', unit: 'الأحياء', lesson: 'تغذية النبات', bloomLevel: 'فهم', difficulty: 'متوسط' },
-    { id: '7', title: 'أوجد مساحة مثلث طول قاعدته 10 سم وارتفاعه 5 سم.', type: 'اختيار من متعدد', unit: 'الهندسة', lesson: 'حساب المساحات', bloomLevel: 'تطبيق', difficulty: 'متوسط' },
-    { id: '8', title: 'من هو مؤسس علم الخوارزميات؟', type: 'اختيار من متعدد', unit: 'التاريخ', lesson: 'العلماء العرب', bloomLevel: 'تذكر', difficulty: 'صعب' },
-    { id: '9', title: 'لماذا يعتبر الغلاف الجوي ضرورياً لاستمرار الحياة؟ قم بتقييم الأسباب.', type: 'سؤال مقالي', unit: 'العلوم البيئية', lesson: 'طبقات الغلاف الجوي', bloomLevel: 'تقييم', difficulty: 'صعب' },
-    { id: '10', title: 'ابتكر نموذجاً جديداً يوضح دورة المياه في الطبيعة.', type: 'سؤال مقالي', unit: 'الجغرافيا', lesson: 'المناخ والطقس', bloomLevel: 'ابتكار', difficulty: 'صعب' },
-  ]);
+  const [activeSubject, setActiveSubject] = useState<{ subject: string; grade: string } | null>(null);
+  const [hubCombos, setHubCombos] = useState<{ subject: string; grade: string; count: number }[]>([]);
+  const [isLoadingHub, setIsLoadingHub] = useState(true);
+  const [hubSubjectFilter, setHubSubjectFilter] = useState('كل المواد');
+  const [questions, setQuestions] = useState<BankQuestion[]>([]);
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
 
   // Filters State
   const [mainSearchQuery, setMainSearchQuery] = useState('');
@@ -422,11 +417,6 @@ export default function QuestionBank() {
   const uniqueDifficulties = ['الكل', 'سهل', 'متوسط', 'صعب'];
 
   // Factory States
-  const [factoryMode, setFactoryMode] = useState<'MANUAL' | 'AI'>('MANUAL');
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  
-  // New Question Form
   const [newQTitle, setNewQTitle] = useState('');
   const [newQUnit, setNewQUnit] = useState('');
   const [newQBloom, setNewQBloom] = useState('تذكر');
@@ -455,51 +445,59 @@ export default function QuestionBank() {
   });
 
 
-  const hubSubjects = [
-    { id: 'math10', name: 'الرياضيات المتقدمة', grade: 'الصف العاشر', term: 'الفصل الدراسي الأول', count: 320, icon: Binary, colorText: 'text-indigo-600', colorBg: 'bg-indigo-50', colorBorder: 'hover:border-indigo-300', colorProgress: 'bg-indigo-500', shadowGlow: 'hover:shadow-indigo-500/20' },
-    { id: 'phys10', name: 'الفيزياء الكلاسيكية', grade: 'الصف العاشر', term: 'الفصل الدراسي الأول', count: 145, icon: Atom, colorText: 'text-purple-600', colorBg: 'bg-purple-50', colorBorder: 'hover:border-purple-300', colorProgress: 'bg-purple-500', shadowGlow: 'hover:shadow-purple-500/20' },
-    { id: 'chem10', name: 'الكيمياء العضوية', grade: 'الصف الحادي عشر', term: 'الفصل الدراسي الثاني', count: 210, icon: FlaskConical, colorText: 'text-emerald-600', colorBg: 'bg-emerald-50', colorBorder: 'hover:border-emerald-300', colorProgress: 'bg-emerald-500', shadowGlow: 'hover:shadow-emerald-500/20' },
-    { id: 'bio10', name: 'علم الأحياء', grade: 'الصف العاشر', term: 'الفصل الدراسي الأول', count: 180, icon: Microscope, colorText: 'text-rose-600', colorBg: 'bg-rose-50', colorBorder: 'hover:border-rose-300', colorProgress: 'bg-rose-500', shadowGlow: 'hover:shadow-rose-500/20' },
-    { id: 'arabic10', name: 'اللغة العربية', grade: 'الصف العاشر', term: 'الفصل الدراسي الأول', count: 450, icon: Languages, colorText: 'text-teal-600', colorBg: 'bg-teal-50', colorBorder: 'hover:border-teal-300', colorProgress: 'bg-teal-500', shadowGlow: 'hover:shadow-teal-500/20' },
-    { id: 'eng10', name: 'اللغة الإنجليزية', grade: 'الصف الثاني عشر', term: 'الفصل الدراسي الثاني', count: 310, icon: Text, colorText: 'text-sky-600', colorBg: 'bg-sky-50', colorBorder: 'hover:border-sky-300', colorProgress: 'bg-sky-500', shadowGlow: 'hover:shadow-sky-500/20' },
-    { id: 'history10', name: 'التاريخ المعاصر', grade: 'الصف العاشر', term: 'الفصل الدراسي الأول', count: 120, icon: Landmark, colorText: 'text-amber-600', colorBg: 'bg-amber-50', colorBorder: 'hover:border-amber-300', colorProgress: 'bg-amber-500', shadowGlow: 'hover:shadow-amber-500/20' },
-    { id: 'geo10', name: 'الجغرافيا الخرائطية', grade: 'الصف الحادي عشر', term: 'الفصل الدراسي الأول', count: 95, icon: Globe, colorText: 'text-orange-600', colorBg: 'bg-orange-50', colorBorder: 'hover:border-orange-300', colorProgress: 'bg-orange-500', shadowGlow: 'hover:shadow-orange-500/20' },
-    { id: 'cs10', name: 'الحاسب الآلي', grade: 'الصف العاشر', term: 'الفصل الدراسي الثاني', count: 275, icon: Monitor, colorText: 'text-blue-600', colorBg: 'bg-blue-50', colorBorder: 'hover:border-blue-300', colorProgress: 'bg-blue-500', shadowGlow: 'hover:shadow-blue-500/20' },
-    { id: 'national10', name: 'التربية الوطنية', grade: 'الصف العاشر', term: 'الفصل الدراسي الأول', count: 65, icon: Flag, colorText: 'text-red-600', colorBg: 'bg-red-50', colorBorder: 'hover:border-red-300', colorProgress: 'bg-red-500', shadowGlow: 'hover:shadow-red-500/20' },
-  ];
 
-  const assessmentsList = [
-    { id: 'a1', title: 'اختبار منتصف الفصل', subject: 'الفيزياء', count: 40, points: 100, target: 'الصف العاشر', status: 'PUBLISHED', date: '10 أكتوبر 2026', icon: Atom, colorText: 'text-indigo-600', colorBg: 'bg-indigo-50', colorBorder: 'border-indigo-100 hover:border-indigo-300', shadowGlow: 'hover:shadow-indigo-500/20' },
-    { id: 'a2', title: 'تقييم شامل', subject: 'اللغة العربية', count: 50, points: 120, target: 'الصف الثاني عشر', status: 'DRAFT', date: '15 نوفمبر 2026', icon: BookOpen, colorText: 'text-emerald-600', colorBg: 'bg-emerald-50', colorBorder: 'border-emerald-100 hover:border-emerald-300', shadowGlow: 'hover:shadow-emerald-500/20' },
-    { id: 'a3', title: 'اختبار قصير', subject: 'الرياضيات', count: 15, points: 30, target: 'الصف الحادي عشر', status: 'PUBLISHED', date: '21 ديسمبر 2026', icon: Calculator, colorText: 'text-rose-600', colorBg: 'bg-rose-50', colorBorder: 'border-rose-100 hover:border-rose-300', shadowGlow: 'hover:shadow-rose-500/20' },
-    { id: 'a4', title: 'مراجعة نهائية', subject: 'الكيمياء', count: 60, points: 150, target: 'الصف العاشر', status: 'DRAFT', date: '5 يناير 2027', icon: FlaskConical, colorText: 'text-sky-600', colorBg: 'bg-sky-50', colorBorder: 'border-sky-100 hover:border-sky-300', shadowGlow: 'hover:shadow-sky-500/20' },
-  ];
+  const [assessmentsList, setAssessmentsList] = useState<{ id: string; title: string; subject: string; questionCount: number; totalPoints: number; className: string; status: string; createdAt: string }[]>([]);
+  const [isLoadingAssessments, setIsLoadingAssessments] = useState(true);
 
-
-
-
-  const handleGenerateAI = () => {
-    if (!aiPrompt) return;
-    setIsGenerating(true);
-    setTimeout(() => {
-      setNewQTitle('استناداً لنظرية التطور، ما هي المعايير الأساسية لبقاء الكائنات؟ (تم التوليد بالذكاء الاصطناعي بناءً على الوصف المدخل)');
-      setIsGenerating(false);
-    }, 1500);
+  const refreshAssessments = () => {
+    setIsLoadingAssessments(true);
+    getBlueprintAssessments({ teacherId: authUser?.teacherId, isSupervisor }).then((list) => {
+      setAssessmentsList(list);
+      setIsLoadingAssessments(false);
+    });
   };
 
-  const handleSaveQuestion = (stayInEditor: boolean = false) => {
-    if (!newQTitle) return;
-    const newQ: Question = {
-      id: Date.now().toString(),
-      title: newQTitle,
+  useEffect(() => {
+    if (assessmentView === 'LIBRARY' && canContribute) {
+      refreshAssessments();
+    }
+  }, [assessmentView, canContribute]);
+
+
+
+
+  const [isSavingQuestion, setIsSavingQuestion] = useState(false);
+  const [saveQuestionError, setSaveQuestionError] = useState('');
+
+  const scopeFromLabel = (label: string): 'central' | 'shared' | 'private' => {
+    if (label === 'بنك مركزي (الوزارة)') return 'central';
+    if (label === 'بنك مشترك (المدرسة)') return 'shared';
+    return 'private';
+  };
+
+  const handleSaveQuestion = async (stayInEditor: boolean = false) => {
+    if (!newQTitle || !activeSubject) return;
+    setIsSavingQuestion(true);
+    setSaveQuestionError('');
+    const { id, error } = await createQuestion({
+      createdBy: authUser?.teacherId || null,
+      createdByRole: isSupervisor ? 'supervisor' : 'teacher',
+      scope: scopeFromLabel(targetBank),
+      subject: activeSubject.subject,
+      grade: activeSubject.grade,
       unit: newQUnit || 'بدون وحدة',
       bloomLevel: newQBloom,
       difficulty: newQDiff,
       type: newQType,
-      options: newQOptions
-    };
-    setQuestions([newQ, ...questions]);
-    
+      question: { title: newQTitle, options: newQOptions, correctOption: newQCorrectOption },
+    });
+    setIsSavingQuestion(false);
+    if (!id) {
+      setSaveQuestionError(error || 'حصل خطأ أثناء الحفظ');
+      return;
+    }
+    refreshQuestions();
+
     // Clear only text entry inputs to allow continuous fluid flow
     setNewQTitle('');
     setNewQOptions([
@@ -509,7 +507,6 @@ export default function QuestionBank() {
       { id: '4', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null }
     ]);
     setNewQCorrectOption(0);
-    setAiPrompt('');
     // CRITICAL: We explicitly do NOT clear newQType, newQUnit, newQBloom, or newQDiff.
     
     if (!stayInEditor) {
@@ -520,6 +517,195 @@ export default function QuestionBank() {
   // بوابة الصلاحية الحقيقية — إما مشرف بنك الأسئلة (وصول كامل) أو معلم عنده صلاحية "إضافة أسئلة" بس
   const isSupervisor = authUser?.role === 'qb_supervisor';
   const canContribute = isSupervisor || (authUser?.role === 'teacher' && !!authUser?.canUseQuestionBank);
+
+  useEffect(() => {
+    if (!canContribute) return;
+    setIsLoadingHub(true);
+    getSubjectGradeCombos({ isSupervisor, teacherGrades: authUser?.grades, teacherSubjects: authUser?.subjects }).then(async (combos) => {
+      const withCounts = await Promise.all(combos.map(async (c) => {
+        const qs = await getVisibleQuestions({ teacherId: authUser?.teacherId, isSupervisor, subject: c.subject, grade: c.grade });
+        return { ...c, count: qs.length };
+      }));
+      setHubCombos(withCounts);
+      setIsLoadingHub(false);
+    });
+  }, [canContribute, isSupervisor, authUser?.teacherId]);
+
+  const refreshQuestions = () => {
+    if (!activeSubject) return;
+    setIsLoadingQuestions(true);
+    getVisibleQuestions({ teacherId: authUser?.teacherId, isSupervisor, subject: activeSubject.subject, grade: activeSubject.grade }).then((qs) => {
+      setQuestions(qs);
+      setIsLoadingQuestions(false);
+    });
+  };
+
+  const [blueprintQuestions, setBlueprintQuestions] = useState<BankQuestion[]>([]);
+  const [isGeneratingBlueprint, setIsGeneratingBlueprint] = useState(false);
+
+  const handleGenerateBlueprint = async () => {
+    if (!blueprintSubject || !blueprintGrade) return;
+    setIsGeneratingBlueprint(true);
+    const results = await generateBlueprintQuestions({
+      subject: blueprintSubject,
+      grade: blueprintGrade,
+      totalQuestions: TotalQuestions,
+      difficultyPercents: { 'سهل': diffEasy, 'متوسط': diffMed, 'صعب': diffHard },
+      bloomPercents: {
+        'تذكر': bloomRemember, 'فهم': bloomUnderstand, 'تطبيق': bloomApply,
+        'تحليل': bloomAnalyze, 'تقييم': bloomEvaluate, 'ابتكار': bloomCreate,
+      },
+      types: selectedTypes,
+    });
+    setBlueprintQuestions(results);
+    setIsGeneratingBlueprint(false);
+    setAssessmentView('BLUEPRINT_REVIEW');
+  };
+
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [editingAssessmentId, setEditingAssessmentId] = useState<string | null>(null);
+  const [isLoadingAssessmentEdit, setIsLoadingAssessmentEdit] = useState(false);
+
+  const handleOpenAssessmentForEdit = async (assessmentId: string) => {
+    setIsLoadingAssessmentEdit(true);
+    const [quiz, linkedQuestions] = await Promise.all([
+      getQuizById(assessmentId),
+      getQuestionsForQuiz(assessmentId),
+    ]);
+    setIsLoadingAssessmentEdit(false);
+    if (!quiz) return;
+    const source = assessmentsList.find((a) => a.id === assessmentId);
+    setEditingAssessmentId(assessmentId);
+    setBlueprintTitle(quiz.title);
+    setBlueprintSubject(source?.subject || '');
+    setBlueprintClassId(source?.classId || '');
+    setBlueprintQuestions(linkedQuestions);
+    const s = quiz.settings || {};
+    if (s.availabilityMode) setAvailabilityMode(s.availabilityMode);
+    if (typeof s.shuffleQuestions === 'boolean') setShuffleQuestions(s.shuffleQuestions);
+    if (typeof s.shuffleAnswers === 'boolean') setShuffleAnswers(s.shuffleAnswers);
+    if (typeof s.allowMultipleAttempts === 'boolean') setAllowMultipleAttempts(s.allowMultipleAttempts);
+    if (typeof s.showOneQuestion === 'boolean') setShowOneQuestion(s.showOneQuestion);
+    if (typeof s.preventBacktracking === 'boolean') setPreventBacktracking(s.preventBacktracking);
+    if (typeof s.allowLateSubmission === 'boolean') setAllowLateSubmission(s.allowLateSubmission);
+    if (typeof s.addToGradebook === 'boolean') setAddToGradebook(s.addToGradebook);
+    if (s.gradebookCalculationMode) setGradebookCalculationMode(s.gradebookCalculationMode);
+    if (typeof s.generateUniquePasswords === 'boolean') setGenerateUniquePasswords(s.generateUniquePasswords);
+    if (typeof s.restrictBrowser === 'boolean') setRestrictBrowser(s.restrictBrowser);
+    if (typeof s.timeLimitMinutes === 'number') setTimeLimitMinutes(s.timeLimitMinutes);
+    if (typeof s.retryWaitHours === 'number') setRetryWaitHours(s.retryWaitHours);
+    if (typeof s.gradebookMaxValue === 'number') setGradebookMaxValue(s.gradebookMaxValue);
+    setAssessmentView('SETTINGS');
+  };
+
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState(45);
+  const [retryWaitHours, setRetryWaitHours] = useState(24);
+  const [gradebookMaxValue, setGradebookMaxValue] = useState(20);
+  const [publishError, setPublishError] = useState('');
+
+  const handlePublishBlueprint = async (status: 'Active' | 'Draft') => {
+    if (!blueprintClassId) {
+      setPublishError('لازم تختار الفصل المستهدف الأول (من فورم المعايير)');
+      return;
+    }
+    if (blueprintQuestions.length === 0) {
+      setPublishError('مفيش أسئلة مختارة للتقييم ده');
+      return;
+    }
+    if (!authUser?.teacherId) {
+      setPublishError('نشر التقييمات محتاج حساب معلم مرتبط بفصل — حساب المشرف مينفعش ينشر تقييم مباشرة، لازم معلم الفصل هو اللي ينشره');
+      return;
+    }
+    setIsPublishing(true);
+    setPublishError('');
+    const quizQuestions = blueprintQuestions.map((q) => ({ ...q.question, id: q.id, sectionId: 'default' }));
+    const settingsBlob = {
+      availabilityMode,
+      shuffleQuestions,
+      shuffleAnswers,
+      allowMultipleAttempts,
+      showOneQuestion,
+      preventBacktracking,
+      allowLateSubmission,
+      addToGradebook,
+      gradebookCalculationMode,
+      generateUniquePasswords,
+      restrictBrowser,
+      timeLimitMinutes,
+      retryWaitHours,
+      gradebookMaxValue,
+    };
+    const assignedClasses = targetingType === 'CLASSES' && selectedItems.length > 0 ? selectedItems : [blueprintClassId];
+
+    if (editingAssessmentId) {
+      const { ok, error } = await updateQuiz(editingAssessmentId, {
+        title: blueprintTitle || 'تقييم من بنك الأسئلة',
+        status,
+        questions: quizQuestions,
+        sections: [{ id: 'default', title: 'القسم الأول' }],
+        settings: settingsBlob,
+        assignedClasses,
+      });
+      setIsPublishing(false);
+      if (!ok) {
+        setPublishError(error || 'حصل خطأ أثناء تعديل التقييم');
+        return;
+      }
+      // نمسح الروابط القديمة ونعمل روابط جديدة تطابق الأسئلة الحالية بالظبط
+      await unlinkAllQuestionsFromQuiz(editingAssessmentId);
+      await linkQuestionsToQuiz(editingAssessmentId, blueprintQuestions.map((q) => q.id));
+      setEditingAssessmentId(null);
+      setAssessmentView('LIBRARY');
+      return;
+    }
+
+    const { id: quizId, error } = await createQuiz(
+      { teacherId: authUser?.teacherId || '', classId: blueprintClassId, subject: blueprintSubject },
+      {
+        title: blueprintTitle || 'تقييم من بنك الأسئلة',
+        dueDate: null,
+        releaseAt: null,
+        status,
+        questions: quizQuestions,
+        sections: [{ id: 'default', title: 'القسم الأول' }],
+        settings: settingsBlob,
+        assignedClasses,
+      }
+    );
+    setIsPublishing(false);
+    if (!quizId) {
+      setPublishError(error || 'حصل خطأ أثناء إنشاء التقييم');
+      return;
+    }
+    await linkQuestionsToQuiz(quizId, blueprintQuestions.map((q) => q.id));
+    setAssessmentView('LIBRARY');
+  };
+
+  const [manualSwapAlternatives, setManualSwapAlternatives] = useState<BankQuestion[]>([]);
+  const [manualSwapSearch, setManualSwapSearch] = useState('');
+
+  useEffect(() => {
+    if (!manualSwapModalQId) { setManualSwapAlternatives([]); return; }
+    const current = blueprintQuestions.find((q) => q.id === manualSwapModalQId);
+    if (!current) return;
+    getVisibleQuestions({ subject: current.subject, grade: current.grade, isSupervisor: true }).then((pool) => {
+      const usedIds = new Set(blueprintQuestions.map((q) => q.id));
+      setManualSwapAlternatives(pool.filter((q) => q.status === 'approved' && !usedIds.has(q.id)));
+    });
+  }, [manualSwapModalQId]);
+
+  useEffect(() => {
+    refreshQuestions();
+  }, [activeSubject?.subject, activeSubject?.grade]);
+
+  useEffect(() => {
+    if (!canContribute) return;
+    if (isSupervisor) {
+      getAllClassSections().then(setTeacherClasses);
+    } else if (authUser?.teacherId) {
+      getMyClassSections(authUser.teacherId).then(setTeacherClasses);
+    }
+  }, [canContribute, isSupervisor, authUser?.teacherId]);
 
   if (isAuthLoading) {
     return (
@@ -690,48 +876,47 @@ export default function QuestionBank() {
                        onChange={() => {}} 
                      />
                      <HubFilterDropdown 
-                       label="الفصل الدراسي" 
-                       value="كل الفصول" 
-                       options={['كل الفصول', 'الفصل الدراسي الأول', 'الفصل الدراسي الثاني']} 
-                       onChange={() => {}} 
-                     />
-                     <HubFilterDropdown 
                        label="المادة" 
-                       value="كل المواد" 
-                       options={['كل المواد', 'الرياضيات المتقدمة', 'الفيزياء الكلاسيكية', 'الكيمياء العضوية', 'علم الأحياء', 'اللغة العربية', 'اللغة الإنجليزية', 'التاريخ المعاصر']} 
-                       onChange={() => {}} 
+                       value={hubSubjectFilter} 
+                       options={['كل المواد', ...Array.from(new Set(hubCombos.map(c => c.subject)))]} 
+                       onChange={setHubSubjectFilter} 
                      />
                   </div>
 
+                  {isLoadingHub ? (
+                    <p className="text-center text-sm text-slate-400 py-16">جاري التحميل...</p>
+                  ) : hubCombos.length === 0 ? (
+                    <p className="text-center text-sm text-slate-400 py-16">لا توجد مواد متاحة حاليًا في المنهج</p>
+                  ) : (
                   <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                    {hubSubjects.map(sub => {
-                      const Icon = sub.icon;
+                    {hubCombos.filter(c => hubSubjectFilter === 'كل المواد' || c.subject === hubSubjectFilter).map(sub => {
                       return (
                         <div 
-                          key={sub.id} 
-                          onClick={() => { setActiveSubject(sub); setMgtStep('WORKSPACE'); }}
-                          className={`bg-white border border-slate-100 p-4 rounded-2xl transition-all duration-300 cursor-pointer group hover:-translate-y-1 hover:shadow-xl ${sub.shadowGlow} ${sub.colorBorder}`}
+                          key={`${sub.subject}-${sub.grade}`} 
+                          onClick={() => { setActiveSubject({ subject: sub.subject, grade: sub.grade }); setMgtStep('WORKSPACE'); }}
+                          className="bg-white border border-slate-100 p-4 rounded-2xl transition-all duration-300 cursor-pointer group hover:-translate-y-1 hover:shadow-xl hover:border-violet-300"
                         >
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex-1"></div>
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${sub.colorBg} ${sub.colorText}`}>
-                              <Icon size={18} />
+                            <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-violet-50 text-violet-600">
+                              <Database size={18} />
                             </div>
                           </div>
-                          <h3 className="font-bold text-slate-800 text-base mb-0.5 group-hover:text-slate-900">{sub.name}</h3>
-                          <p className="text-[11px] font-bold text-slate-400 mb-4">{sub.grade} • {sub.term}</p>
+                          <h3 className="font-bold text-slate-800 text-base mb-0.5 group-hover:text-slate-900">{sub.subject}</h3>
+                          <p className="text-[11px] font-bold text-slate-400 mb-4">{sub.grade}</p>
                           <div className="border-t border-slate-50 pt-3 mt-auto">
                             <div className="flex items-center justify-between mb-2">
                                <span className="text-xs font-semibold text-slate-700">{sub.count.toLocaleString('ar-SA')} سؤال</span>
                             </div>
                             <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
-                              <div className={`h-full rounded-full ${sub.colorProgress}`} style={{ width: `${Math.min(100, sub.count / 5)}%` }}></div>
+                              <div className="h-full rounded-full bg-violet-500" style={{ width: `${Math.min(100, sub.count * 2)}%` }}></div>
                             </div>
                           </div>
                         </div>
                       )
                     })}
                   </div>
+                  )}
                 </motion.div>
               )}
 
@@ -743,7 +928,7 @@ export default function QuestionBank() {
                       <button onClick={() => { setMgtStep('HUB'); setActiveSubject(null); }} className="w-10 h-10 bg-slate-50 text-slate-500 rounded-xl flex items-center justify-center hover:bg-slate-100 hover:text-slate-800 transition-colors shadow-none">
                         <ArrowRight size={20} />
                       </button>
-                      <h2 className="text-2xl font-bold text-slate-800">{activeSubject.name}</h2>
+                      <h2 className="text-2xl font-bold text-slate-800">{activeSubject.subject} <span className="text-slate-400 font-medium text-lg">• {activeSubject.grade}</span></h2>
                     </div>
                     <div className="flex gap-4 flex-wrap">
                       <button className="px-6 py-2.5 bg-white border border-purple-200 text-purple-700 hover:bg-purple-50 font-bold rounded-xl flex items-center gap-2 transition-colors shadow-none text-sm">
@@ -847,7 +1032,7 @@ export default function QuestionBank() {
                                     <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-400 hover:text-violet-600 hover:border-violet-300 hover:bg-violet-50 transition-colors flex items-center justify-center" aria-label="تعديل">
                                       <Edit2 size={14} />
                                     </button>
-                                    <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors flex items-center justify-center" aria-label="حذف">
+                                    <button onClick={async () => { if (confirm('تأكيد حذف السؤال؟')) { await deleteQuestion(q.id); refreshQuestions(); } }} className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors flex items-center justify-center" aria-label="حذف">
                                       <Trash2 size={14} />
                                     </button>
                                   </div>
@@ -951,7 +1136,7 @@ export default function QuestionBank() {
                              >
                                <div className="absolute left-3 top-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                  <button className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-violet-600 hover:bg-violet-50 flex items-center justify-center transition-colors shadow-none"><Edit2 size={14} /></button>
-                                 <button className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors shadow-none"><Trash2 size={14} /></button>
+                                 <button onClick={async (e) => { e.stopPropagation(); if (confirm('تأكيد حذف السؤال؟')) { await deleteQuestion(q.id); refreshQuestions(); } }} className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors shadow-none"><Trash2 size={14} /></button>
                                </div>
                                <div className="flex items-center gap-2 mb-3">
                                  <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
@@ -988,7 +1173,7 @@ export default function QuestionBank() {
                     {/* Header & Back */}
                     <div className="flex items-center justify-between">
                        <h2 className="text-sm font-bold text-slate-500 flex items-center gap-2">
-                          بنوك الأسئلة <span className="text-slate-300">/</span> {activeSubject.name} <span className="text-slate-300">/</span> <span className="text-slate-800">إنشاء سؤال جديد</span>
+                          بنوك الأسئلة <span className="text-slate-300">/</span> {activeSubject.subject} <span className="text-slate-300">/</span> <span className="text-slate-800">إنشاء سؤال جديد</span>
                        </h2>
                        <div className="flex items-center gap-3">
                          <button 
@@ -1111,7 +1296,12 @@ export default function QuestionBank() {
                                 </div>
                                 <div className="flex items-center gap-2 text-slate-400">
                                   <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center hover:text-violet-600 transition-colors" aria-label="نسخ"><Copy size={16} /></button>
-                                  <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center hover:text-red-600 hover:border-red-200 transition-colors" aria-label="حذف"><Trash2 size={16} /></button>
+                                  <button onClick={() => { setNewQTitle(''); setNewQOptions([
+                                    { id: '1', text: '', isCorrect: true, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
+                                    { id: '2', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
+                                    { id: '3', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
+                                    { id: '4', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null }
+                                  ]); setNewQCorrectOption(0); }} className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center hover:text-red-600 hover:border-red-200 transition-colors" aria-label="مسح المسودة"><Trash2 size={16} /></button>
                                 </div>
                              </div>
 
@@ -1374,23 +1564,35 @@ export default function QuestionBank() {
                       <h2 className="text-xl font-bold text-slate-800">مكتبة التقييمات</h2>
                       <p className="text-sm font-medium text-slate-500 mt-1">إدارة الاختبارات والتقييمات المحفوظة وتعيينها للطلاب</p>
                     </div>
-                    <button onClick={() => setAssessmentView('BLUEPRINT_FORM')} className="px-6 py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl flex items-center gap-2 transition-colors shadow-none">
+                    <button onClick={() => {
+                      setEditingAssessmentId(null);
+                      setBlueprintTitle('');
+                      setBlueprintSubject('');
+                      setBlueprintGrade('');
+                      setBlueprintClassId('');
+                      setBlueprintQuestions([]);
+                      setAssessmentView('BLUEPRINT_FORM');
+                    }} className="px-6 py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl flex items-center gap-2 transition-colors shadow-none">
                       <Plus size={18} />
                       إنشاء تقييم بالمعايير
                     </button>
                   </div>
 
                   {/* Assessment Grid */}
+                  {isLoadingAssessments ? (
+                    <p className="text-center text-sm text-slate-400 py-16">جاري التحميل...</p>
+                  ) : assessmentsList.length === 0 ? (
+                    <p className="text-center text-sm text-slate-400 py-16">لسه مفيش تقييمات اتعملت بالمخطط — دوس "إنشاء تقييم بالمعايير" فوق</p>
+                  ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {assessmentsList.map(assessment => {
-                      const Icon = assessment.icon;
                       return (
-                      <div key={assessment.id} className={`bg-white border ${assessment.colorBorder} p-6 rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${assessment.shadowGlow} group flex flex-col`}>
+                      <div key={assessment.id} className="bg-white border border-slate-100 p-6 rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-violet-300 group flex flex-col">
                         <div className="flex justify-between items-start mb-4">
-                          <div className={`w-12 h-12 ${assessment.colorBg} ${assessment.colorText} rounded-2xl flex items-center justify-center`}>
-                            <Icon size={24} />
+                          <div className="w-12 h-12 bg-violet-50 text-violet-600 rounded-2xl flex items-center justify-center">
+                            <ListChecks size={24} />
                           </div>
-                          {assessment.status === 'PUBLISHED' ? (
+                          {assessment.status === 'Active' ? (
                             <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">منشور</span>
                           ) : (
                             <span className="px-3 py-1 bg-slate-100 text-slate-600 text-xs font-bold rounded-full">مسودة</span>
@@ -1399,31 +1601,32 @@ export default function QuestionBank() {
                         
                         <div className="mb-4 flex-1">
                           <div className="flex flex-wrap gap-2 mb-2">
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center border ${assessment.colorBg} border-white ${assessment.colorText}`}>{assessment.subject}</span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded flex items-center border bg-violet-50 border-white text-violet-600">{assessment.subject}</span>
                           </div>
                           <h3 className="font-bold text-slate-800 text-lg leading-tight mb-2">{assessment.title}</h3>
-                          <p className="text-xs font-bold text-slate-400">{assessment.target} • {assessment.date}</p>
+                          <p className="text-xs font-bold text-slate-400">{assessment.className} • {new Date(assessment.createdAt).toLocaleDateString()}</p>
                         </div>
                         
                         <div className="flex items-center gap-4 mb-5 pt-4 border-t border-slate-100 mt-auto">
                            <div className="flex flex-col">
                              <span className="text-[10px] font-bold text-slate-400 mb-0.5">الأسئلة</span>
-                             <span className="text-sm font-black text-slate-700">{assessment.count} سؤال</span>
+                             <span className="text-sm font-black text-slate-700">{assessment.questionCount} سؤال</span>
                            </div>
                            <div className="w-px h-8 bg-slate-200"></div>
                            <div className="flex flex-col">
                              <span className="text-[10px] font-bold text-slate-400 mb-0.5">إجمالي الدرجات</span>
-                             <span className="text-sm font-black text-slate-700">{assessment.points} نقطة</span>
+                             <span className="text-sm font-black text-slate-700">{assessment.totalPoints} نقطة</span>
                            </div>
                         </div>
 
-                        <button onClick={() => setAssessmentView('SETTINGS')} className="w-full py-3 text-sm font-bold text-slate-700 bg-slate-50 hover:bg-violet-600 hover:text-white border border-slate-200 hover:border-violet-600 rounded-xl transition-colors flex items-center justify-center gap-2">
+                        <button onClick={() => handleOpenAssessmentForEdit(assessment.id)} disabled={isLoadingAssessmentEdit} className="w-full py-3 text-sm font-bold text-slate-700 bg-slate-50 hover:bg-violet-600 hover:text-white border border-slate-200 hover:border-violet-600 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
                           <Settings2 size={18} />
                           ضبط الإعدادات والنشر
                         </button>
                       </div>
                     )})}
                   </div>
+                  )}
                 </motion.div>
               )}
 
@@ -1441,29 +1644,40 @@ export default function QuestionBank() {
 
                   {/* 1. SECTION 1: CORE ASSESSMENT DATA */}
                   <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-none">
-                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                        <div className="flex flex-col">
                          <label className="text-sm text-slate-500 mb-1 font-bold">اسم التقييم</label>
-                         <input type="text" placeholder="مثال: التقييم الختامي..." className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors" />
-                       </div>
-                       <div className="flex flex-col">
-                         <label className="text-sm text-slate-500 mb-1 font-bold">المادة</label>
-                         <select className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors">
-                           <option>الفيزياء الكلاسيكية</option>
-                           <option>الرياضيات المتقدمة</option>
-                         </select>
-                       </div>
-                       <div className="flex flex-col">
-                         <label className="text-sm text-slate-500 mb-1 font-bold">الوحدات المستهدفة</label>
-                         <select className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors cursor-pointer">
-                           <option>كل الوحدات</option>
-                           <option>الوحدة الأولى: الميكانيكا</option>
-                           <option>الوحدة الثانية: الديناميكا الحرارية</option>
-                         </select>
+                         <input type="text" value={blueprintTitle} onChange={(e) => setBlueprintTitle(e.target.value)} placeholder="مثال: التقييم الختامي..." className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors" />
                        </div>
                        <div className="flex flex-col">
                          <label className="text-sm text-slate-500 mb-1 font-bold">إجمالي الأسئلة</label>
                          <input type="number" value={TotalQuestions} onChange={(e) => setTotalQuestions(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors" />
+                       </div>
+                     </div>
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                       <div className="flex flex-col">
+                         <label className="text-sm text-slate-500 mb-1 font-bold">المادة والصف</label>
+                         <select value={blueprintSubject && blueprintGrade ? `${blueprintSubject}|${blueprintGrade}` : ''} onChange={(e) => { const [s, g] = e.target.value.split('|'); setBlueprintSubject(s); setBlueprintGrade(g); setBlueprintClassId(''); }} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors">
+                           <option value="">اختر المادة والصف...</option>
+                           {hubCombos.map((c) => (
+                             <option key={`${c.subject}-${c.grade}`} value={`${c.subject}|${c.grade}`}>{c.subject} • {c.grade}</option>
+                           ))}
+                         </select>
+                       </div>
+                       <div className="flex flex-col">
+                         <label className="text-sm text-slate-500 mb-1 font-bold">الفصل المستهدف</label>
+                         <select value={blueprintClassId} onChange={(e) => setBlueprintClassId(e.target.value)} disabled={!blueprintGrade} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors disabled:opacity-50">
+                           <option value="">اختر الفصل...</option>
+                           {teacherClasses.filter((c) => !blueprintGrade || c.gradeLevel === blueprintGrade).map((c) => (
+                             <option key={c.id} value={c.id}>{c.name}</option>
+                           ))}
+                         </select>
+                       </div>
+                       <div className="flex flex-col">
+                         <label className="text-sm text-slate-500 mb-1 font-bold">الوحدات المستهدفة</label>
+                         <select value={blueprintUnit} onChange={(e) => setBlueprintUnit(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors cursor-pointer">
+                           <option>كل الوحدات</option>
+                         </select>
                        </div>
                      </div>
                   </div>
@@ -1676,9 +1890,9 @@ export default function QuestionBank() {
                         <MousePointerClick size={18} />
                         اختيار الأسئلة يدوياً
                      </button>
-                     <button onClick={() => setAssessmentView('BLUEPRINT_REVIEW')} className="w-full md:w-auto px-8 py-3.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm text-sm">
-                        <Bot size={18} />
-                        توليد آلي بالذكاء الاصطناعي
+                     <button onClick={handleGenerateBlueprint} disabled={!blueprintSubject || !blueprintGrade || isGeneratingBlueprint} className="w-full md:w-auto px-8 py-3.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm text-sm">
+                        <ListChecks size={18} />
+                        {isGeneratingBlueprint ? 'جاري الاختيار...' : 'توليد حسب المعايير'}
                      </button>
                   </div>
 
@@ -1845,25 +2059,25 @@ export default function QuestionBank() {
                     <div className="w-16 h-16 relative shrink-0">
                        <svg className="w-full h-full -rotate-90">
                          <circle cx="32" cy="32" r="28" fill="none" className="stroke-slate-100" strokeWidth="4" />
-                         <circle cx="32" cy="32" r="28" fill="none" className="stroke-violet-600 outline-none" strokeWidth="4" strokeLinecap="round" strokeDasharray="175.93" strokeDashoffset={175.93 - (175.93 * 0.94)} />
+                         <circle cx="32" cy="32" r="28" fill="none" className="stroke-violet-600 outline-none" strokeWidth="4" strokeLinecap="round" strokeDasharray="175.93" strokeDashoffset={175.93 - (175.93 * Math.min(1, TotalQuestions > 0 ? blueprintQuestions.length / TotalQuestions : 0))} />
                        </svg>
                        <div className="absolute inset-0 flex items-center justify-center">
-                         <span className="font-black text-violet-700 text-lg">94%</span>
+                         <span className="font-black text-violet-700 text-lg">{TotalQuestions > 0 ? Math.round((blueprintQuestions.length / TotalQuestions) * 100) : 0}%</span>
                        </div>
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-slate-800">تطابق عالي مع المعايير المطلوبة</h3>
-                      <p className="text-sm font-medium text-slate-500 mt-1">تم تحقيق 94% من معايير التوزيع للبلوم والصعوبة. يمكنك مراجعة الأسئلة واستبدالها إذا لزم الأمر.</p>
+                      <h3 className="text-lg font-bold text-slate-800">{blueprintQuestions.length >= TotalQuestions ? 'تم الوصول للعدد المطلوب بالكامل' : 'البنك مفيهوش أسئلة كفاية بالمعايير دي'}</h3>
+                      <p className="text-sm font-medium text-slate-500 mt-1">تم اختيار {blueprintQuestions.length} من {TotalQuestions} سؤال مطلوب من البنك الحقيقي. تقدر تراجع الأسئلة وتستبدلها لو محتاج.</p>
                     </div>
                   </div>
 
                   {/* Selected Questions List */}
                   <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-none">
                      <div className="flex items-center justify-between mb-6">
-                       <h3 className="text-lg font-bold text-slate-800">الأسئلة المختارة (20 سؤال)</h3>
+                       <h3 className="text-lg font-bold text-slate-800">الأسئلة المختارة ({blueprintQuestions.length} سؤال)</h3>
                      </div>
                      <div className="space-y-3">
-                       {savedQuestions.map((q, idx) => {
+                       {blueprintQuestions.map((q, idx) => {
                          const isExpanded = expandedQuestions.includes(q.id);
                          const isSwapping = swappingIds.includes(q.id);
                          const isHighlighted = highlightedIds.includes(q.id);
@@ -1883,18 +2097,18 @@ export default function QuestionBank() {
                              
                              <div className="flex gap-2">
                                <span className="text-[10px] font-bold bg-white border border-slate-200 text-slate-600 px-2 py-0.5 rounded">{q.type}</span>
-                               <span className="text-[10px] font-bold bg-violet-50 text-violet-700 px-2 py-0.5 rounded">{q.bloom}</span>
-                               <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{q.diff}</span>
+                               <span className="text-[10px] font-bold bg-violet-50 text-violet-700 px-2 py-0.5 rounded">{q.bloomLevel}</span>
+                               <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{q.difficulty}</span>
                              </div>
 
                              {isExpanded && q.options && (
                                <div className="mt-4 pt-4 border-t border-slate-200/60 grid grid-cols-1 md:grid-cols-2 gap-3">
-                                  {q.options.map((opt, oIdx) => (
-                                     <div key={oIdx} className={`flex items-center gap-3 p-3 rounded-lg border ${oIdx === q.correctIdx ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white border-slate-200 text-slate-700'}`}>
-                                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${oIdx === q.correctIdx ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300'}`}>
-                                           {oIdx === q.correctIdx && <div className="w-1.5 h-1.5 bg-white rounded-full"></div>}
+                                  {q.options.map((opt: any, oIdx: number) => (
+                                     <div key={opt.id || oIdx} className={`flex items-center gap-3 p-3 rounded-lg border ${opt.isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white border-slate-200 text-slate-700'}`}>
+                                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${opt.isCorrect ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300'}`}>
+                                           {opt.isCorrect && <div className="w-1.5 h-1.5 bg-white rounded-full"></div>}
                                         </div>
-                                        <span className="text-sm font-bold">{opt}</span>
+                                        <span className="text-sm font-bold">{opt.text}</span>
                                      </div>
                                   ))}
                                </div>
@@ -1912,12 +2126,12 @@ export default function QuestionBank() {
                              {activeSwapMenuId === q.id && (
                                 <DropdownMenu 
                                   options={[
-                                    {label: 'استبدال ذكي آلي', icon: Bot},
+                                    {label: 'استبدال تلقائي', icon: Layers},
                                     {label: 'استبدال يدوي', icon: MousePointerClick}
                                   ]} 
                                   onSelect={(opt) => {
                                      setActiveSwapMenuId(null);
-                                     if (opt === 'استبدال ذكي آلي') {
+                                     if (opt === 'استبدال تلقائي') {
                                         handleSwapBlueprintQuestion(q.id);
                                      } else {
                                         setManualSwapModalQId(q.id);
@@ -1958,7 +2172,7 @@ export default function QuestionBank() {
                                  </button>
                                </div>
                                <div className="px-6 pb-4 space-y-3">
-                                 <input type="text" placeholder="ابحث في الأسئلة البديلة..." className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors" />
+                                 <input type="text" value={manualSwapSearch} onChange={(e) => setManualSwapSearch(e.target.value)} placeholder="ابحث في الأسئلة البديلة..." className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors" />
                                  <div className="flex gap-2 items-center overflow-x-auto custom-scrollbar pb-1">
                                    <select className="bg-slate-50 border border-slate-200 text-slate-600 text-[11px] font-bold rounded-md px-2 py-1.5 outline-none focus:border-violet-500 cursor-pointer">
                                      <option>الوحدة (الكل)</option>
@@ -1974,33 +2188,30 @@ export default function QuestionBank() {
                              </div>
                              
                              <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4">
-                               {[
-                                 {id: 'alt1', title: 'علل: لا يعتبر الزجاج مادة بلورية.', options: ['لأنه سائل فائق التبريد', 'لأنه يتمدد بالحرارة', 'لأنه عازل للكهرباء', 'لأنه شفاف'], correctIdx: 0},
-                                 {id: 'alt2', title: 'فسر التوتر السطحي للسوائل بناءً على القوى الجزيئية.', options: ['قوى التلاصق', 'قوى التماسك', 'قوى الاحتكاك', 'قوى الجاذبية'], correctIdx: 1}
-                               ].map((alt) => (
+                               {manualSwapAlternatives.filter((alt) => alt.title.toLowerCase().includes(manualSwapSearch.toLowerCase())).length === 0 ? (
+                                 <p className="text-center text-sm text-slate-400 py-10">مفيش أسئلة بديلة متاحة حاليًا</p>
+                               ) : manualSwapAlternatives.filter((alt) => alt.title.toLowerCase().includes(manualSwapSearch.toLowerCase())).map((alt) => (
                                  <div key={alt.id} className="p-4 border border-slate-200 rounded-xl hover:border-violet-300 transition-colors bg-white">
                                     <p className="text-sm font-bold text-slate-800 mb-3">{alt.title}</p>
                                     <div className="grid grid-cols-2 gap-2 mb-4">
-                                      {alt.options.map((opt, oIdx) => (
-                                        <div key={oIdx} className={`text-xs font-bold p-2 rounded-lg border ${oIdx === alt.correctIdx ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
-                                          {opt}
+                                      {(alt.options || []).map((opt: any, oIdx: number) => (
+                                        <div key={opt.id || oIdx} className={`text-xs font-bold p-2 rounded-lg border ${opt.isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
+                                          {opt.text}
                                         </div>
                                       ))}
                                     </div>
                                     <div className="flex justify-end">
                                       <button onClick={() => {
-                                        setSavedQuestions(prev => prev.map(q => {
-                                          if (q.id === manualSwapModalQId) {
-                                            return { ...q, title: alt.title, options: alt.options, correctIdx: alt.correctIdx };
-                                          }
-                                          return q;
-                                        }));
+                                        setBlueprintQuestions(prev => prev.map(q => q.id === manualSwapModalQId ? alt : q));
+                                        const swappedId = manualSwapModalQId;
                                         setManualSwapModalQId(null);
                                         // highlight the swapped question
-                                        setHighlightedIds(prev => [...prev, manualSwapModalQId]);
-                                        setTimeout(() => {
-                                          setHighlightedIds(prev => prev.filter(qId => qId !== manualSwapModalQId));
-                                        }, 1500);
+                                        if (swappedId) {
+                                          setHighlightedIds(prev => [...prev, alt.id]);
+                                          setTimeout(() => {
+                                            setHighlightedIds(prev => prev.filter(qId => qId !== alt.id));
+                                          }, 1500);
+                                        }
                                       }} className="px-5 py-2 bg-violet-50 text-violet-700 hover:bg-violet-100 font-bold rounded-lg transition-colors text-sm border border-violet-100 flex items-center gap-2">
                                         <Check size={14} /> اختيار
                                       </button>
@@ -2238,7 +2449,7 @@ export default function QuestionBank() {
                             <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden divide-y divide-slate-100 mb-6">
                               <div className="flex justify-between items-center p-5">
                                 <label className="text-sm font-bold text-slate-700">المدة الزمنية (بالدقائق)</label>
-                                <input type="number" defaultValue="45" className="w-24 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-center text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors hover:bg-slate-100" />
+                                <input type="number" value={timeLimitMinutes} onChange={(e) => setTimeLimitMinutes(Number(e.target.value))} className="w-24 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-center text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors hover:bg-slate-100" />
                               </div>
                               <div className="flex justify-between items-center p-5 bg-slate-50">
                                 <label className="text-sm font-bold text-slate-700">عند انتهاء الوقت</label>
@@ -2316,7 +2527,7 @@ export default function QuestionBank() {
                               
                               <div className={`bg-slate-50 p-5 flex justify-between items-center transition-all duration-300 ${allowMultipleAttempts ? 'opacity-100 pointer-events-auto' : 'opacity-40 pointer-events-none select-none'}`}>
                                 <label className="text-sm font-bold text-slate-600">الانتظار بين المحاولات (بالساعات)</label>
-                                <input type="number" defaultValue="24" className="w-24 bg-white border border-slate-200 rounded-lg px-3 py-2 text-center text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors hover:bg-slate-50" />
+                                <input type="number" value={retryWaitHours} onChange={(e) => setRetryWaitHours(Number(e.target.value))} className="w-24 bg-white border border-slate-200 rounded-lg px-3 py-2 text-center text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors hover:bg-slate-50" />
                               </div>
                             </div>
 
@@ -2403,7 +2614,8 @@ export default function QuestionBank() {
                                         <div className="relative">
                                           <input 
                                             type="number" 
-                                            defaultValue="20" 
+                                            value={gradebookMaxValue}
+                                            onChange={(e) => setGradebookMaxValue(Number(e.target.value))}
                                             className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 hover:bg-slate-50 transition-colors" 
                                             dir="ltr"
                                           />
@@ -2502,12 +2714,13 @@ export default function QuestionBank() {
 
                   {/* Fixed Footer */}
                   <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 shrink-0 flex justify-end gap-3 z-20 w-full shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
-                    <button onClick={() => setAssessmentView('LIBRARY')} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold rounded-xl transition-colors text-sm shadow-none">
+                    {publishError && <p className="text-sm font-bold text-rose-600 self-center ml-auto">{publishError}</p>}
+                    <button onClick={() => handlePublishBlueprint('Draft')} disabled={isPublishing} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold rounded-xl transition-colors text-sm shadow-none disabled:opacity-50">
                       حفظ كمسودة
                     </button>
-                    <button onClick={() => setAssessmentView('LIBRARY')} className="px-8 py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl flex items-center gap-2 transition-colors shadow-sm text-sm">
+                    <button onClick={() => handlePublishBlueprint('Active')} disabled={isPublishing} className="px-8 py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl flex items-center gap-2 transition-colors shadow-sm text-sm disabled:opacity-50">
                       <Globe size={18} />
-                      نشر واعتماد التقييم
+                      {isPublishing ? 'جاري النشر...' : 'نشر واعتماد التقييم'}
                     </button>
                   </div>
                 </motion.div>

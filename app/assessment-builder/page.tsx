@@ -18,7 +18,8 @@ import { createPortal } from 'react-dom';
 import { FloatingPortal } from '@floating-ui/react';
 import { AssessmentSidebar } from '@/components/AssessmentSidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { createAssignment, createQuiz, uploadAssignmentAttachment, getSubmissionFileUrl, getUnitsForAssignment, getAssignmentById, getQuizById, updateAssignment, updateQuiz, getTeacherOtherClasses, getClassRoster, saveQuestionToBank, getQuestionBank, BankQuestion } from '@/services/assignmentData';
+import { createAssignment, createQuiz, uploadAssignmentAttachment, getSubmissionFileUrl, getUnitsForAssignment, getAssignmentById, getQuizById, updateAssignment, updateQuiz, getTeacherOtherClasses, getClassRoster } from '@/services/assignmentData';
+import { getVisibleQuestions, BankQuestion } from '@/services/questionBankData';
 import { getGradebookCategories } from '@/services/academicData';
 
 interface Question {
@@ -60,6 +61,7 @@ function AssessmentBuilderContent() {
   const { authUser } = useAuth();
   const scopeClassId = searchParams.get('classId') || '';
   const scopeSubject = searchParams.get('subject') || '';
+  const scopeGrade = searchParams.get('grade') || '';
   const scopeUnitId = searchParams.get('unitId') || '';
   const editId = searchParams.get('id') || '';
   const [isEditLoading, setIsEditLoading] = useState(!!editId);
@@ -145,15 +147,15 @@ function AssessmentBuilderContent() {
   const [selectedBankIds, setSelectedBankIds] = useState<string[]>([]);
 
   useEffect(() => {
-    if (isBankDrawerOpen && authUser?.teacherId && scopeSubject) {
+    if (isBankDrawerOpen && scopeSubject && scopeGrade) {
       setIsLoadingBank(true);
-      getQuestionBank(authUser.teacherId, scopeSubject).then((qs) => {
+      getVisibleQuestions({ teacherId: authUser?.teacherId, isSupervisor: authUser?.role === 'qb_supervisor', subject: scopeSubject, grade: scopeGrade }).then((qs) => {
         setBankQuestions(qs);
         setIsLoadingBank(false);
       });
       setSelectedBankIds([]);
     }
-  }, [isBankDrawerOpen, authUser?.teacherId, scopeSubject]);
+  }, [isBankDrawerOpen, authUser?.teacherId, scopeSubject, scopeGrade]);
 
   const toggleBankSelection = (id: string) => {
     setSelectedBankIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -169,7 +171,7 @@ function AssessmentBuilderContent() {
   };
 
   const filteredBankQuestions = bankQuestions.filter((bq) =>
-    (bq.question.text || '').toLowerCase().includes(bankSearch.toLowerCase())
+    (bq.title || '').toLowerCase().includes(bankSearch.toLowerCase())
   );
   const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
 
@@ -2016,25 +2018,29 @@ function AssessmentBuilderContent() {
                 <div className="p-4 border-b border-slate-50">
                   <div className="relative">
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input type="text" placeholder="Search questions..." className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-sm outline-none focus:ring-2 focus:ring-indigo-100" />
+                    <input type="text" value={bankSearch} onChange={(e) => setBankSearch(e.target.value)} placeholder="Search questions..." className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-sm outline-none focus:ring-2 focus:ring-indigo-100" />
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                  {[1, 2, 3, 4, 5].map(i => (
-                    <div key={i} className="flex items-start gap-4 p-4 border border-slate-100 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer group">
-                      <div className="w-5 h-5 rounded border-2 border-slate-200 flex items-center justify-center group-hover:border-indigo-500 transition-colors">
-                        <Check size={12} className="text-transparent group-hover:text-indigo-500" />
+                  {isLoadingBank ? (
+                    <p className="text-center text-sm text-slate-400 py-10">Loading...</p>
+                  ) : filteredBankQuestions.length === 0 ? (
+                    <p className="text-center text-sm text-slate-400 py-10">No questions found for this subject/grade yet.</p>
+                  ) : filteredBankQuestions.map(bq => (
+                    <div key={bq.id} onClick={() => toggleBankSelection(bq.id)} className="flex items-start gap-4 p-4 border border-slate-100 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer group">
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors shrink-0 mt-0.5 ${selectedBankIds.includes(bq.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-200 group-hover:border-indigo-500'}`}>
+                        <Check size={12} className={selectedBankIds.includes(bq.id) ? 'text-white' : 'text-transparent group-hover:text-indigo-500'} />
                       </div>
                       <div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Unit 1 • Matrices</span>
-                        <p className="text-sm font-medium text-slate-700 mt-1">Define the identity matrix and its properties.</p>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">{bq.unit}{bq.lesson ? ` • ${bq.lesson}` : ''}</span>
+                        <p className="text-sm font-medium text-slate-700 mt-1">{bq.title}</p>
                       </div>
                     </div>
                   ))}
                 </div>
                 <div className="p-6 border-t border-slate-100">
-                  <button className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-all">
-                    Add Selected Questions
+                  <button onClick={handleAddSelectedBankQuestions} disabled={selectedBankIds.length === 0} className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 disabled:opacity-50 transition-all">
+                    Add Selected Questions{selectedBankIds.length > 0 ? ` (${selectedBankIds.length})` : ''}
                   </button>
                 </div>
               </motion.div>

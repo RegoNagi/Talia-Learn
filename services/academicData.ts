@@ -80,3 +80,38 @@ export async function getGradebookCategories(subject: string, grade: string): Pr
   return Object.keys((matching as any).category_weights || {});
 }
 
+// بيجيب كل الصفوف الدراسية الحقيقية المعرّفة في المنهج (Talia 360)
+export async function getGradeLevels(): Promise<string[]> {
+  const { data, error } = await supabase.from('grade_levels').select('name, display_order').order('display_order', { ascending: true });
+  if (error) {
+    console.error('Error fetching grade levels:', error);
+    return [];
+  }
+  return (data || []).map((row: any) => row.name);
+}
+
+// بيبني قايمة مادة×صف حقيقية لبنك الأسئلة — كل حاجة للمشرف، بس مواد وصفوف المعلم نفسه للمعلم
+export async function getSubjectGradeCombos(scope: { isSupervisor: boolean; teacherGrades?: string[]; teacherSubjects?: string[] }): Promise<{ subject: string; grade: string }[]> {
+  const grades = scope.isSupervisor ? await getGradeLevels() : (scope.teacherGrades || []);
+  const combos: { subject: string; grade: string }[] = [];
+  for (const grade of grades) {
+    const subjects = await getGradeSubjects(grade);
+    for (const subject of subjects) {
+      if (scope.isSupervisor || (scope.teacherSubjects || []).includes(subject)) {
+        combos.push({ subject, grade });
+      }
+    }
+  }
+  return combos;
+}
+
+// بيجيب كل فصول المدرسة الحقيقية (يستخدمها مشرف بنك الأسئلة اللي مالوش فصول خاصة بيه)
+export async function getAllClassSections(): Promise<{ id: string; name: string; gradeLevel: string }[]> {
+  const { data, error } = await supabase.from('class_sections').select('id, name, grade_level');
+  if (error) {
+    console.error('Error fetching all class sections:', error);
+    return [];
+  }
+  return (data || []).map((row: any) => ({ id: row.id, name: row.name, gradeLevel: row.grade_level ?? '' }));
+}
+
