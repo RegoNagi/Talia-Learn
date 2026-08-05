@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { Search, Send, Zap, ChevronDown, Check, FileText, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { getMyMessages, markMessageAsRead, AppMessage } from '@/services/messagesData';
 
 interface ChatContact {
   id: string;
@@ -111,8 +112,28 @@ function FilterDropdown({ options, value, onChange, placeholder }: { options: {i
   );
 }
 
-export function MessagesCenter({ language = 'ar' }: { language?: 'ar' | 'en' }) {
+export function MessagesCenter({ language = 'ar', authUser }: { language?: 'ar' | 'en'; authUser?: any }) {
   const isRtl = language === 'ar';
+
+  const [realMessages, setRealMessages] = useState<AppMessage[]>([]);
+  const [isLoadingReal, setIsLoadingReal] = useState(true);
+  const recipientId = authUser?.parentId || authUser?.studentId || authUser?.teacherId;
+  const recipientRole = authUser?.role;
+
+  useEffect(() => {
+    if (!recipientId || !recipientRole) { setIsLoadingReal(false); return; }
+    getMyMessages(recipientId, recipientRole).then((msgs) => {
+      setRealMessages(msgs);
+      setIsLoadingReal(false);
+    });
+  }, [recipientId, recipientRole]);
+
+  const handleOpenRealMessage = async (msg: AppMessage) => {
+    if (!msg.isRead) {
+      await markMessageAsRead(msg.id);
+      setRealMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, isRead: true } : m)));
+    }
+  };
   
   const [activeTab, setActiveTab] = useState<'student' | 'parent' | 'teacher'>('student');
   const [activeChatId, setActiveChatId] = useState<string>('1');
@@ -199,6 +220,35 @@ export function MessagesCenter({ language = 'ar' }: { language?: 'ar' | 'en' }) 
   const cannedList = CANNED_RESPONSES[isRtl ? 'ar' : 'en'];
 
   return (
+    <div className="space-y-4">
+      {recipientId && (
+        <div className="bg-white border border-gray-100 rounded-2xl p-4" dir={isRtl ? 'rtl' : 'ltr'}>
+          <h3 className="text-sm font-bold text-gray-800 mb-3">{isRtl ? 'إشعارات من المعلمين' : 'Notifications from Teachers'}</h3>
+          {isLoadingReal ? (
+            <p className="text-xs text-gray-400">{isRtl ? 'جاري التحميل...' : 'Loading...'}</p>
+          ) : realMessages.length === 0 ? (
+            <p className="text-xs text-gray-400">{isRtl ? 'مفيش رسائل لسه.' : 'No messages yet.'}</p>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {realMessages.map((msg) => (
+                <button
+                  key={msg.id}
+                  onClick={() => handleOpenRealMessage(msg)}
+                  className={`w-full text-left p-3 rounded-xl border transition-colors ${msg.isRead ? 'border-gray-100 bg-gray-50/50' : 'border-orange-200 bg-orange-50'}`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-gray-800">{msg.senderName}</span>
+                    <span className="text-[10px] text-gray-400">{new Date(msg.createdAt).toLocaleString()}</span>
+                  </div>
+                  {msg.subject && <p className="text-xs font-semibold text-gray-600 mb-0.5">{msg.subject}</p>}
+                  <p className="text-xs text-gray-600">{msg.content}</p>
+                  {!msg.isRead && <span className="inline-block mt-1 text-[9px] font-bold text-orange-600 uppercase">{isRtl ? 'جديد' : 'New'}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     <div className="h-[calc(100vh-140px)] w-full bg-white border border-gray-100 flex overflow-hidden rounded-2xl shadow-none" dir={isRtl ? 'rtl' : 'ltr'}>
       
       {/* Column 1: Advanced Directory & Chat List (30%) */}
@@ -412,6 +462,7 @@ export function MessagesCenter({ language = 'ar' }: { language?: 'ar' | 'en' }) 
          </div>
       </div>
 
+    </div>
     </div>
   );
 }

@@ -6,12 +6,12 @@ import {
   Zap, 
   Image as ImageIcon, 
   FileText, 
-  Sparkles, 
   X, 
   Send 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, AIChallenge } from '@/types/classSpace';
+import { uploadAssignmentAttachment, getSubmissionFileUrl } from '@/services/assignmentData';
 
 interface PostComposerProps {
   currentUser: User | null;
@@ -26,14 +26,26 @@ interface PostComposerProps {
 
 export function PostComposer({ currentUser, onPublishPost }: PostComposerProps) {
   const [content, setContent] = useState('');
-  const [attachments, setAttachments] = useState<{ id: string; name: string }[]>([]);
+  const [attachments, setAttachments] = useState<{ id: string; name: string; url: string }[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   // AI Challenge Modal State
   const [isChallengeModalOpen, setIsChallengeModalOpen] = useState(false);
   const [challengeTitle, setChallengeTitle] = useState('');
   const [challengeDesc, setChallengeDesc] = useState('');
   const [challengeXp, setChallengeXp] = useState(100);
-  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setIsUploading(true);
+    const uploaded = await uploadAssignmentAttachment(file);
+    setIsUploading(false);
+    if (uploaded) {
+      setAttachments((prev) => [...prev, { id: `${Date.now()}`, name: uploaded.name, url: getSubmissionFileUrl(uploaded.storagePath) }]);
+    }
+  };
 
   const handlePostSubmit = () => {
     if (!content.trim() && attachments.length === 0) return;
@@ -42,13 +54,12 @@ export function PostComposer({ currentUser, onPublishPost }: PostComposerProps) 
     if (attachments.length > 0) {
       mediaObj = {
         type: 'image',
-        url: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1000&q=80'
+        url: attachments[0].url,
       };
     }
 
     onPublishPost({
       content,
-      topicTag: 'Announcement',
       media: mediaObj,
       type: 'standard'
     });
@@ -57,15 +68,6 @@ export function PostComposer({ currentUser, onPublishPost }: PostComposerProps) 
     setAttachments([]);
   };
 
-  const handleGenerateAiChallenge = () => {
-    setIsGenerating(true);
-    setTimeout(() => {
-      setChallengeTitle('Kinematics Vector Sprint #1');
-      setChallengeDesc('Calculate the velocity vector components for a projectile launched at 30° with an initial velocity of 50 m/s.');
-      setChallengeXp(150);
-      setIsGenerating(false);
-    }, 1000);
-  };
 
   const handlePublishChallenge = () => {
     if (!challengeTitle.trim()) return;
@@ -139,22 +141,18 @@ export function PostComposer({ currentUser, onPublishPost }: PostComposerProps) 
               </button>
 
               {/* Photo / Video */}
-              <button
-                onClick={() => setAttachments([...attachments, { id: `${Date.now()}`, name: 'sample_photo.jpg' }])}
-                className="flex items-center gap-1 text-slate-500 hover:text-indigo-600"
-              >
+              <label className="flex items-center gap-1 text-slate-500 hover:text-indigo-600 cursor-pointer">
                 <ImageIcon size={14} className="text-emerald-500" />
-                <span>Photo/Video</span>
-              </button>
+                <span>{isUploading ? 'Uploading...' : 'Photo/Video'}</span>
+                <input type="file" accept="image/*,video/*" className="hidden" onChange={handleFileSelect} disabled={isUploading} />
+              </label>
 
               {/* Document */}
-              <button
-                onClick={() => setAttachments([...attachments, { id: `${Date.now()}`, name: 'study_guide.pdf' }])}
-                className="flex items-center gap-1 text-slate-500 hover:text-indigo-600"
-              >
+              <label className="flex items-center gap-1 text-slate-500 hover:text-indigo-600 cursor-pointer">
                 <FileText size={14} className="text-indigo-500" />
-                <span>Document</span>
-              </button>
+                <span>{isUploading ? 'Uploading...' : 'Document'}</span>
+                <input type="file" className="hidden" onChange={handleFileSelect} disabled={isUploading} />
+              </label>
             </div>
 
             {/* Post Button */}
@@ -189,20 +187,6 @@ export function PostComposer({ currentUser, onPublishPost }: PostComposerProps) 
               </div>
 
               <div className="p-5 space-y-3.5">
-                <div className="flex justify-between items-center bg-orange-50 border border-orange-200 rounded-xl p-3">
-                  <div className="flex items-center gap-2">
-                    <Sparkles size={16} className="text-orange-600" />
-                    <span className="text-xs font-bold text-orange-900">Let Talia AI draft a STEM challenge</span>
-                  </div>
-                  <button
-                    onClick={handleGenerateAiChallenge}
-                    disabled={isGenerating}
-                    className="px-3 py-1 bg-orange-600 text-white text-xs font-bold rounded-lg hover:bg-orange-700"
-                  >
-                    {isGenerating ? 'Drafting...' : 'Auto Draft'}
-                  </button>
-                </div>
-
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Challenge Title</label>
                   <input

@@ -10,8 +10,10 @@ import {
 import {
   getAssignments, getQuizzes, getSubmissionsForAssignment, getMySubmission,
   submitAssignment, gradeSubmission, getSubmissionFileUrl, deleteAssignment, getClassRoster,
-  Assignment, AssignmentSubmission, Quiz,
+  startOrGetQuizAttempt, saveQuizAnswer, submitQuizAttempt, getMyQuizAttempt, getQuizAttemptsForQuiz, gradeQuizManualQuestion,
+  Assignment, AssignmentSubmission, Quiz, QuizAttempt,
 } from '@/services/assignmentData';
+import { syncGradeToGradebook } from '@/services/gradebookSync';
 
 interface AssessmentsTabProps {
   role?: 'teacher' | 'parent' | 'student';
@@ -31,13 +33,25 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [submissionCounts, setSubmissionCounts] = useState<Record<string, { submitted: number; graded: number; total: number }>>({});
   const [classRosterCount, setClassRosterCount] = useState(0);
+  const [quizAttemptCounts, setQuizAttemptCounts] = useState<Record<string, { submitted: number; needsReview: number }>>({});
+  const [activeQuizForGrading, setActiveQuizForGrading] = useState<Quiz | null>(null);
+  const [quizGradingAttempts, setQuizGradingAttempts] = useState<(QuizAttempt & { studentName: string })[]>([]);
+  const [activeQuizAttemptForGrading, setActiveQuizAttemptForGrading] = useState<(QuizAttempt & { studentName: string }) | null>(null);
+  const [manualReviewScores, setManualReviewScores] = useState<Record<string, string>>({});
+  const [isSavingQuizGrade, setIsSavingQuizGrade] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [view, setView] = useState<'list' | 'grading-list' | 'grading-student' | 'intro' | 'submit' | 'success'>('list');
+  const [view, setView] = useState<'list' | 'grading-list' | 'grading-student' | 'intro' | 'submit' | 'success' | 'quiz-intro' | 'quiz-taking' | 'quiz-result' | 'quiz-grading-list' | 'quiz-grading-student'>('list');
   const [activeAssignment, setActiveAssignment] = useState<Assignment | null>(null);
   const [gradingSubmissions, setGradingSubmissions] = useState<AssignmentSubmission[]>([]);
   const [activeSubmission, setActiveSubmission] = useState<AssignmentSubmission | null>(null);
   const [mySubmission, setMySubmission] = useState<AssignmentSubmission | null>(null);
+  const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
+  const [myQuizAttempt, setMyQuizAttempt] = useState<QuizAttempt | null>(null);
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, any>>({});
+  const [quizQIndex, setQuizQIndex] = useState(0);
+  const [isSubmittingQuiz, setIsSubmittingQuiz] = useState(false);
+  const [quizResult, setQuizResult] = useState<{ score: number; maxScore: number; needsManualReview: boolean } | null>(null);
 
   const refreshList = () => {
     if (!scope && !studentScope) return;
@@ -59,6 +73,15 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
         setSubmissionCounts(counts);
         const classRoster = await getClassRoster(scope.classId);
         setClassRosterCount(classRoster.length);
+        const qCounts: Record<string, { submitted: number; needsReview: number }> = {};
+        for (const q of quizItems) {
+          const attempts = await getQuizAttemptsForQuiz(q.id, scope.classId);
+          qCounts[q.id] = {
+            submitted: attempts.filter(a => a.status !== 'in_progress').length,
+            needsReview: attempts.filter(a => a.needsManualReview && a.status !== 'graded').length,
+          };
+        }
+        setQuizAttemptCounts(qCounts);
       }
       setIsLoading(false);
     });
@@ -91,6 +114,50 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
     setView('grading-list');
   };
 
+  const openQuizGradingList = async (quiz: Quiz) => {
+    if (!scope) return;
+    setActiveQuizForGrading(quiz);
+    const attempts = await getQuizAttemptsForQuiz(quiz.id, scope.classId);
+    setQuizGradingAttempts(attempts);
+    setView('quiz-grading-list');
+  };
+
+  const openQuizAttemptGrading = (attempt: QuizAttempt & { studentName: string }) => {
+    setActiveQuizAttemptForGrading(attempt);
+    setManualReviewScores({});
+    setView('quiz-grading-student');
+  };
+
+  const handleSaveQuizManualGrade = async () => {
+    if (!activeQuizForGrading || !activeQuizAttemptForGrading || !scope) return;
+    setIsSavingQuizGrade(true);
+    const extraScore = Object.values(manualReviewScores).reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
+    const { ok, error } = await gradeQuizManualQuestion(activeQuizAttemptForGrading.id, extraScore);
+    if (ok) {
+      const finalScore = (activeQuizAttemptForGrading.score || 0) + extraScore;
+      if (subject && grade) {
+        syncGradeToGradebook({
+          subject,
+          grade,
+          title: activeQuizForGrading.title,
+          category: activeQuizForGrading.settings?.category || 'Uncategorized',
+          maxScore: activeQuizAttemptForGrading.maxScore || 0,
+          sourceType: 'quiz',
+          sourceId: activeQuizForGrading.id,
+          studentId: activeQuizAttemptForGrading.studentId,
+          score: finalScore,
+          status: 'Graded',
+        });
+      }
+      const attempts = await getQuizAttemptsForQuiz(activeQuizForGrading.id, scope.classId);
+      setQuizGradingAttempts(attempts);
+      setView('quiz-grading-list');
+    } else {
+      alert(`Error saving grade: ${error}`);
+    }
+    setIsSavingQuizGrade(false);
+  };
+
   const [gradeInput, setGradeInput] = useState('');
   const [selectedRubricLevels, setSelectedRubricLevels] = useState<Record<string, string>>({});
   const [feedbackInput, setFeedbackInput] = useState('');
@@ -107,7 +174,22 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
   const handleSaveGrade = async () => {
     if (!activeAssignment || !activeSubmission) return;
     setIsSavingGrade(true);
-    const { ok, error } = await gradeSubmission(activeAssignment.id, activeSubmission.studentId, { grade: parseFloat(gradeInput) || 0, feedback: feedbackInput });
+    const gradeValue = parseFloat(gradeInput) || 0;
+    const { ok, error } = await gradeSubmission(activeAssignment.id, activeSubmission.studentId, { grade: gradeValue, feedback: feedbackInput });
+    if (ok && subject && grade) {
+      syncGradeToGradebook({
+        subject,
+        grade,
+        title: activeAssignment.title,
+        category: activeAssignment.settings?.category || 'Uncategorized',
+        maxScore: activeAssignment.settings?.maxScore || 100,
+        sourceType: 'assignment',
+        sourceId: activeAssignment.id,
+        studentId: activeSubmission.studentId,
+        score: gradeValue,
+        status: 'Graded',
+      });
+    }
     setIsSavingGrade(false);
     if (ok) {
       const subs = await getSubmissionsForAssignment(activeAssignment.id, scope!.classId);
@@ -126,6 +208,59 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
       setMySubmission(sub);
     }
     setView('intro');
+  };
+
+  const openQuizIntro = async (quiz: Quiz) => {
+    setActiveQuiz(quiz);
+    setQuizResult(null);
+    if (studentId) {
+      const attempt = await getMyQuizAttempt(quiz.id, studentId);
+      setMyQuizAttempt(attempt);
+    }
+    setView('quiz-intro');
+  };
+
+  const handleStartQuiz = async () => {
+    if (!activeQuiz || !studentId) return;
+    const attempt = await startOrGetQuizAttempt(activeQuiz.id, studentId);
+    if (attempt) {
+      setMyQuizAttempt(attempt);
+      setQuizAnswers(attempt.answers || {});
+      setQuizQIndex(0);
+      setView('quiz-taking');
+    }
+  };
+
+  const handleAnswerChange = (questionId: string, answer: any) => {
+    setQuizAnswers((prev) => ({ ...prev, [questionId]: answer }));
+    if (myQuizAttempt) saveQuizAnswer(myQuizAttempt.id, questionId, answer);
+  };
+
+  const handleSubmitQuiz = async () => {
+    if (!activeQuiz || !myQuizAttempt || !studentId) return;
+    setIsSubmittingQuiz(true);
+    const result = await submitQuizAttempt(myQuizAttempt.id, activeQuiz);
+    if (result.ok && !result.needsManualReview && subject && grade) {
+      syncGradeToGradebook({
+        subject,
+        grade,
+        title: activeQuiz.title,
+        category: activeQuiz.settings?.category || 'Uncategorized',
+        maxScore: result.maxScore,
+        sourceType: 'quiz',
+        sourceId: activeQuiz.id,
+        studentId,
+        score: result.score,
+        status: 'Graded',
+      });
+    }
+    setIsSubmittingQuiz(false);
+    if (result.ok) {
+      setQuizResult(result);
+      setView('quiz-result');
+    } else {
+      alert(`Error submitting quiz: ${result.error}`);
+    }
   };
 
   const [submitText, setSubmitText] = useState('');
@@ -148,6 +283,85 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
 
   // ================= TEACHER VIEWS =================
   const renderTeacherFlow = () => {
+    if (view === 'quiz-grading-student' && activeQuizForGrading && activeQuizAttemptForGrading) {
+      const manualQuestions = (activeQuizForGrading.questions || []).filter((q: any) => q.type === 'short_answer' || q.type === 'file_upload');
+      return (
+        <div className="p-8 max-w-4xl mx-auto flex flex-col gap-6 w-full">
+          <button onClick={() => setView('quiz-grading-list')} className="w-fit text-slate-400 hover:text-slate-600 flex items-center gap-1 text-sm font-bold transition-colors">
+            <ArrowLeft size={16} /> Back
+          </button>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">{activeQuizForGrading.title}</h2>
+            <p className="text-sm font-medium text-slate-500 mt-1">Reviewing: <span className="font-bold text-slate-700">{activeQuizAttemptForGrading.studentName}</span></p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 p-6">
+            <p className="text-sm font-bold text-slate-500 mb-4">Auto-graded score so far: <span className="text-emerald-600">{activeQuizAttemptForGrading.score}/{activeQuizAttemptForGrading.maxScore}</span> (multiple choice / true-false)</p>
+          </div>
+          {manualQuestions.map((q: any) => (
+            <div key={q.id} className="bg-white rounded-2xl border border-slate-100 p-6">
+              <div className="flex justify-between items-start mb-3">
+                <p className="font-bold text-slate-800 flex-1">{q.text}</p>
+                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full shrink-0">{q.points} pts max</span>
+              </div>
+              {q.type === 'short_answer' ? (
+                <p className="text-slate-600 bg-slate-50 rounded-xl p-4 mb-4">{activeQuizAttemptForGrading.answers[q.id] || '(No answer)'}</p>
+              ) : (
+                <p className="text-slate-500 bg-slate-50 rounded-xl p-4 mb-4">{activeQuizAttemptForGrading.answers[q.id]?.name || '(No file uploaded)'}</p>
+              )}
+              <label className="block text-xs font-bold text-slate-500 mb-1.5">Award points (out of {q.points})</label>
+              <input
+                type="number"
+                max={q.points}
+                value={manualReviewScores[q.id] || ''}
+                onChange={(e) => setManualReviewScores((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                className="w-32 border border-slate-200 rounded-xl px-3 py-2 text-lg font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+            </div>
+          ))}
+          <button onClick={handleSaveQuizManualGrade} disabled={isSavingQuizGrade} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl font-bold transition-all shadow-sm">
+            {isSavingQuizGrade ? 'Saving...' : 'Save Final Grade'}
+          </button>
+        </div>
+      );
+    }
+
+    if (view === 'quiz-grading-list' && activeQuizForGrading) {
+      return (
+        <div className="p-8 max-w-4xl mx-auto flex flex-col gap-6 w-full">
+          <button onClick={() => setView('list')} className="w-fit text-slate-400 hover:text-slate-600 flex items-center gap-1 text-sm font-bold transition-colors">
+            <ArrowLeft size={16} /> Back
+          </button>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">{activeQuizForGrading.title}</h2>
+            <p className="text-sm font-medium text-slate-500 mt-1">{quizGradingAttempts.length} students</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 divide-y divide-slate-100">
+            {quizGradingAttempts.map((a) => (
+              <button
+                key={a.studentId}
+                onClick={() => a.status !== 'in_progress' && openQuizAttemptGrading(a)}
+                disabled={a.status === 'in_progress'}
+                className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors text-left disabled:cursor-not-allowed disabled:hover:bg-transparent"
+              >
+                <div>
+                  <p className="font-bold text-slate-800 text-sm">{a.studentName}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{a.status === 'in_progress' ? 'Not attempted yet' : a.submittedAt ? new Date(a.submittedAt).toLocaleString() : ''}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {a.score !== null && <span className="text-sm font-bold text-emerald-600">{a.score}/{a.maxScore}</span>}
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                    a.status === 'graded' ? 'bg-emerald-100 text-emerald-700' :
+                    a.needsManualReview ? 'bg-rose-100 text-rose-600' :
+                    a.status === 'in_progress' ? 'bg-slate-100 text-slate-400' : 'bg-blue-100 text-blue-700'
+                  }`}>{a.status === 'in_progress' ? 'Not Started' : a.needsManualReview ? 'Needs Review' : a.status}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     if (view === 'grading-student' && activeAssignment && activeSubmission) {
       return (
         <div className="p-8 max-w-6xl mx-auto flex gap-8 w-full h-full">
@@ -363,7 +577,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
                 ) : (
                   <>
                     {quizzes.map(item => (
-                      <tr key={item.id} className="hover:bg-slate-50 transition-all">
+                      <tr key={item.id} className="hover:bg-slate-50 transition-all cursor-pointer" onClick={() => openQuizGradingList(item)}>
                         <td className="py-4 px-6">
                           <p className="font-bold text-slate-800">{item.title}</p>
                         </td>
@@ -380,10 +594,14 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
                           }`}>{item.status}</span>
                         </td>
                         <td className="py-4 px-6">
-                          <span className="text-sm font-bold text-slate-700">0/{classRosterCount}</span>
+                          <span className="text-sm font-bold text-slate-700">{quizAttemptCounts[item.id]?.submitted || 0}/{classRosterCount}</span>
                         </td>
                         <td className="py-4 px-6">
-                          <span className="text-sm font-bold text-slate-400">-</span>
+                          {quizAttemptCounts[item.id]?.needsReview ? (
+                            <span className="text-sm font-bold text-rose-600">{quizAttemptCounts[item.id].needsReview} to review</span>
+                          ) : (
+                            <span className="text-sm font-bold text-slate-400">-</span>
+                          )}
                         </td>
                         <td className="py-4 px-6">
                           <div className="flex items-center gap-2">
@@ -450,6 +668,119 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
 
   // ================= STUDENT VIEWS =================
   const renderStudentFlow = () => {
+    if (view === 'quiz-result' && activeQuiz && quizResult) {
+      return (
+        <div className="p-8 max-w-xl mx-auto flex items-center justify-center h-full w-full min-h-[600px]">
+          <div className="bg-white p-12 rounded-[2.5rem] border border-slate-100 shadow-sm text-center w-full flex flex-col items-center">
+            <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-8">
+              <CheckCircle size={48} strokeWidth={2.5} />
+            </div>
+            <h2 className="text-3xl font-black text-slate-800 mb-3">Quiz Submitted!</h2>
+            {quizResult.needsManualReview ? (
+              <p className="text-slate-500 font-medium mb-6 text-lg">Some of your answers need your teacher's review before a final grade is ready.</p>
+            ) : (
+              <p className="text-5xl font-black text-emerald-600 mb-2">{quizResult.score}/{quizResult.maxScore}</p>
+            )}
+            <button onClick={() => { setActiveQuiz(null); setQuizResult(null); setView('list'); refreshList(); }} className="w-full py-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-2xl font-bold text-lg transition-all mt-4">
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (view === 'quiz-taking' && activeQuiz) {
+      const oneAtATime = !!activeQuiz.settings?.oneAtATime;
+      const questionsList = activeQuiz.questions || [];
+      const questionsToShow = oneAtATime ? (questionsList[quizQIndex] ? [questionsList[quizQIndex]] : []) : questionsList;
+      return (
+        <div className="p-8 max-w-2xl mx-auto flex flex-col gap-6 w-full">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-bold text-slate-800">{activeQuiz.title}</h2>
+            {oneAtATime && <span className="text-sm font-bold text-indigo-600">Question {quizQIndex + 1} of {questionsList.length}</span>}
+          </div>
+          {questionsToShow.map((q: any) => (
+            <div key={q.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+              <div className="flex justify-between items-start mb-4">
+                <p className="font-bold text-slate-800 flex-1">{q.text}</p>
+                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full shrink-0">{q.points} pts</span>
+              </div>
+              {q.imageUrl && <img src={q.imageUrl} alt="" className="max-h-48 rounded-xl border border-slate-200 mb-4" />}
+              {(q.type === 'multiple_choice' || q.type === 'true_false') && (
+                <div className="space-y-2">
+                  {(q.options || []).map((opt: any) => (
+                    <label key={opt.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${quizAnswers[q.id] === opt.id ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                      <input type="radio" checked={quizAnswers[q.id] === opt.id} onChange={() => handleAnswerChange(q.id, opt.id)} />
+                      <span className="text-sm text-slate-700">{opt.text}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {q.type === 'short_answer' && (
+                <textarea rows={3} value={quizAnswers[q.id] || ''} onChange={(e) => handleAnswerChange(q.id, e.target.value)} className="w-full border border-slate-200 rounded-xl p-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none resize-none" placeholder="Type your answer..." />
+              )}
+              {q.type === 'file_upload' && (
+                <label className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex items-center gap-3 text-slate-400 hover:bg-slate-50 cursor-pointer block">
+                  <UploadCloud size={20} /> {quizAnswers[q.id]?.name || 'Click to upload a file'}
+                  <input type="file" className="hidden" onChange={(e) => handleAnswerChange(q.id, e.target.files?.[0] ? { name: e.target.files[0].name } : null)} />
+                </label>
+              )}
+            </div>
+          ))}
+          {oneAtATime ? (
+            <div className="flex justify-between gap-3">
+              <button disabled={quizQIndex === 0} onClick={() => setQuizQIndex((i) => Math.max(0, i - 1))} className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold disabled:opacity-40 hover:bg-slate-50 transition-all">
+                Previous
+              </button>
+              {quizQIndex < questionsList.length - 1 ? (
+                <button onClick={() => setQuizQIndex((i) => Math.min(questionsList.length - 1, i + 1))} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all">
+                  Next
+                </button>
+              ) : (
+                <button onClick={handleSubmitQuiz} disabled={isSubmittingQuiz} className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-60 transition-all">
+                  {isSubmittingQuiz ? 'Submitting...' : 'Submit Quiz'}
+                </button>
+              )}
+            </div>
+          ) : (
+            <button onClick={handleSubmitQuiz} disabled={isSubmittingQuiz} className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl font-bold text-lg transition-all shadow-md">
+              {isSubmittingQuiz ? 'Submitting...' : 'Submit Quiz'}
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    if (view === 'quiz-intro' && activeQuiz) {
+      const alreadyDone = myQuizAttempt && myQuizAttempt.status !== 'in_progress';
+      return (
+        <div className="p-8 max-w-2xl mx-auto flex flex-col gap-6 w-full">
+          <button onClick={() => setView('list')} className="w-fit text-slate-400 hover:text-slate-600 flex items-center gap-1 text-sm font-bold transition-colors">
+            <ArrowLeft size={16} /> Back
+          </button>
+          <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">{activeQuiz.title}</h2>
+            <div className="flex items-center gap-4 text-sm text-slate-500 mb-8 font-medium flex-wrap">
+              {activeQuiz.dueDate && <span className="flex items-center gap-1"><AlertCircle size={16}/> Due: {new Date(activeQuiz.dueDate).toLocaleString()}</span>}
+              <span>{(activeQuiz.questions || []).length} questions</span>
+              <span>{activeQuiz.settings?.maxScore || 0} pts</span>
+            </div>
+
+            {alreadyDone ? (
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6">
+                <p className="font-bold text-slate-800 mb-1">{myQuizAttempt?.status === 'graded' ? 'Your quiz has been graded' : 'Submitted — awaiting review'}</p>
+                {myQuizAttempt?.status === 'graded' && <p className="text-2xl font-black text-emerald-600 mb-2">{myQuizAttempt.score}/{myQuizAttempt.maxScore}</p>}
+              </div>
+            ) : (
+              <button onClick={handleStartQuiz} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-lg transition-all shadow-md flex items-center justify-center gap-2">
+                <Check size={20} /> {myQuizAttempt ? 'Continue Quiz' : 'Start Quiz'}
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     if (view === 'success') {
       return (
         <div className="p-8 max-w-xl mx-auto flex items-center justify-center h-full w-full min-h-[600px]">
@@ -537,8 +868,8 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
       <div className="p-8 max-w-4xl mx-auto flex flex-col gap-8 w-full">
         <div className="flex justify-between items-end mb-4">
           <div>
-            <h2 className="text-2xl font-bold text-slate-800">Your Assignments</h2>
-            <p className="text-sm font-medium text-slate-500 mt-1">Complete your pending assignments.</p>
+            <h2 className="text-2xl font-bold text-slate-800">Your Assessments</h2>
+            <p className="text-sm font-medium text-slate-500 mt-1">Complete your pending quizzes and assignments.</p>
           </div>
           {role === 'parent' && (
             <span className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 text-xs font-bold px-3 py-1.5 rounded-full border border-indigo-100">
@@ -549,9 +880,34 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {isLoading ? (
             <p className="text-slate-400 col-span-2 text-center py-10">Loading...</p>
-          ) : assignments.length === 0 ? (
-            <p className="text-slate-400 col-span-2 text-center py-10">No assignments yet.</p>
-          ) : assignments.map(item => (
+          ) : assignments.length === 0 && quizzes.length === 0 ? (
+            <p className="text-slate-400 col-span-2 text-center py-10">No assessments yet.</p>
+          ) : (
+            <>
+              {quizzes.map(item => (
+                <div key={item.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-purple-100 text-purple-700">Quiz</span>
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-800 mb-1">{item.title}</h3>
+                    {item.dueDate && (
+                      <p className="text-xs font-medium text-red-500 flex items-center gap-1 mb-4">
+                        <AlertCircle size={14} /> Due: {new Date(item.dueDate).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => openQuizIntro(item)}
+                    disabled={role === 'parent'}
+                    className={`w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 mt-4
+                      ${role === 'parent' ? 'bg-slate-100 text-slate-400 cursor-not-allowed opacity-50 pointer-events-none' : 'bg-purple-600 hover:bg-purple-700 text-white shadow-sm'}`}
+                  >
+                    <FileText size={18} /> Open
+                  </button>
+                </div>
+              ))}
+              {assignments.map(item => (
             <div key={item.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -573,7 +929,9 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
                 <FileText size={18} /> Open
               </button>
             </div>
-          ))}
+              ))}
+            </>
+          )}
         </div>
       </div>
     );

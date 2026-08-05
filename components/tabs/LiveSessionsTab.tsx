@@ -1,8 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import Image from 'next/image';
+import { getLiveSessions, createLiveSession, deleteLiveSession, RealLiveSession } from '@/services/liveSessionsData';
+import { broadcastMessageToClass, getClassAnnouncementsForStudent, AppMessage } from '@/services/messagesData';
+import { getClassRoster } from '@/services/assignmentData';
 import { 
   Video, 
   Calendar, 
@@ -49,9 +52,10 @@ interface UpcomingSession {
   date: string;
   time: string;
   color: string;
+  joinUrl: string;
 }
 
-export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string }) {
+export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teacherId, teacherName, studentId, className }: { viewRole?: string; classId?: string; subject?: string; teacherId?: string; teacherName?: string; studentId?: string; className?: string }) {
   const isTeacher = viewRole === 'TEACHER';
   const isStudent = viewRole === 'STUDENT';
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
@@ -64,49 +68,120 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
   const [isAnnouncementsModalOpen, setIsAnnouncementsModalOpen] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
-  const activeSession = {
-    title: 'Session 4: Matrix Transformations & Determinants',
-    date: 'Today, May 5',
-    time: '10:00 AM',
-    agenda: [
-      'Visualizing Linear Transformations',
-      'The Determinant as a Scaling Factor',
-      'Properties of the Determinant'
-    ],
+  const [sessions, setSessions] = useState<RealLiveSession[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const refresh = () => {
+    if (!classId || !subject) { setIsLoading(false); return; }
+    setIsLoading(true);
+    getLiveSessions(classId, subject).then((data) => {
+      setSessions(data);
+      setIsLoading(false);
+    });
   };
 
-  const archiveSessions: Session[] = [
-    {
-      id: 's3',
-      title: 'Session 3: Basic Operations',
-      date: 'April 28, 2026',
-      time: '10:00 AM',
-      attendance: '24/25',
-      hasSummary: true,
-    },
-    {
-      id: 's2',
-      title: 'Session 2: Matrix Addition & Scaling',
-      date: 'April 21, 2026',
-      time: '10:00 AM',
-      attendance: '22/25',
-      hasSummary: true,
-    },
-    {
-      id: 's1',
-      title: 'Session 1: Introduction to Matrices',
-      date: 'April 14, 2026',
-      time: '10:00 AM',
-      attendance: '25/25',
-      hasSummary: false,
-    }
-  ];
+  useEffect(() => {
+    refresh();
+  }, [classId, subject]);
 
-  const upcomingSessions: UpcomingSession[] = [
-    { id: 'u1', date: 'May 8', time: '10:00 AM', title: 'Eigenvalues', color: 'bg-indigo-400' },
-    { id: 'u2', date: 'May 12', time: '10:00 AM', title: 'Eigenvectors', color: 'bg-emerald-400' },
-    { id: 'u3', date: 'May 15', time: '10:00 AM', title: 'Diagonalization', color: 'bg-rose-400' },
-  ];
+  const now = new Date();
+  const upcomingAll = sessions.filter((s) => new Date(s.scheduledAt) >= now).sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+  const pastAll = sessions.filter((s) => new Date(s.scheduledAt) < now).sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime());
+
+  const activeSession = upcomingAll[0] ? {
+    id: upcomingAll[0].id,
+    title: upcomingAll[0].title,
+    date: new Date(upcomingAll[0].scheduledAt).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }),
+    time: new Date(upcomingAll[0].scheduledAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+    agenda: upcomingAll[0].agenda ? upcomingAll[0].agenda.split('\n').filter(Boolean) : [],
+    joinUrl: upcomingAll[0].joinUrl,
+  } : null;
+
+  const upcomingSessions: UpcomingSession[] = upcomingAll.slice(1).map((s) => ({
+    id: s.id,
+    date: new Date(s.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+    time: new Date(s.scheduledAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+    title: s.title,
+    color: 'bg-indigo-400',
+    joinUrl: s.joinUrl,
+  }));
+
+  const archiveSessions: Session[] = pastAll.map((s) => ({
+    id: s.id,
+    title: s.title,
+    date: new Date(s.scheduledAt).toLocaleDateString(),
+    time: new Date(s.scheduledAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+    attendance: '—',
+    hasSummary: false,
+  }));
+
+  // ============ Schedule Form ============
+  const [newTitle, setNewTitle] = useState('');
+  const [newDate, setNewDate] = useState('');
+  const [newTime, setNewTime] = useState('10:00');
+  const [newAgenda, setNewAgenda] = useState('');
+  const [newJoinUrl, setNewJoinUrl] = useState('');
+  const [isSavingSession, setIsSavingSession] = useState(false);
+  const [scheduleError, setScheduleError] = useState('');
+
+  const handleCreateSession = async () => {
+    if (!classId || !subject || !teacherId || !newTitle.trim() || !newDate || !newJoinUrl.trim()) return;
+    setIsSavingSession(true);
+    setScheduleError('');
+    const { ok, error } = await createLiveSession({
+      classId,
+      subject,
+      teacherId,
+      title: newTitle.trim(),
+      agenda: newAgenda.trim(),
+      scheduledAt: `${newDate}T${newTime || '10:00'}`,
+      joinUrl: newJoinUrl.trim(),
+    });
+    setIsSavingSession(false);
+    if (ok) {
+      setShowScheduleFormModal(false);
+      setNewTitle('');
+      setNewDate('');
+      setNewTime('10:00');
+      setNewAgenda('');
+      setNewJoinUrl('');
+      refresh();
+    } else {
+      setScheduleError(error || 'Unknown error');
+    }
+  };
+
+  // ============ Announcements ============
+  const [announcements, setAnnouncements] = useState<AppMessage[]>([]);
+  const [broadcastText, setBroadcastText] = useState('');
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState('');
+
+  useEffect(() => {
+    if (isStudent && studentId) {
+      getClassAnnouncementsForStudent(studentId, isAnnouncementsModalOpen ? 50 : 5).then(setAnnouncements);
+    }
+  }, [isStudent, studentId, isAnnouncementsModalOpen]);
+
+  const handleSendAnnouncement = async () => {
+    if (!classId || !teacherId || !teacherName || !broadcastText.trim()) return;
+    setIsBroadcasting(true);
+    setBroadcastResult('');
+    const roster = await getClassRoster(classId);
+    const { ok, error } = await broadcastMessageToClass({
+      senderId: teacherId,
+      senderName: teacherName,
+      studentIds: roster.map((s) => s.id),
+      content: broadcastText.trim(),
+    });
+    setIsBroadcasting(false);
+    if (ok) {
+      setBroadcastText('');
+      setShowBroadcastModal(false);
+    } else {
+      setBroadcastResult(error || 'Failed to send.');
+    }
+  };
 
   return (
     <div className="h-full flex flex-col max-w-7xl mx-auto p-6 md:p-8">
@@ -121,6 +196,17 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
               <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-[2rem] blur opacity-10 group-hover:opacity-20 transition duration-1000"></div>
               
               <div className="relative bg-white rounded-[2rem] border border-slate-100 shadow-none p-8">
+                {!activeSession ? (
+                  <div className="text-center py-8">
+                    <Video size={36} className="mx-auto text-slate-300 mb-3" />
+                    <p className="text-slate-500 font-medium mb-4">{isTeacher ? 'No upcoming session scheduled yet.' : 'No upcoming session scheduled yet.'}</p>
+                    {isTeacher && (
+                      <button onClick={() => setShowScheduleFormModal(true)} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all">
+                        Schedule a Session
+                      </button>
+                    )}
+                  </div>
+                ) : (
                 <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
                   <div className="space-y-4">
                     <div className="flex items-center gap-3">
@@ -137,6 +223,7 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
                       {activeSession.title}
                     </h2>
 
+                    {activeSession.agenda.length > 0 && (
                     <div className="space-y-3 pt-2">
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">PLANNED AGENDA</p>
                       <ul className="space-y-2">
@@ -148,18 +235,20 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
                         ))}
                       </ul>
                     </div>
+                    )}
                   </div>
 
                   <div className="flex flex-col gap-3 min-w-[200px]">
-                    <button className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded transition-all flex items-center justify-center gap-2 active:scale-[0.98]">
+                    <a href={activeSession.joinUrl} target="_blank" rel="noreferrer" className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded transition-all flex items-center justify-center gap-2 active:scale-[0.98]">
                       {isTeacher ? 'Start Live Session' : 'Join Live Session'}
                       <Video size={18} />
-                    </button>
+                    </a>
                     <button className="w-full bg-white border border-slate-100 text-slate-600 px-6 py-4 rounded-2xl text-sm font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2 active:scale-[0.98] shadow-none" onClick={() => setShowMaterialsModal(true)}>
                       Session Materials
                     </button>
                   </div>
                 </div>
+                )}
               </div>
             </div>
           </section>
@@ -271,15 +360,15 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
                                   className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-none border border-slate-100 py-2 z-50"
                                 >
                                   {[
-                                    { id: 'edit', icon: <Edit size={14} />, label: 'Edit Summary', color: 'text-slate-600' },
-                                    { id: 'download', icon: <Download size={14} />, label: 'Download Recording', color: 'text-slate-600' },
-                                    { id: 'hide', icon: <EyeOff size={14} />, label: 'Hide Session', color: 'text-slate-600' },
                                     { id: 'delete', icon: <Trash2 size={14} />, label: 'Delete Session', color: 'text-rose-600' },
                                   ].map((item) => (
                                     <button
                                       key={item.id}
-                                      onClick={() => {
-                                        alert(`${item.label} clicked for ${session.title}`);
+                                      onClick={async () => {
+                                        if (confirm(`Delete "${session.title}"?`)) {
+                                          await deleteLiveSession(session.id);
+                                          refresh();
+                                        }
                                         setActiveMenuId(null);
                                       }}
                                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold hover:bg-slate-50 transition-colors ${item.color}`}
@@ -311,7 +400,7 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
               <div className="w-20 h-20 rounded-[1.5rem] bg-indigo-50 flex items-center justify-center mb-4 border border-indigo-100">
                 <Users2 size={40} className="text-indigo-500" />
               </div>
-              <h4 className="text-lg font-bold text-slate-800">Advanced Algebra 1</h4>
+              <h4 className="text-lg font-bold text-slate-800">{className || subject || 'Class'}</h4>
               <p className="text-xs font-medium text-slate-400 mb-6">Fall 2026 Class</p>
               
               {!isStudent ? (
@@ -325,14 +414,14 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
               ) : (
                 <div className="w-full mt-2 text-left space-y-3 flex flex-col">
                   <h5 className="font-bold text-slate-800 text-sm mb-1">Latest Announcements</h5>
-                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm text-slate-600 text-left">
-                    <p className="mb-2">Make sure to review Chapter 4 before today&apos;s session. There will be a short quiz!</p>
-                    <span className="text-[10px] text-slate-400 font-medium">Yesterday, 8:00 PM</span>
-                  </div>
-                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm text-slate-600 text-left">
-                    <p className="mb-2">The mid-term project deadline has been extended to Friday. Good luck everyone!</p>
-                    <span className="text-[10px] text-slate-400 font-medium">Monday, 2:00 PM</span>
-                  </div>
+                  {announcements.length === 0 ? (
+                    <p className="text-xs text-slate-400">No announcements yet.</p>
+                  ) : announcements.slice(0, 2).map((a) => (
+                    <div key={a.id} className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm text-slate-600 text-left">
+                      <p className="mb-2">{a.content}</p>
+                      <span className="text-[10px] text-slate-400 font-medium">{new Date(a.createdAt).toLocaleString()}</span>
+                    </div>
+                  ))}
                   <button 
                     onClick={() => setIsAnnouncementsModalOpen(true)}
                     className="w-full py-2.5 mt-1 bg-transparent text-teal-600 hover:bg-teal-50 rounded-xl font-bold text-sm transition-colors shadow-none text-center"
@@ -366,7 +455,7 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
                       ? 'bg-indigo-50/50 border-l-4 border-indigo-600 rounded-r-xl rounded-l-sm' 
                       : 'hover:bg-slate-50 border border-transparent hover:border-slate-100'
                   }`} 
-                  onClick={() => alert(`Opening details for ${u.title}`)}
+                  onClick={() => window.open(u.joinUrl, '_blank')}
                 >
                   {index === 0 && (
                     <div className="absolute top-3 right-4">
@@ -459,19 +548,20 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
                 </button>
               </div>
               <div className="p-6 space-y-4">
-                <p className="text-sm text-slate-500">This message will be sent as a notification and email to all 25 students in <span className="font-bold text-slate-800">Advanced Algebra 1</span>.</p>
+                <p className="text-sm text-slate-500">This message will be sent as a notification to all students in <span className="font-bold text-slate-800">{className || subject || 'this class'}</span>.</p>
                 <textarea 
+                  value={broadcastText}
+                  onChange={(e) => setBroadcastText(e.target.value)}
                   placeholder="Write your announcement here..."
                   className="w-full h-40 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all resize-none shadow-none"
                 />
+                {broadcastResult && <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-2xl px-4 py-3">{broadcastResult}</p>}
                 <button 
-                  onClick={() => {
-                    alert('Announcement sent!');
-                    setShowBroadcastModal(false);
-                  }}
-                  className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-none"
+                  onClick={handleSendAnnouncement}
+                  disabled={!broadcastText.trim() || isBroadcasting}
+                  className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 disabled:opacity-60 transition-all shadow-none"
                 >
-                  Send to Class
+                  {isBroadcasting ? 'Sending...' : 'Send to Class'}
                 </button>
               </div>
             </motion.div>
@@ -839,7 +929,7 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
               <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between bg-white shrink-0">
                 <div className="space-y-1">
                   <h3 className="text-xl font-bold text-slate-800">Schedule New Session</h3>
-                  <p className="text-sm font-medium text-slate-400">Add a session to Advanced Algebra 1</p>
+                  <p className="text-sm font-medium text-slate-400">Add a session to {className || subject || 'this class'}</p>
                 </div>
                 <button onClick={() => setShowScheduleFormModal(false)} className="p-2.5 hover:bg-slate-50 rounded-xl transition-colors text-slate-900 border border-transparent">
                   <X size={20} />
@@ -851,6 +941,8 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Session Title</label>
                   <input 
                     type="text" 
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
                     placeholder="e.g. Session 5: Eigenvalues & Stability"
                     className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-medium focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
                   />
@@ -862,8 +954,9 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
                     <div className="relative">
                       <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                       <input 
-                        type="text" 
-                        placeholder="Select date..."
+                        type="date" 
+                        value={newDate}
+                        onChange={(e) => setNewDate(e.target.value)}
                         className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-medium focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
                       />
                     </div>
@@ -873,8 +966,9 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
                     <div className="relative">
                       <Clock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                       <input 
-                        type="text" 
-                        placeholder="10:00 AM"
+                        type="time" 
+                        value={newTime}
+                        onChange={(e) => setNewTime(e.target.value)}
                         className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-medium focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
                       />
                     </div>
@@ -882,21 +976,38 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
                 </div>
 
                 <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Meeting Link</label>
+                  <div className="relative">
+                    <Video size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input 
+                      type="url" 
+                      value={newJoinUrl}
+                      onChange={(e) => setNewJoinUrl(e.target.value)}
+                      placeholder="Paste your Google Meet link (meet.google.com/new)"
+                      className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-medium focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400 ml-1">Open meet.google.com/new in another tab, copy the link, and paste it here.</p>
+                </div>
+
+                <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Agenda / Summary</label>
                   <textarea 
+                    value={newAgenda}
+                    onChange={(e) => setNewAgenda(e.target.value)}
                     placeholder="Briefly describe what will be covered..."
                     className="w-full h-32 p-6 bg-slate-50 border border-slate-100 rounded-[2rem] text-sm font-medium focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none"
                   />
                 </div>
 
+                {scheduleError && <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-2xl px-4 py-3">{scheduleError}</p>}
+
                 <button 
-                  onClick={() => {
-                    alert('Session Scheduled Successfully!');
-                    setShowScheduleFormModal(false);
-                  }}
-                  className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-bold text-sm shadow-none shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-[0.99]"
+                  onClick={handleCreateSession}
+                  disabled={!newTitle.trim() || !newDate || !newJoinUrl.trim() || isSavingSession}
+                  className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-bold text-sm shadow-none shadow-indigo-100 hover:bg-indigo-700 disabled:opacity-60 transition-all active:scale-[0.99]"
                 >
-                  Create Session
+                  {isSavingSession ? 'Creating...' : 'Create Session'}
                 </button>
               </div>
             </motion.div>
@@ -952,7 +1063,7 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
               </div>
 
               <div className="flex-1 overflow-y-auto px-8 py-6 space-y-4 custom-scrollbar bg-white">
-                {[...archiveSessions, ...archiveSessions].map((session, i) => (
+                {archiveSessions.map((session, i) => (
                   <div 
                     key={`${session.id}-${i}`}
                     className="bg-white rounded-2xl border border-slate-100 p-5 flex items-center justify-between hover:shadow-none transition-all group"
@@ -1014,7 +1125,7 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
               <div className="px-6 py-5 border-b border-slate-50 flex items-center justify-between bg-white shrink-0">
                 <div className="space-y-1">
                   <h3 className="text-xl font-bold text-slate-900">All Announcements</h3>
-                  <p className="text-xs font-medium text-slate-400">Advanced Algebra 1 notifications</p>
+                  <p className="text-xs font-medium text-slate-400">{className || subject || 'Class'} notifications</p>
                 </div>
                 <button 
                   onClick={() => setIsAnnouncementsModalOpen(false)} 
@@ -1025,22 +1136,14 @@ export function LiveSessionsTab({ viewRole = 'TEACHER' }: { viewRole?: string })
               </div>
 
               <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4 custom-scrollbar bg-white">
-                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm text-slate-600">
-                  <p className="mb-2 font-medium">Make sure to review Chapter 4 before today&apos;s session. There will be a short quiz!</p>
-                  <span className="text-xs text-slate-400 font-medium tracking-wide">Yesterday, 8:00 PM</span>
-                </div>
-                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm text-slate-600">
-                  <p className="mb-2 font-medium">The mid-term project deadline has been extended to Friday. Good luck everyone!</p>
-                  <span className="text-xs text-slate-400 font-medium tracking-wide">Monday, 2:00 PM</span>
-                </div>
-                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm text-slate-600">
-                  <p className="mb-2 font-medium">Extra office hours this week will be on Wednesday from 3-5 PM.</p>
-                  <span className="text-xs text-slate-400 font-medium tracking-wide">Sunday, 11:30 AM</span>
-                </div>
-                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm text-slate-600">
-                  <p className="mb-2 font-medium">Welcome to Advanced Algebra 1! Please read the syllabus before our first session.</p>
-                  <span className="text-xs text-slate-400 font-medium tracking-wide">Aug 28, 2026</span>
-                </div>
+                {announcements.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-6">No announcements yet.</p>
+                ) : announcements.map((a) => (
+                  <div key={a.id} className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm text-slate-600">
+                    <p className="mb-2 font-medium">{a.content}</p>
+                    <span className="text-xs text-slate-400 font-medium tracking-wide">{new Date(a.createdAt).toLocaleString()}</span>
+                  </div>
+                ))}
               </div>
             </motion.div>
           </div>

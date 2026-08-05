@@ -326,7 +326,16 @@ export function MyClassesView({
       {/* TAB 2: CLASS SPACE VIEW */}
       {activeTab === 'space' && (
         <div className="w-full">
-          <ClassSpaceView />
+          <ClassSpaceView
+            authUser={authUser}
+            userRole={userRole}
+            classId={userRole === 'teacher' ? myClasses[0]?.id : myClassInfo?.id}
+            subject={userRole === 'teacher' ? (authUser.subjects || [])[0] : mySubjects[0]}
+            grade={userRole === 'teacher' ? myClasses[0]?.gradeLevel : myClassInfo?.gradeLevel}
+            className={userRole === 'teacher' ? myClasses[0]?.name : myClassInfo?.name}
+            myClasses={userRole === 'teacher' ? myClasses : (myClassInfo ? [myClassInfo] : [])}
+            mySubjects={userRole === 'teacher' ? (authUser.subjects || []) : mySubjects}
+          />
         </div>
       )}
     </div>

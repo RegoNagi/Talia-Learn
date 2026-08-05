@@ -18,7 +18,7 @@ import { createPortal } from 'react-dom';
 import { FloatingPortal } from '@floating-ui/react';
 import { AssessmentSidebar } from '@/components/AssessmentSidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { createAssignment, createQuiz, uploadAssignmentAttachment, getSubmissionFileUrl, getUnitsForAssignment, getAssignmentById, getQuizById, updateAssignment, updateQuiz, getTeacherOtherClasses, getClassRoster } from '@/services/assignmentData';
+import { createAssignment, createQuiz, uploadAssignmentAttachment, getSubmissionFileUrl, getUnitsForAssignment, getAssignmentById, getQuizById, updateAssignment, updateQuiz, getTeacherOtherClasses, getClassRoster, saveQuestionToBank, getQuestionBank, BankQuestion } from '@/services/assignmentData';
 import { getGradebookCategories } from '@/services/academicData';
 
 interface Question {
@@ -139,6 +139,38 @@ function AssessmentBuilderContent() {
   // UI State
   const [isAIDraftRoomOpen, setIsAIDraftRoomOpen] = useState(false);
   const [isBankDrawerOpen, setIsBankDrawerOpen] = useState(false);
+  const [bankQuestions, setBankQuestions] = useState<BankQuestion[]>([]);
+  const [isLoadingBank, setIsLoadingBank] = useState(false);
+  const [bankSearch, setBankSearch] = useState('');
+  const [selectedBankIds, setSelectedBankIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (isBankDrawerOpen && authUser?.teacherId && scopeSubject) {
+      setIsLoadingBank(true);
+      getQuestionBank(authUser.teacherId, scopeSubject).then((qs) => {
+        setBankQuestions(qs);
+        setIsLoadingBank(false);
+      });
+      setSelectedBankIds([]);
+    }
+  }, [isBankDrawerOpen, authUser?.teacherId, scopeSubject]);
+
+  const toggleBankSelection = (id: string) => {
+    setSelectedBankIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
+
+  const handleAddSelectedBankQuestions = () => {
+    const toAdd = bankQuestions
+      .filter((bq) => selectedBankIds.includes(bq.id))
+      .map((bq) => ({ ...bq.question, id: `q-${window.crypto.randomUUID()}`, sectionId: activeSectionId }));
+    setQuestions((prev) => [...prev, ...toAdd]);
+    setIsBankDrawerOpen(false);
+    addToast(`${toAdd.length} Question(s) Added`);
+  };
+
+  const filteredBankQuestions = bankQuestions.filter((bq) =>
+    (bq.question.text || '').toLowerCase().includes(bankSearch.toLowerCase())
+  );
   const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
 
   // AI Strategy Room State
@@ -1209,9 +1241,7 @@ function AssessmentBuilderContent() {
                     <div>
                       <div className="border border-slate-200 rounded-2xl overflow-hidden focus-within:border-indigo-300 focus-within:ring-4 focus-within:ring-indigo-50 transition-all">
                         <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center gap-2">
-                          <button className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"><Type size={14} /></button>
-                          <button className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"><AlignLeft size={14} /></button>
-                          <button className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"><ImageIcon size={14} /></button>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Instructions</span>
                         </div>
                         <textarea 
                           value={instructionsText}

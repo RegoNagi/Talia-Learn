@@ -1,110 +1,100 @@
 'use client';
 
-import React, { useState } from 'react';
-import Image from 'next/image';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   BarChart3, 
   Trophy, 
   AlertTriangle, 
   Eye, 
-  ChevronRight, 
-  GraduationCap,
-  Award,
   BookOpen
 } from 'lucide-react';
+import { getGradebookConfigFull, getRealAssessments, getRealGradeEntries } from '@/services/gradebookSync';
+import { getClassRoster } from '@/services/assignmentData';
 
 interface StudentGradeItem {
   rank: number;
   id: string;
   name: string;
-  avatar: string;
-  gpa: string;
-  scorePercentage: number;
-  gradeBadge: string;
+  total: number;
 }
 
-export function GradingWidget() {
+interface GradingWidgetProps {
+  classId?: string;
+  subject?: string;
+  grade?: string;
+}
+
+export function GradingWidget({ classId, subject, grade }: GradingWidgetProps) {
+  const router = useRouter();
   const [activeSubTab, setActiveSubTab] = useState<'top5' | 'atRisk'>('top5');
+  const [isLoading, setIsLoading] = useState(true);
+  const [ranked, setRanked] = useState<StudentGradeItem[]>([]);
+  const [passingScore, setPassingScore] = useState(60);
 
-  const topStudents: StudentGradeItem[] = [
-    {
-      rank: 1,
-      id: 'st-1',
-      name: 'Emma Thompson',
-      avatar: 'https://picsum.photos/seed/emma/100',
-      gpa: '3.98',
-      scorePercentage: 98,
-      gradeBadge: 'A+'
-    },
-    {
-      rank: 2,
-      id: 'st-2',
-      name: 'Alex Johnson',
-      avatar: 'https://picsum.photos/seed/alex/100',
-      gpa: '3.90',
-      scorePercentage: 95,
-      gradeBadge: 'A'
-    },
-    {
-      rank: 3,
-      id: 'st-3',
-      name: 'Liam Chen',
-      avatar: 'https://picsum.photos/seed/liam/100',
-      gpa: '3.85',
-      scorePercentage: 93,
-      gradeBadge: 'A'
-    },
-    {
-      rank: 4,
-      id: 'st-4',
-      name: 'Sophia Rodriguez',
-      avatar: 'https://picsum.photos/seed/sophia/100',
-      gpa: '3.78',
-      scorePercentage: 91,
-      gradeBadge: 'A-'
-    },
-    {
-      rank: 5,
-      id: 'st-5',
-      name: 'Marcus Vance',
-      avatar: 'https://picsum.photos/seed/marcus/100',
-      gpa: '3.70',
-      scorePercentage: 89,
-      gradeBadge: 'B+'
-    }
-  ];
+  useEffect(() => {
+    if (!classId || !subject || !grade) { setIsLoading(false); return; }
+    setIsLoading(true);
+    (async () => {
+      const config = await getGradebookConfigFull(subject, grade);
+      if (!config) { setIsLoading(false); setRanked([]); return; }
+      setPassingScore(config.passingScore || 60);
 
-  const atRiskStudents: StudentGradeItem[] = [
-    {
-      rank: 1,
-      id: 'st-6',
-      name: 'Noah Smith',
-      avatar: 'https://picsum.photos/seed/noah/100',
-      gpa: '2.10',
-      scorePercentage: 62,
-      gradeBadge: 'D+'
-    },
-    {
-      rank: 2,
-      id: 'st-7',
-      name: 'Jacob Miller',
-      avatar: 'https://picsum.photos/seed/jacob/100',
-      gpa: '2.25',
-      scorePercentage: 65,
-      gradeBadge: 'C-'
-    },
-    {
-      rank: 3,
-      id: 'st-8',
-      name: 'Chloe Davis',
-      avatar: 'https://picsum.photos/seed/chloe/100',
-      gpa: '2.40',
-      scorePercentage: 68,
-      gradeBadge: 'C'
-    }
-  ];
+      const [assessments, entries, roster] = await Promise.all([
+        getRealAssessments(config.id),
+        getRealGradeEntries(config.id),
+        getClassRoster(classId),
+      ]);
 
-  const currentList = activeSubTab === 'top5' ? topStudents : atRiskStudents;
+      const categories = Array.from(new Set(assessments.map((a) => a.category)));
+      const entryMap: Record<string, Record<string, number | null>> = {};
+      for (const e of entries) {
+        if (!entryMap[e.studentId]) entryMap[e.studentId] = {};
+        entryMap[e.studentId][e.assessmentId] = e.score;
+      }
+
+      const computeTotal = (studentEntries: Record<string, number | null>) => {
+        let total = 0;
+        let totalWeight = 0;
+        for (const cat of categories) {
+          const catAssessments = assessments.filter((a) => a.category === cat);
+          const weight = config.categoryWeights[cat] || 0;
+          if (weight === 0 || catAssessments.length === 0) continue;
+          const sumScore = catAssessments.reduce((s, a) => s + (studentEntries[a.id] ?? 0), 0);
+          const sumMax = catAssessments.reduce((s, a) => s + a.maxScore, 0);
+          if (sumMax === 0) continue;
+          total += (sumScore / sumMax) * weight;
+          totalWeight += weight;
+        }
+        return totalWeight > 0 ? (total / totalWeight) * 100 : null;
+      };
+
+      const results = roster
+        .map((s) => ({ id: s.id, name: s.name, total: computeTotal(entryMap[s.id] || {}) }))
+        .filter((r): r is { id: string; name: string; total: number } => r.total !== null)
+        .sort((a, b) => b.total - a.total)
+        .map((r, i) => ({ rank: i + 1, id: r.id, name: r.name, total: r.total }));
+
+      setRanked(results);
+      setIsLoading(false);
+    })();
+  }, [classId, subject, grade]);
+
+  const top5 = ranked.slice(0, 5);
+  const atRisk = ranked.filter((r) => r.total < passingScore).slice(-5).reverse().map((r, i) => ({ ...r, rank: i + 1 }));
+  const currentList = activeSubTab === 'top5' ? top5 : atRisk;
+
+  if (!classId || !subject) {
+    return (
+      <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
+        <div className="flex items-center gap-2 mb-2">
+          <BarChart3 size={18} className="text-indigo-600" />
+          <h3 className="font-extrabold text-sm text-slate-900">Grading</h3>
+        </div>
+        <p className="text-xs text-slate-400">Select a class and subject above to see grading data.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
@@ -114,13 +104,13 @@ export function GradingWidget() {
           <BarChart3 size={18} className="text-indigo-600" />
           <h3 className="font-extrabold text-sm text-slate-900">Grading</h3>
         </div>
-        <button className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+        <button onClick={() => router.push(`/courses/${classId}__${encodeURIComponent(subject || '')}?tab=gradebook`)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
           Full View <Eye size={12} />
         </button>
       </div>
 
       <div className="text-[11px] text-slate-400 font-bold mb-3">
-        Subject: <span className="text-slate-700">Math</span>
+        Subject: <span className="text-slate-700">{subject}</span>
       </div>
 
       {/* Tabs */}
@@ -146,17 +136,21 @@ export function GradingWidget() {
           }`}
         >
           <AlertTriangle size={13} className="text-rose-500" />
-          <span>5 At Risk</span>
+          <span>At Risk</span>
         </button>
       </div>
 
       <div className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider mb-2.5">
-        {activeSubTab === 'top5' ? 'Top 5 Performing Students' : 'Students Requiring Support'}
+        {activeSubTab === 'top5' ? 'Top Performing Students' : 'Students Requiring Support'}
       </div>
 
       {/* Student List */}
       <div className="space-y-2 mb-4">
-        {currentList.map((st) => (
+        {isLoading ? (
+          <p className="text-xs text-slate-400 text-center py-4">Loading...</p>
+        ) : currentList.length === 0 ? (
+          <p className="text-xs text-slate-400 text-center py-4">No graded data yet.</p>
+        ) : currentList.map((st) => (
           <div
             key={st.id}
             className="flex items-center justify-between p-2 rounded-xl bg-slate-50/80 hover:bg-slate-100/80 transition-colors border border-slate-100"
@@ -167,31 +161,18 @@ export function GradingWidget() {
               }`}>
                 #{st.rank}
               </span>
-              <div className="w-7 h-7 rounded-full bg-slate-200 relative overflow-hidden shrink-0">
-                <Image src={st.avatar} alt={st.name} fill className="object-cover" referrerPolicy="no-referrer" />
-              </div>
-              <div>
-                <h4 className="font-bold text-xs text-slate-900 leading-tight">{st.name}</h4>
-                <span className="text-[10px] text-slate-400 font-semibold">GPA: {st.gpa}</span>
-              </div>
+              <h4 className="font-bold text-xs text-slate-900 leading-tight">{st.name}</h4>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <span className={`text-xs font-black ${activeSubTab === 'top5' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                {st.scorePercentage}%
-              </span>
-              <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md ${
-                activeSubTab === 'top5' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-              }`}>
-                {st.gradeBadge}
-              </span>
-            </div>
+            <span className={`text-xs font-black ${activeSubTab === 'top5' ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {st.total.toFixed(1)}%
+            </span>
           </div>
         ))}
       </div>
 
       {/* Footer Button */}
-      <button className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-98">
+      <button onClick={() => router.push(`/courses/${classId}__${encodeURIComponent(subject || '')}?tab=gradebook`)} className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-98">
         <BookOpen size={14} />
         <span>Open Full Gradebook</span>
       </button>

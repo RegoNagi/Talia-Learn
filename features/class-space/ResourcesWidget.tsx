@@ -21,24 +21,12 @@ export function ResourcesWidget({
   selectedCategory,
   onCategoryChange
 }: ResourcesWidgetProps) {
-  const sampleItems = [
-    {
-      id: 'res-1',
-      title: 'Linear Algebra Unit 1 Study Guide',
-      type: 'DOCUMENT',
-      size: '2.4 MB',
-      author: 'Ms. Sarah Jenkins',
-      typeBg: 'bg-emerald-100 text-emerald-800'
-    },
-    {
-      id: 'res-2',
-      title: 'Eigenvector Visual Explanation Video',
-      type: 'VIDEO',
-      size: '142 MB',
-      author: 'Dr. Robert Vance',
-      typeBg: 'bg-teal-100 text-teal-800'
-    }
-  ];
+  const typeBgMap: Record<string, string> = {
+    PDF: 'bg-emerald-100 text-emerald-800',
+    VIDEO: 'bg-teal-100 text-teal-800',
+    AUDIO: 'bg-purple-100 text-purple-800',
+    SCORM: 'bg-indigo-100 text-indigo-800',
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
@@ -50,7 +38,7 @@ export function ResourcesWidget({
         </div>
 
         <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
-          2 items
+          {resources.length} items
         </span>
       </div>
 
@@ -68,27 +56,33 @@ export function ResourcesWidget({
 
       {/* Items */}
       <div className="space-y-2 mb-4">
-        {sampleItems.map((res) => (
-          <div
+        {isLoading ? (
+          <p className="text-xs text-slate-400 text-center py-4">Loading...</p>
+        ) : resources.length === 0 ? (
+          <p className="text-xs text-slate-400 text-center py-4">No resources yet.</p>
+        ) : resources.map((res) => (
+          <a
             key={res.id}
-            className="p-3 rounded-xl border border-slate-100 bg-slate-50/60 hover:bg-slate-100/60 transition-colors"
+            href={res.url || undefined}
+            target="_blank"
+            rel="noreferrer"
+            className="block p-3 rounded-xl border border-slate-100 bg-slate-50/60 hover:bg-slate-100/60 transition-colors"
           >
             <div className="flex items-start justify-between gap-2 mb-1">
-              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md ${res.typeBg}`}>
+              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md ${typeBgMap[res.type] || 'bg-slate-100 text-slate-700'}`}>
                 {res.type}
               </span>
-              <span className="text-[10px] text-slate-400 font-semibold">{res.size}</span>
+              {res.fileSize && <span className="text-[10px] text-slate-400 font-semibold">{res.fileSize}</span>}
             </div>
 
             <h4 className="font-bold text-xs text-slate-900 leading-tight mb-1">{res.title}</h4>
 
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-[10px] text-slate-400 font-medium">By {res.author}</span>
-              <button className="text-xs font-extrabold text-emerald-600 hover:text-emerald-700 flex items-center gap-0.5">
+            <div className="flex items-center justify-end pt-1">
+              <span className="text-xs font-extrabold text-emerald-600 hover:text-emerald-700 flex items-center gap-0.5">
                 <Download size={12} /> Get
-              </button>
+              </span>
             </div>
-          </div>
+          </a>
         ))}
       </div>
 

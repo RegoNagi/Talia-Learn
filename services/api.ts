@@ -4,8 +4,6 @@ import {
   HomeworkItem, 
   QuizItem, 
   ResourceItem, 
-  StudentHealthData, 
-  StudentSkillsData,
   ClassSpaceFilterState,
   AIChallenge,
   User
@@ -301,164 +299,11 @@ const INITIAL_RESOURCES: ResourceItem[] = [
   }
 ];
 
-// --- SEGREGATED HEALTH DATA MOCK (Wellbeing, Sleep, Attendance, Activity) ---
-const INITIAL_HEALTH_DATA: StudentHealthData[] = [
-  {
-    id: 'h-1',
-    studentId: 'st-101',
-    studentName: 'Alex Johnson',
-    avatar: 'https://picsum.photos/seed/alex/100',
-    className: '10-A',
-    attendancePercentage: 98,
-    sleepHoursAverage: 8.2,
-    physicalActivityMinutes: 45,
-    moodStatus: 'Happy',
-    wellbeingScore: 92,
-    lastLoggedDate: '2026-08-03',
-  },
-  {
-    id: 'h-2',
-    studentId: 'st-102',
-    studentName: 'Emma Thompson',
-    avatar: 'https://picsum.photos/seed/emma/100',
-    className: '10-A',
-    attendancePercentage: 94,
-    sleepHoursAverage: 7.5,
-    physicalActivityMinutes: 60,
-    moodStatus: 'Focused',
-    wellbeingScore: 88,
-    lastLoggedDate: '2026-08-03',
-  },
-  {
-    id: 'h-3',
-    studentId: 'st-103',
-    studentName: 'Liam Chen',
-    avatar: 'https://picsum.photos/seed/liam/100',
-    className: '10-A',
-    attendancePercentage: 86,
-    sleepHoursAverage: 5.8,
-    physicalActivityMinutes: 15,
-    moodStatus: 'Tired',
-    wellbeingScore: 64,
-    lastLoggedDate: '2026-08-03',
-    alerts: ['Sleep under 6 hours for 3 consecutive days', 'Attendance dropped below 90%']
-  },
-  {
-    id: 'h-4',
-    studentId: 'st-104',
-    studentName: 'Sophia Rodriguez',
-    avatar: 'https://picsum.photos/seed/sophia/100',
-    className: '10-B',
-    attendancePercentage: 100,
-    sleepHoursAverage: 8.8,
-    physicalActivityMinutes: 50,
-    moodStatus: 'Happy',
-    wellbeingScore: 96,
-    lastLoggedDate: '2026-08-03',
-  },
-  {
-    id: 'h-5',
-    studentId: 'st-105',
-    studentName: 'Noah Smith',
-    avatar: 'https://picsum.photos/seed/noah/100',
-    className: '10-B',
-    attendancePercentage: 91,
-    sleepHoursAverage: 6.4,
-    physicalActivityMinutes: 30,
-    moodStatus: 'Stressed',
-    wellbeingScore: 72,
-    lastLoggedDate: '2026-08-03',
-    alerts: ['High stress reported before Math Midterm']
-  }
-];
-
-// --- SEGREGATED SKILLS DATA MOCK (Bloom's Taxonomy & Competencies) ---
-const INITIAL_SKILLS_DATA: StudentSkillsData[] = [
-  {
-    id: 'sk-1',
-    studentId: 'st-101',
-    studentName: 'Alex Johnson',
-    avatar: 'https://picsum.photos/seed/alex/100',
-    className: '10-A',
-    subject: 'Mathematics',
-    bloomLevels: {
-      remember: 95,
-      understand: 90,
-      apply: 85,
-      analyze: 80,
-      evaluate: 72,
-      create: 68
-    },
-    competencies: {
-      criticalThinking: 84,
-      problemSolving: 88,
-      collaboration: 92,
-      digitalLiteracy: 95
-    },
-    overallMasteryPercentage: 86,
-    topSkill: 'Digital Literacy & Applied Problem Solving',
-    needsImprovementSkill: 'Evaluation & Complex Synthesis'
-  },
-  {
-    id: 'sk-2',
-    studentId: 'st-102',
-    studentName: 'Emma Thompson',
-    avatar: 'https://picsum.photos/seed/emma/100',
-    className: '10-A',
-    subject: 'Mathematics',
-    bloomLevels: {
-      remember: 98,
-      understand: 96,
-      apply: 92,
-      analyze: 90,
-      evaluate: 88,
-      create: 84
-    },
-    competencies: {
-      criticalThinking: 92,
-      problemSolving: 90,
-      collaboration: 96,
-      digitalLiteracy: 90
-    },
-    overallMasteryPercentage: 92,
-    topSkill: 'Peer Collaboration & Creative Design',
-    needsImprovementSkill: 'Speed in Time-bounded Exams'
-  },
-  {
-    id: 'sk-3',
-    studentId: 'st-103',
-    studentName: 'Liam Chen',
-    avatar: 'https://picsum.photos/seed/liam/100',
-    className: '10-A',
-    subject: 'Physics',
-    bloomLevels: {
-      remember: 80,
-      understand: 75,
-      apply: 65,
-      analyze: 58,
-      evaluate: 50,
-      create: 45
-    },
-    competencies: {
-      criticalThinking: 62,
-      problemSolving: 60,
-      collaboration: 70,
-      digitalLiteracy: 78
-    },
-    overallMasteryPercentage: 65,
-    topSkill: 'Factual Memory & Digital Tools',
-    needsImprovementSkill: 'Analytical Problem Solving'
-  }
-];
-
-// Stateful local stores for mutations simulation
 let postsStore = [...INITIAL_POSTS];
 let liveSessionsStore = [...INITIAL_LIVE_SESSIONS];
 let homeworkStore = [...INITIAL_HOMEWORK];
 let quizzesStore = [...INITIAL_QUIZZES];
 let resourcesStore = [...INITIAL_RESOURCES];
-let healthStore = [...INITIAL_HEALTH_DATA];
-let skillsStore = [...INITIAL_SKILLS_DATA];
 
 export const classSpaceApi = {
   // Current User
@@ -624,26 +469,6 @@ export const classSpaceApi = {
     if (query && query.trim()) {
       const q = query.toLowerCase();
       list = list.filter(r => r.title.toLowerCase().includes(q) || r.type.toLowerCase().includes(q));
-    }
-    return list;
-  },
-
-  // --- DISTINCT HEALTH DATA ENDPOINTS ---
-  async getHealthData(filters?: ClassSpaceFilterState): Promise<StudentHealthData[]> {
-    await delay(350);
-    let list = [...healthStore];
-    if (filters?.className && filters.className !== 'All Classes') {
-      list = list.filter(h => h.className === filters.className);
-    }
-    return list;
-  },
-
-  // --- DISTINCT SKILLS DATA ENDPOINTS ---
-  async getSkillsData(filters?: ClassSpaceFilterState): Promise<StudentSkillsData[]> {
-    await delay(350);
-    let list = [...skillsStore];
-    if (filters?.className && filters.className !== 'All Classes') {
-      list = list.filter(s => s.className === filters.className);
     }
     return list;
   }

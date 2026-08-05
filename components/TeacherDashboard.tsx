@@ -1,429 +1,421 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Users, CheckCircle, Clock, MessageSquare, AlertTriangle, 
-  BookOpen, Video, ChevronDown, Check, Send, AlertCircle, TrendingDown, Bell,
-  FileText, Brain
-} from 'lucide-react';
-import Image from 'next/image';
 import { motion, AnimatePresence } from 'motion/react';
+import { useRouter } from 'next/navigation';
+import { getMyClassSections, LearnClassSection } from '@/services/attendanceData';
+import {
+  getTodayAttendanceSummary,
+  getGradingSummaries,
+  getTodaySchedule,
+  getContentProgression,
+  getPendingRewardsCount,
+  AttendanceSummary,
+  GradingSummary,
+  ScheduleItem,
+  ProgressionItem,
+} from '@/services/dashboardData';
 
-// Reusable Select Component
-function CustomSelect({ 
-  label,
-  options, 
-  value, 
-  onChange 
-}: { 
-  label?: string;
-  options: {id: string, label: string}[], 
-  value: string, 
-  onChange: (val: string) => void 
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+const ACCENT = '#ea580c';
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const selectedLabel = options.find(o => o.id === value)?.label || value;
-
+function Icon({ path, size = 16, stroke = 'currentColor', width = 1.8 }: { path: string; size?: number; stroke?: string; width?: number }) {
   return (
-    <div className="relative z-20 flex flex-col gap-1.5" ref={dropdownRef}>
-      {label && <label className="text-xs font-bold text-slate-500">{label}</label>}
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center justify-between gap-3 px-4 py-2.5 bg-white border rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm w-full min-w-[160px] ${isOpen ? 'border-orange-500 ring-2 ring-orange-50' : 'border-slate-200'}`}
-      >
-        <span className="truncate">{selectedLabel}</span>
-        <ChevronDown size={16} className={`text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div 
-            initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.15 }}
-            className="absolute top-full start-0 w-full mt-1.5 bg-white border border-slate-100 rounded-xl z-50 py-1 shadow-lg overflow-hidden"
-          >
-            <div className="max-h-60 overflow-y-auto">
-              {options.map(opt => (
-                <button
-                  key={opt.id}
-                  onClick={() => { onChange(opt.id); setIsOpen(false); }}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 text-sm text-start transition-colors ${value === opt.id ? 'text-orange-600 font-bold bg-orange-50/50' : 'text-slate-700 font-medium'}`}
-                >
-                  <span className="truncate">{opt.label}</span>
-                  {value === opt.id && <Check size={16} className="text-orange-600 shrink-0" />}
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke={stroke} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round">
+      <path d={path} />
+    </svg>
+  );
+}
+
+function RingProgress({ value, size = 106, stroke = 9, label, sub }: { value: number; size?: number; stroke?: number; label: string; sub: string }) {
+  const r = 34;
+  const c = 2 * Math.PI * r;
+  const offset = c - (Math.min(value, 100) / 100) * c;
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flex: `0 0 ${size}px` }}>
+      <svg viewBox="0 0 80 80" width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={40} cy={40} r={r} fill="none" stroke="#f4f4f5" strokeWidth={stroke} />
+        <circle cx={40} cy={40} r={r} fill="none" stroke={ACCENT} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset} />
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontSize: size > 90 ? 27 : 15, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1 }}>{label}</span>
+        <span style={{ fontSize: size > 90 ? 10.5 : 9, color: '#a1a1aa', whiteSpace: 'nowrap' }}>{sub}</span>
+      </div>
     </div>
   );
 }
 
-export function TeacherDashboard({ language = 'ar', userRole }: { language?: 'ar' | 'en', userRole?: string }) {
-  const [grade, setGrade] = useState('4');
-  const [selectedClass, setSelectedClass] = useState('all');
-  const [activeSubject, setActiveSubject] = useState('math');
+function FlatFilterDropdown({ options, value, onChange, placeholder }: { options: { id: string; label: string }[]; value: string; onChange: (v: string) => void; placeholder: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+  const selectedLabel = value === 'all' ? placeholder : options.find((o) => o.id === value)?.label || placeholder;
+  return (
+    <div style={{ position: 'relative' }} ref={ref}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ display: 'flex', alignItems: 'center', gap: 9, whiteSpace: 'nowrap', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500, color: '#09090b', background: '#fff', border: '1px solid #e4e4e7', borderRadius: 11, padding: '8px 13px', cursor: 'pointer' }}
+      >
+        <Icon path="M4 5h16v12H4zM8 21h8M12 17v4" stroke="#a1a1aa" />
+        {selectedLabel}
+        <Icon path="m6 9 6 6 6-6" size={13} stroke="#a1a1aa" width={2} />
+      </button>
+      {isOpen && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 7px)', left: 0, zIndex: 50, minWidth: 176, background: '#fff', border: '1px solid #e4e4e7', borderRadius: 14, boxShadow: '0 18px 40px rgba(16,24,40,0.12)', padding: 5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <button onClick={() => { onChange('all'); setIsOpen(false); }} style={{ fontFamily: 'inherit', fontSize: 12.5, fontWeight: value === 'all' ? 600 : 500, color: value === 'all' ? '#09090b' : '#71717a', background: 'transparent', border: 'none', borderRadius: 9, padding: '8px 10px', textAlign: 'left', cursor: 'pointer' }}>
+            {placeholder === 'Class' ? 'All classes' : 'All'}
+          </button>
+          {options.map((opt) => (
+            <button key={opt.id} onClick={() => { onChange(opt.id); setIsOpen(false); }} style={{ fontFamily: 'inherit', fontSize: 12.5, fontWeight: value === opt.id ? 600 : 500, color: value === opt.id ? '#09090b' : '#71717a', background: 'transparent', border: 'none', borderRadius: 9, padding: '8px 10px', textAlign: 'left', cursor: 'pointer' }}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
-  const filterOptions = {
-    grade: [
-      { id: '4', label: 'Grade 4' },
-      { id: '5', label: 'Grade 5' }
-    ],
-    classes: [
-      { id: 'all', label: 'All Classes' },
-      { id: '4A', label: '4A' },
-      { id: '4B', label: '4B' }
-    ]
-  };
+export function TeacherDashboard({ language = 'en', userRole = 'teacher', authUser, onNavigate }: { language?: 'ar' | 'en'; userRole?: string; authUser?: any; onNavigate?: (space: string) => void }) {
+  const router = useRouter();
+  const isRtl = language === 'ar';
+  const teacherId: string | undefined = authUser?.teacherId;
+  const subjectsAll: string[] = authUser?.subjects || [];
 
-  const subjects = [
-    { id: 'math', label: 'Mathematics' },
-    { id: 'science', label: 'Science' },
-    { id: 'arabic', label: 'Arabic' },
-    { id: 'history', label: 'History' },
-  ];
+  const [sections, setSections] = useState<LearnClassSection[]>([]);
+  const [gradeFilter, setGradeFilter] = useState('all');
+  const [classFilter, setClassFilter] = useState('all');
+  const [subjectFilter, setSubjectFilter] = useState('all');
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Mock aggregated vs specific class data
-  const isAllClasses = selectedClass === 'all';
-  
-  const kpis = {
-    totalStudents: isAllClasses ? 56 : 28,
-    attendance: isAllClasses ? { present: 54, absent: 2 } : { present: 28, absent: 0 },
-    homework: isAllClasses ? 12 : 5,
-    assignments: isAllClasses ? 3 : 1,
-    assessments: isAllClasses ? 2 : 1,
-  };
+  const [attendance, setAttendance] = useState<AttendanceSummary>({ present: 0, total: 0, absentStudentIds: [] });
+  const [grading, setGrading] = useState<{ assignments: GradingSummary[]; quizzes: GradingSummary[] }>({ assignments: [], quizzes: [] });
+  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
+  const [progression, setProgression] = useState<ProgressionItem[]>([]);
+  const [pendingRewards, setPendingRewards] = useState(0);
 
-  const pendingTasks = [
-    { id: 1, title: 'Grade First Weekly Assessment', class: '4A', type: 'assessment', urgent: true },
-    { id: 2, title: 'Review Algebra Assignment', class: '4B', type: 'homework', urgent: false },
-    { id: 3, title: 'Prepare Fractions Lesson', class: '4A', type: 'prep', urgent: false },
-  ];
+  const scopedSections = sections.filter((s) => (gradeFilter === 'all' || s.gradeLevel === gradeFilter) && (classFilter === 'all' || s.id === classFilter));
+  const scopedSubjects = subjectFilter === 'all' ? subjectsAll : [subjectFilter];
 
-  const radarAlerts = [
-    { id: 1, student: 'Ahmed Hassan', avatar: 'https://picsum.photos/seed/ahmed/100', issue: 'Drop in Weekly Assessment grades', type: 'academic', class: '4A' },
-    { id: 2, student: 'Sarah Mohamed', avatar: 'https://picsum.photos/seed/sarah2/100', issue: 'Exceeded absence limit', type: 'attendance', class: '4B' },
-  ];
+  useEffect(() => {
+    if (!teacherId) { setIsLoading(false); return; }
+    getMyClassSections(teacherId).then(setSections);
+  }, [teacherId]);
 
-  const schedule = [
-    { id: 1, time: '08:00 AM', title: 'Math', type: 'physical', location: 'Bldg A - Class 4A', status: 'completed' },
-    { id: 2, time: '10:30 AM', title: 'Live Review', type: 'virtual', location: 'Online - Class 4B', status: 'current' },
-    { id: 3, time: '12:00 PM', title: 'Science', type: 'physical', location: 'Main Lab - Class 4C', status: 'upcoming' },
-  ];
+  useEffect(() => {
+    if (!teacherId || sections.length === 0) { if (!teacherId) setIsLoading(false); return; }
+    setIsLoading(true);
+    Promise.all([
+      getTodayAttendanceSummary(scopedSections),
+      getGradingSummaries(scopedSections, scopedSubjects, teacherId),
+      getTodaySchedule(scopedSections, scopedSubjects),
+      getContentProgression(scopedSections, scopedSubjects, teacherId),
+      getPendingRewardsCount(scopedSections, scopedSubjects),
+    ]).then(([att, grd, sch, prog, rewards]) => {
+      setAttendance(att);
+      setGrading(grd);
+      setSchedule(sch);
+      setProgression(prog);
+      setPendingRewards(rewards);
+      setIsLoading(false);
+    });
+  }, [teacherId, sections, gradeFilter, classFilter, subjectFilter]);
 
-  const visibleTasks = isAllClasses ? pendingTasks : pendingTasks.filter(t => t.class === selectedClass);
-  const visibleAlerts = isAllClasses ? radarAlerts : radarAlerts.filter(a => a.class === selectedClass);
+  if (userRole !== 'teacher') {
+    return (
+      <div style={{ maxWidth: 1440, margin: '0 auto', padding: '40px 24px' }}>
+        <h1 style={{ fontSize: 24, fontWeight: 600 }}>{isRtl ? 'الرئيسية' : 'Home'}</h1>
+        <p style={{ color: '#71717a', fontSize: 14 }}>{isRtl ? 'مرحبًا بيك' : 'Welcome'}</p>
+      </div>
+    );
+  }
+
+  const totalAssignmentsToGrade = grading.assignments.reduce((s, a) => s + a.toGrade, 0);
+  const totalQuizzesToGrade = grading.quizzes.reduce((s, q) => s + q.toGrade, 0);
+  const totalSubmissions = grading.assignments.reduce((s, a) => s + a.totalSubmissions, 0);
+  const submissionAvgPct = totalSubmissions > 0 ? Math.round((grading.assignments.reduce((s, a) => s + (a.totalSubmissions - a.toGrade), 0) / totalSubmissions) * 100) : 0;
+  const liveNowCount = schedule.filter((s) => s.isLive).length;
+  const heroQuiz = grading.quizzes[0];
+
+  const gradeOptions = Array.from(new Set(sections.map((s) => s.gradeLevel))).map((g) => ({ id: g, label: isRtl ? `الصف ${g}` : `Grade ${g}` }));
+  const classOptions = sections.filter((s) => gradeFilter === 'all' || s.gradeLevel === gradeFilter).map((s) => ({ id: s.id, label: s.name }));
+  const subjectOptions = subjectsAll.map((s) => ({ id: s, label: s }));
+
+  const actionItems = [
+    ...grading.assignments.map((a) => ({ kind: 'assignment' as const, title: (isRtl ? 'تصحيح: ' : 'Grade: ') + a.title, className: a.className, detail: `${a.toGrade} ${isRtl ? 'بانتظار التصحيح' : 'waiting'}`, assessmentId: a.assessmentId })),
+    ...grading.quizzes.map((q) => ({ kind: 'quiz' as const, title: (isRtl ? 'تصحيح: ' : 'Grade: ') + q.title, className: q.className, detail: `${q.toGrade} ${isRtl ? 'بانتظار التصحيح' : 'waiting'}`, assessmentId: q.assessmentId })),
+  ].slice(0, 6);
+
+  const goToAssessments = (classId: string, subject: string) => router.push(`/courses/${classId}__${encodeURIComponent(subject)}?tab=assessments`);
+  const findSectionByName = (name: string) => sections.find((s) => s.name === name);
+
+  const cardStyle: React.CSSProperties = { background: '#fff', border: '1px solid #f0f0f2', borderRadius: 20, boxShadow: '0 1px 2px rgba(16,24,40,0.04)' };
 
   return (
-    <div className="w-full flex flex-col gap-6" dir="ltr">
-      {/* 1. Master Filter & Subject Chips */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-4 self-start w-fit">
-        <div className="flex gap-4 items-end">
-          <div className="w-[180px]">
-            <CustomSelect label="Grade" options={filterOptions.grade} value={grade} onChange={setGrade} />
+    <div dir={isRtl ? 'rtl' : 'ltr'} style={{ maxWidth: 1440, margin: '0 auto', padding: '0 24px 44px 24px', fontFamily: "'Geist', -apple-system, BlinkMacSystemFont, sans-serif" }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 22, flexWrap: 'wrap', padding: '26px 2px 16px 2px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: '#a1a1aa' }}>
+            <span>TaliaLearn</span><span>/</span><span style={{ color: '#09090b', fontWeight: 500 }}>{isRtl ? 'الرئيسية' : 'Home'}</span>
           </div>
-          <div className="w-[180px]">
-            <CustomSelect label="Class" options={filterOptions.classes} value={selectedClass} onChange={setSelectedClass} />
-          </div>
+          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 600, letterSpacing: '-0.03em' }}>{isRtl ? 'لوحة التحكم' : 'Dashboard'}</h1>
+          <p style={{ margin: 0, fontSize: 12.5, color: '#71717a' }}>
+            {new Date().toLocaleDateString(isRtl ? 'ar-EG' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })} · {schedule.length} {isRtl ? 'حصص اليوم' : 'periods today'} · {liveNowCount} {isRtl ? 'مباشر الآن' : 'live now'}
+          </p>
         </div>
+      </div>
 
-        <div className="flex overflow-x-auto pb-1 gap-2 no-scrollbar">
-          {subjects.map(subj => {
-            const isActive = activeSubject === subj.id;
+      {/* Filter bar */}
+      <div style={{ position: 'sticky', top: 10, zIndex: 40, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(16px)', border: '1px solid #f0f0f2', borderRadius: 16, boxShadow: '0 6px 22px rgba(16,24,40,0.05)', padding: '9px 12px', marginBottom: 16 }}>
+        <FlatFilterDropdown options={gradeOptions} value={gradeFilter} onChange={(v) => { setGradeFilter(v); setClassFilter('all'); }} placeholder={isRtl ? 'الصف' : 'Grade'} />
+        <FlatFilterDropdown options={classOptions} value={classFilter} onChange={setClassFilter} placeholder={isRtl ? 'الفصل' : 'Class'} />
+        <span style={{ width: 1, height: 24, background: '#f0f0f2' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {subjectsAll.map((subj) => {
+            const on = subjectFilter === subj;
             return (
               <button
-                key={subj.id}
-                onClick={() => setActiveSubject(subj.id)}
-                className={`px-4 py-2 rounded-full font-medium whitespace-nowrap transition-all text-sm ${
-                  isActive 
-                    ? 'bg-blue-600 text-white border border-transparent' 
-                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
+                key={subj}
+                onClick={() => setSubjectFilter(on ? 'all' : subj)}
+                style={{ whiteSpace: 'nowrap', fontFamily: 'inherit', fontSize: 12.5, fontWeight: on ? 600 : 500, color: on ? '#fff' : '#71717a', background: on ? ACCENT : 'transparent', border: `1px solid ${on ? ACCENT : 'transparent'}`, borderRadius: 999, padding: '7px 14px', cursor: 'pointer' }}
               >
-                {subj.label}
+                {subj}
               </button>
             );
           })}
         </div>
+        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', fontSize: 11.5, color: '#71717a' }}>
+          <span style={{ width: 6, height: 6, borderRadius: 999, background: ACCENT }} />
+          {scopedSubjects.length === subjectsAll.length ? (isRtl ? 'كل المواد' : 'All subjects') : scopedSubjects.join(', ')} · {gradeFilter === 'all' ? (isRtl ? 'كل الصفوف' : 'All grades') : gradeFilter}
+        </span>
       </div>
 
-      {/* 2. Live KPIs Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* KPI 1 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-start">
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-slate-600">Total Students</span>
-            <span className="text-3xl font-bold text-slate-900 mt-2">{kpis.totalStudents}</span>
-          </div>
-          <div className="w-12 h-12 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-            <Users size={24} />
-          </div>
-        </div>
-
-        {/* KPI 2 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-start">
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-slate-600">Today&apos;s Attendance</span>
-            <span className="text-3xl font-bold text-slate-900 mt-2 flex items-baseline gap-2">
-              {kpis.attendance.present}
-              <span className="text-sm font-medium text-slate-500">/ {kpis.attendance.absent} Absent</span>
-            </span>
-          </div>
-          <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <CheckCircle size={24} />
-          </div>
-        </div>
-
-        {/* KPI 3 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-start">
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-slate-600">Homework</span>
-            <span className="text-3xl font-bold text-slate-900 mt-2">{kpis.homework}</span>
-            <span className="text-xs text-slate-500 mt-1">To grade</span>
-          </div>
-          <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <BookOpen size={24} />
-          </div>
-        </div>
-
-        {/* KPI 4 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-start">
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-slate-600">Assignments</span>
-            <span className="text-3xl font-bold text-slate-900 mt-2">{kpis.assignments}</span>
-            <span className="text-xs text-slate-500 mt-1">Active</span>
-          </div>
-          <div className="w-12 h-12 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
-            <Clock size={24} />
-          </div>
-        </div>
-
-        {/* KPI 5 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-start">
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-slate-600">Assessments</span>
-            <span className="text-3xl font-bold text-slate-900 mt-2">{kpis.assessments}</span>
-            <span className="text-xs text-slate-500 mt-1">General</span>
-          </div>
-          <div className="w-12 h-12 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
-            <FileText size={24} />
-          </div>
-        </div>
-
-        {/* KPI 6 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-start">
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-slate-600">Weekly Assessment</span>
-            <span className="text-3xl font-bold text-slate-900 mt-2">{isAllClasses ? 5 : 2}</span>
-            <span className="text-xs text-slate-500 mt-1">To grade</span>
-          </div>
-          <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-            <Brain size={24} />
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Main Workspace */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        
-        {/* Right Column (Takes 2 cols on xl) */}
-        <div className="xl:col-span-2 flex flex-col gap-6">
-          
-          {/* Action Center & To-Do */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                <Bell className="text-orange-500" size={24} />
-                Action Center
-              </h2>
-              <button className="text-sm font-bold text-orange-600 hover:text-orange-700 transition-colors">
-                View All
-              </button>
+      {isLoading ? (
+        <div style={{ ...cardStyle, padding: 60, textAlign: 'center', color: '#a1a1aa', fontSize: 13 }}>{isRtl ? 'جاري التحميل...' : 'Loading...'}</div>
+      ) : (
+      <>
+      {/* Row 1 */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+        <section style={{ ...cardStyle, flex: '1.35 1 340px', minWidth: 0, padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#71717a' }}>{isRtl ? 'حضور اليوم' : "Today's Attendance"}</span>
+              <span style={{ fontSize: 11.5, color: '#a1a1aa' }}>{isRtl ? 'إجمالي فصولك' : 'Across your classes'}</span>
             </div>
-            
-            <div className="flex flex-col gap-3">
-              {visibleTasks.map(task => (
-                <div key={task.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-slate-100 hover:border-orange-100 hover:bg-orange-50/30 transition-all bg-slate-50/50 group gap-4">
-                  <div className="flex items-start sm:items-center gap-4">
-                    <div className={`w-2 h-2 rounded-full mt-2 sm:mt-0 shrink-0 ${task.urgent ? 'bg-rose-500 animate-pulse ring-4 ring-rose-100' : 'bg-slate-300'}`}></div>
-                    <div>
-                      <h4 className="font-bold text-slate-800 mb-1 group-hover:text-orange-600 transition-colors">{task.title}</h4>
-                      {isAllClasses && (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-white border border-slate-200 text-slate-600 shadow-sm">
-                          Class {task.class}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+            <RingProgress value={attendance.total > 0 ? (attendance.present / attendance.total) * 100 : 0} label={attendance.total > 0 ? `${Math.round((attendance.present / attendance.total) * 100)}%` : '—'} sub={isRtl ? 'حاضر' : 'present'} />
+            <div style={{ flex: '1 1 190px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                <span style={{ fontSize: 44, fontWeight: 700, letterSpacing: '-0.045em', lineHeight: 0.82, color: ACCENT }}>{attendance.present}</span>
+                <span style={{ fontSize: 24, fontWeight: 400, letterSpacing: '-0.02em', color: '#a1a1aa', paddingBottom: 2 }}>/ {attendance.total}</span>
+              </div>
+              <span style={{ fontSize: 11, color: '#a1a1aa' }}>{isRtl ? 'حاضر من الإجمالي' : 'present of total students'}</span>
+              {attendance.absentStudentIds.length > 0 && (
+                <span style={{ display: 'inline-flex', width: 'fit-content', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: '#be123c', background: '#fff1f2', border: '1px solid #ffe4e6', borderRadius: 999, padding: '4px 9px' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: 999, background: '#e11d48' }} />
+                  {attendance.absentStudentIds.length} {isRtl ? 'غايب' : 'Absent'}
+                </span>
+              )}
+            </div>
+          </div>
+          <button type="button" onClick={() => onNavigate && onNavigate('attendance')} style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, color: ACCENT, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}>
+            {isRtl ? 'تسجيل الحضور' : 'Take Attendance'}
+            <Icon path="M5 12h14M13 6l6 6-6 6" size={14} width={2} />
+          </button>
+        </section>
+
+        <section style={{ flex: '0.95 1 250px', minWidth: 0, position: 'relative', overflow: 'hidden', borderRadius: 20, background: 'linear-gradient(155deg,#fb923c 0%,#ea580c 55%,#c2410c 100%)', color: '#fff', padding: 20, display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 12px 30px rgba(234,88,12,0.22)' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.85)' }}>{isRtl ? 'تصحيح الكويزات' : 'Quiz Grading'}</span>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+            <span style={{ fontSize: 46, fontWeight: 700, letterSpacing: '-0.045em', lineHeight: 0.82 }}>{totalQuizzesToGrade}</span>
+          </div>
+          <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.82)' }}>
+            {heroQuiz ? `${heroQuiz.title} · ${heroQuiz.className}` : (isRtl ? 'مفيش كويزات محتاجة تصحيح' : 'No quizzes need grading')}
+          </span>
+          <button
+            type="button"
+            disabled={!heroQuiz}
+            onClick={() => { if (heroQuiz) { const sec = findSectionByName(heroQuiz.className); if (sec) goToAssessments(sec.id, scopedSubjects[0] || subjectsAll[0]); } }}
+            style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: '#c2410c', background: '#fff', border: 'none', borderRadius: 11, padding: '11px 16px', cursor: heroQuiz ? 'pointer' : 'default', opacity: heroQuiz ? 1 : 0.6 }}
+          >
+            {isRtl ? 'صحّح الآن' : 'Grade Now'}
+            <Icon path="M5 12h14M13 6l6 6-6 6" size={14} width={2.2} />
+          </button>
+        </section>
+
+        <section style={{ ...cardStyle, flex: '0.85 1 230px', minWidth: 0, padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#71717a' }}>{isRtl ? 'نسبة التسليم' : 'Submission Rate'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.045em', lineHeight: 0.86, color: ACCENT }}>{submissionAvgPct}%</span>
+              <span style={{ fontSize: 11, color: '#a1a1aa' }}>{isRtl ? 'متوسط التسليم' : 'Avg. Submissions'}</span>
+            </div>
+            <RingProgress value={submissionAvgPct} size={64} stroke={5} label={`${submissionAvgPct}%`} sub="" />
+          </div>
+          <span style={{ marginTop: 'auto', fontSize: 11, color: '#a1a1aa' }}>{isRtl ? `عبر ${scopedSections.length} فصول` : `Across ${scopedSections.length} classes`}</span>
+        </section>
+      </div>
+
+      {/* Row 2 */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 14 }}>
+        <section style={{ ...cardStyle, flex: '1 1 210px', minWidth: 0, padding: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#71717a' }}>{isRtl ? 'واجبات' : 'Homework'}</span>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 7 }}>
+            <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 0.86, color: ACCENT }}>{totalAssignmentsToGrade}</span>
+            <span style={{ fontSize: 21, fontWeight: 400, color: '#a1a1aa', paddingBottom: 2 }}>/ {totalSubmissions}</span>
+          </div>
+          <span style={{ fontSize: 11, color: '#a1a1aa' }}>{isRtl ? 'محتاجة تصحيح من إجمالي التسليمات' : 'to grade of submissions'}</span>
+          <button type="button" onClick={() => scopedSections[0] && goToAssessments(scopedSections[0].id, scopedSubjects[0] || subjectsAll[0])} style={{ marginTop: 'auto', alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, color: ACCENT, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}>
+            {isRtl ? 'صحّح الآن' : 'Grade Now'}
+            <Icon path="M5 12h14M13 6l6 6-6 6" size={14} width={2} />
+          </button>
+        </section>
+
+        <section style={{ ...cardStyle, flex: '1 1 210px', minWidth: 0, padding: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#71717a' }}>{isRtl ? 'حصص مباشرة اليوم' : 'Live Sessions Today'}</span>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 7 }}>
+            <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 0.86, color: ACCENT }}>{liveNowCount}</span>
+            <span style={{ fontSize: 21, fontWeight: 400, color: '#a1a1aa', paddingBottom: 2 }}>/ {schedule.length}</span>
+          </div>
+          <span style={{ fontSize: 11, color: '#a1a1aa' }}>{isRtl ? 'مباشر الآن من إجمالي حصص اليوم' : 'live now of periods today'}</span>
+          <button type="button" onClick={() => onNavigate && onNavigate('calendar')} style={{ marginTop: 'auto', alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, color: ACCENT, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}>
+            {isRtl ? 'عرض الجدول' : 'View Schedule'}
+            <Icon path="M5 12h14M13 6l6 6-6 6" size={14} width={2} />
+          </button>
+        </section>
+
+        <section style={{ ...cardStyle, flex: '1 1 210px', minWidth: 0, padding: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#71717a' }}>{isRtl ? 'مكافآت التحديات المعلّقة' : 'Pending Rewards'}</span>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 7 }}>
+            <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 0.86, color: ACCENT }}>{pendingRewards}</span>
+          </div>
+          <span style={{ fontSize: 11, color: '#a1a1aa' }}>{isRtl ? 'مشاركة محتاجة منح نقاط' : 'challenge submissions to award'}</span>
+        </section>
+      </div>
+
+      {/* Row 3: Action Center + Today's Schedule */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 14 }}>
+        <section style={{ ...cardStyle, flex: '1.3 1 400px', minWidth: 0, padding: '20px 20px 6px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, paddingBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em' }}>{isRtl ? 'مركز الإجراءات' : 'Action Center'}</h2>
+              {actionItems.length > 0 && (
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: ACCENT, background: '#fff7ed', border: '1px solid #ffedd5', borderRadius: 999, padding: '2px 8px' }}>{actionItems.length} {isRtl ? 'معلّق' : 'pending'}</span>
+              )}
+            </div>
+          </div>
+          {actionItems.length === 0 ? (
+            <p style={{ padding: '20px 2px 24px', color: '#a1a1aa', fontSize: 12.5, textAlign: 'center' }}>{isRtl ? 'كل حاجة متصحّحة، مفيش إجراءات معلّقة' : "You're all caught up — no pending actions"}</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {actionItems.map((item, idx) => {
+                const sec = findSectionByName(item.className);
+                return (
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '14px 2px', borderTop: '1px solid #f4f4f5' }}>
+                    <span style={{ width: 34, height: 34, borderRadius: 11, background: '#fff7ed', color: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 34px' }}>
+                      <Icon path={item.kind === 'quiz' ? 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z' : 'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2'} />
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600 }}>{item.title}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 600, color: '#3f3f46', background: '#f4f4f5', borderRadius: 6, padding: '2px 7px' }}>{item.className}</span>
+                        <span style={{ fontSize: 11, color: '#a1a1aa' }}>{item.detail}</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => sec && goToAssessments(sec.id, scopedSubjects[0] || subjectsAll[0])}
+                      style={{ whiteSpace: 'nowrap', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: '#fff', background: `linear-gradient(180deg,#fb923c,${ACCENT})`, border: `1px solid ${ACCENT}`, borderRadius: 9, padding: '8px 18px', cursor: 'pointer' }}
+                    >
+                      {isRtl ? 'ابدأ' : 'Start'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section style={{ ...cardStyle, flex: '1 1 320px', minWidth: 0, padding: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginBottom: 16 }}>
+            <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em' }}>{isRtl ? 'جدول اليوم' : "Today's Schedule"}</h2>
+          </div>
+          {schedule.length === 0 ? (
+            <p style={{ color: '#a1a1aa', fontSize: 12.5, textAlign: 'center', padding: '20px 0' }}>{isRtl ? 'مفيش حصص اليوم' : 'No periods today'}</p>
+          ) : (
+            <div>
+              {schedule.map((item, idx) => (
+                <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '44px 14px minmax(0,1fr)', columnGap: 12 }}>
+                  <span style={{ fontSize: 11, fontWeight: item.isLive ? 700 : 600, color: item.isLive ? ACCENT : '#71717a', paddingTop: 3 }}>{item.time}</span>
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 999, background: item.isLive ? ACCENT : '#09090b', marginTop: 6 }} />
+                    {idx < schedule.length - 1 && <span style={{ flex: 1, width: 1.5, background: '#f4f4f5' }} />}
+                  </span>
+                  <div style={{ paddingBottom: 15 }}>
+                    {item.isLive ? (
+                      <div style={{ background: 'linear-gradient(135deg,#fff7ed,#ffedd5)', border: '1px solid #fed7aa', borderRadius: 16, padding: '14px 15px', display: 'flex', flexDirection: 'column', gap: 11 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#c2410c' }}>
+                          <span style={{ width: 6, height: 6, borderRadius: 999, background: ACCENT }} /> {isRtl ? 'مباشر' : 'Live'}
                         </span>
-                      )}
-                    </div>
-                  </div>
-                  <button className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white text-sm font-bold rounded-xl transition-all shadow-md shadow-orange-200 shrink-0">
-                    Start
-                  </button>
-                </div>
-              ))}
-              {visibleTasks.length === 0 && (
-                <div className="text-center py-8 text-slate-500 font-medium">
-                  No pending tasks.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Content Progression */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 mb-6">
-              <BookOpen className="text-blue-500" size={24} />
-              Content Progression
-            </h2>
-            
-            <div className="flex flex-col gap-6">
-              {isAllClasses ? (
-                <>
-                  <div className="group">
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="font-bold text-slate-700">Class 4A</span>
-                      <span className="font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md text-sm">65%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden shadow-inner">
-                      <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-500 rounded-full group-hover:scale-y-110 transition-transform origin-left" style={{ width: '65%' }}></div>
-                    </div>
-                  </div>
-                  <div className="group">
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="font-bold text-slate-700">Class 4B</span>
-                      <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md text-sm">42%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden shadow-inner">
-                      <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full group-hover:scale-y-110 transition-transform origin-left" style={{ width: '42%' }}></div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="group">
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="font-bold text-slate-700">Unit 1: Numbers</span>
-                      <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md text-sm">100%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden shadow-inner">
-                      <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full" style={{ width: '100%' }}></div>
-                    </div>
-                  </div>
-                  <div className="group">
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="font-bold text-slate-700">Unit 2: Geometry</span>
-                      <span className="font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md text-sm">30%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden shadow-inner">
-                      <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-500 rounded-full group-hover:scale-y-110 transition-transform origin-left" style={{ width: '30%' }}></div>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-        </div>
-
-        {/* Left Column (Takes 1 col on xl) */}
-        <div className="flex flex-col gap-6">
-          
-          {/* Today's Schedule (Moved Up & Enhanced) */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex-1">
-            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 mb-6">
-              <Clock className="text-indigo-500" size={24} />
-              Today&apos;s Schedule
-            </h2>
-            
-            <div className="relative border-s-2 border-slate-100 ms-4 space-y-8">
-              {schedule.map(item => (
-                <div key={item.id} className="relative ps-6">
-                  {/* Timeline dot */}
-                  <div className={`absolute -start-[11px] top-1 w-5 h-5 rounded-full border-4 border-white shadow-sm ${item.status === 'completed' ? 'bg-slate-300' : item.status === 'current' ? (item.type === 'virtual' ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500') : 'bg-indigo-300'}`}></div>
-                  
-                  <div className="flex flex-col gap-2">
-                    <span className={`text-xs font-bold ${item.status === 'completed' ? 'text-slate-400' : 'text-slate-500'}`}>{item.time}</span>
-                    <h4 className={`font-bold text-base ${item.status === 'completed' ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{item.title}</h4>
-                    
-                    {/* Striking Visual Distinction */}
-                    {item.type === 'virtual' ? (
-                      <div className="mt-1 flex flex-col gap-3 p-3 rounded-xl bg-rose-50 border border-rose-100">
-                        <div className="flex items-center gap-2 text-rose-700 text-xs font-bold">
-                          <Video size={14} className="animate-pulse" />
-                          {item.location}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ fontSize: 13.5, fontWeight: 600 }}>{item.title}</span>
+                          <span style={{ fontSize: 11, color: '#b45309' }}>{item.className}</span>
                         </div>
-                        {item.status === 'current' && (
-                          <button className="flex items-center justify-center gap-2 w-full py-2.5 bg-rose-600 text-white font-bold text-sm rounded-lg hover:bg-rose-700 transition-colors shadow-sm shadow-rose-200">
-                            Join Live Stream
-                          </button>
-                        )}
+                        <a href={item.joinUrl} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: '#fff', background: `linear-gradient(180deg,#fb923c,${ACCENT})`, border: 'none', borderRadius: 11, padding: '11px 16px', textDecoration: 'none' }}>
+                          <Icon path="m10 8 6 4-6 4V8z" size={15} width={2} /> {isRtl ? 'انضم للبث' : 'Join Live Stream'}
+                        </a>
                       </div>
                     ) : (
-                      <div className="mt-1 flex items-center gap-2 p-2.5 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold">
-                        <Users size={14} />
-                        {item.location}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>{item.title}</span>
+                        <span style={{ alignSelf: 'flex-start', fontSize: 10.5, fontWeight: 600, color: '#3f3f46', background: '#fafafa', border: '1px solid #f0f0f2', borderRadius: 7, padding: '3px 8px' }}>{item.className}</span>
                       </div>
                     )}
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-
-          {/* Student Radar */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 mb-6">
-              <AlertTriangle className="text-rose-500" size={24} />
-              Student Radar
-            </h2>
-            
-            <div className="flex flex-col gap-4">
-              {visibleAlerts.map(alert => (
-                <div key={alert.id} className="p-4 rounded-xl bg-rose-50/80 border border-rose-100 flex flex-col gap-3 hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-white shadow-sm">
-                        <Image src={alert.avatar} alt={alert.student} fill className="object-cover" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-slate-800 text-sm">{alert.student}</h4>
-                        {isAllClasses && (
-                          <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-100">Class {alert.class}</span>
-                        )}
-                      </div>
-                    </div>
-                    <button className="w-8 h-8 rounded-full bg-white border border-rose-200 flex items-center justify-center text-rose-500 hover:bg-rose-500 hover:text-white transition-colors shadow-sm" title="Send Message">
-                      <Send size={14} />
-                    </button>
-                  </div>
-                  <div className="flex items-start gap-2 bg-white p-3 rounded-xl border border-rose-100 shadow-sm">
-                    {alert.type === 'academic' ? <TrendingDown size={14} className="text-rose-500 shrink-0 mt-0.5" /> : <Clock size={14} className="text-rose-500 shrink-0 mt-0.5" />}
-                    <p className="text-xs font-bold text-rose-700 leading-relaxed">{alert.issue}</p>
-                  </div>
-                </div>
-              ))}
-              {visibleAlerts.length === 0 && (
-                <div className="text-center py-6 text-slate-500 font-medium text-sm">
-                  No active alerts.
-                </div>
-              )}
-            </div>
-          </div>
-
-        </div>
+          )}
+        </section>
       </div>
+
+      {/* Content Progression */}
+      <section style={{ ...cardStyle, marginTop: 14, padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 18 }}>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em' }}>{isRtl ? 'تقدّم المحتوى' : 'Content Progression'}</h2>
+        </div>
+        {progression.length === 0 ? (
+          <p style={{ color: '#a1a1aa', fontSize: 12.5, textAlign: 'center', padding: '20px 0' }}>{isRtl ? 'مفيش دروس مضافة لسه' : 'No lessons added yet'}</p>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+            {progression.map((p, idx) => {
+              const pct = p.total > 0 ? (p.completed / p.total) * 100 : 0;
+              return (
+                <div key={idx} style={{ flex: '1 1 240px', minWidth: 0, border: '1px solid #f4f4f5', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 13 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600 }}>{p.className} · {p.subject}</span>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+                    <span style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 0.9 }}>{p.completed}</span>
+                    <span style={{ fontSize: 11.5, color: '#a1a1aa', paddingBottom: 2 }}>{isRtl ? `من ${p.total} درس` : `of ${p.total} lessons`}</span>
+                  </div>
+                  <div style={{ height: 8, borderRadius: 999, background: '#f4f4f5', overflow: 'hidden' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', borderRadius: 999, background: 'linear-gradient(90deg,#fdba74,#ea580c)' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+      </>
+      )}
     </div>
   );
 }
-

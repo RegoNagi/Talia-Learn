@@ -37,40 +37,9 @@ export function HomeworkWidget({
     setIsModalOpen(false);
   };
 
-  const sampleItems = [
-    {
-      id: 'hw-1',
-      title: 'Matrix Transformations Works...',
-      statusBadge: '4 To Grade',
-      statusColor: 'bg-amber-100 text-amber-800',
-      submissions: '22/28',
-      points: '20 pts'
-    },
-    {
-      id: 'hw-2',
-      title: "Newton's 2nd Law Problem Set",
-      statusBadge: 'Graded',
-      statusColor: 'bg-emerald-100 text-emerald-800',
-      submissions: '24/24',
-      points: '30 pts'
-    },
-    {
-      id: 'hw-3',
-      title: 'Chemical Bonding Quiz Prep',
-      statusBadge: '6 To Grade',
-      statusColor: 'bg-amber-100 text-amber-800',
-      submissions: '18/30',
-      points: '15 pts'
-    },
-    {
-      id: 'hw-4',
-      title: 'Cellular Respiration Essay Draft',
-      statusBadge: '2 To Grade',
-      statusColor: 'bg-amber-100 text-amber-800',
-      submissions: '14/28',
-      points: '25 pts'
-    }
-  ];
+  const totalSubmitted = homeworkList.reduce((sum, h) => sum + h.submittedCount, 0);
+  const totalStudents = homeworkList.reduce((sum, h) => sum + h.totalStudents, 0);
+  const toGradeCount = homeworkList.filter((h) => h.status === 'grading').length;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs">
@@ -101,24 +70,28 @@ export function HomeworkWidget({
             TOTAL HOMEWORK SUBMISSIONS
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
-            <span className="text-2xl font-black text-slate-900">18</span>
-            <span className="text-xs font-bold text-slate-400">/ 24</span>
+            <span className="text-2xl font-black text-slate-900">{totalSubmitted}</span>
+            <span className="text-xs font-bold text-slate-400">/ {totalStudents}</span>
           </div>
         </div>
 
         <span className="bg-white border border-slate-200 text-slate-800 text-xs font-extrabold px-3 py-1.5 rounded-xl shadow-2xs">
-          4 To Grade
+          {toGradeCount} To Grade
         </span>
       </div>
 
       {/* Items Section Header */}
       <div className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider mb-2">
-        HOMEWORK REQUIRING GRADING
+        HOMEWORK
       </div>
 
       {/* Homework Items */}
       <div className="space-y-2">
-        {sampleItems.map((item) => (
+        {isLoading ? (
+          <p className="text-xs text-slate-400 text-center py-4">Loading...</p>
+        ) : homeworkList.length === 0 ? (
+          <p className="text-xs text-slate-400 text-center py-4">No homework yet.</p>
+        ) : homeworkList.map((item) => (
           <div
             key={item.id}
             className="p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-100/60 transition-colors flex items-center justify-between gap-2"
@@ -126,16 +99,16 @@ export function HomeworkWidget({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <h4 className="font-bold text-xs text-slate-900 truncate">{item.title}</h4>
-                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md shrink-0 ${item.statusColor}`}>
-                  {item.statusBadge}
+                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md shrink-0 ${
+                  item.status === 'grading' ? 'bg-amber-100 text-amber-800' : item.status === 'closed' ? 'bg-slate-100 text-slate-600' : 'bg-emerald-100 text-emerald-800'
+                }`}>
+                  {item.status}
                 </span>
               </div>
               <div className="flex items-center gap-2 text-[10px] text-slate-400 font-semibold mt-0.5">
-                <span>Submissions: <strong className="text-slate-700">{item.submissions}</strong></span>
+                <span>Submissions: <strong className="text-slate-700">{item.submittedCount}/{item.totalStudents}</strong></span>
               </div>
             </div>
-
-            <span className="text-[10px] font-bold text-slate-400 shrink-0">{item.points}</span>
           </div>
         ))}
       </div>

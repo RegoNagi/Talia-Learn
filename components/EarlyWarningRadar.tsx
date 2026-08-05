@@ -4,6 +4,8 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { AlertCircle, AlertTriangle, CheckCircle2, MessageSquare, Zap, ChevronDown, ChevronUp, UserX, TrendingDown, Activity, Sparkles, Bot, ShieldCheck, X, Info, Settings2, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { getRiskDataForTeacher } from '@/services/riskData';
+import { sendMessage, sendMessageToStudentParent } from '@/services/messagesData';
 
 type RiskLevel = 'critical' | 'warning' | 'stable';
 
@@ -16,155 +18,10 @@ interface StudentRisk {
   avatar: string;
   risk?: RiskLevel;
   attendance: number;
-  academicDrop: number;
-  engagementAr: string;
-  engagementEn: string;
-  recentNotesAr: string;
-  recentNotesEn: string;
+  overallAverage: number | null;
+  gradedCount: number;
+  recentNote: string | null;
 }
-
-const MOCK_STUDENTS: StudentRisk[] = [
-  {
-     id: 's1',
-     name: 'أحمد محمود',
-     nameEn: 'Ahmed Mahmoud',
-     grade: '10',
-     className: '10-A',
-     avatar: 'https://picsum.photos/seed/ahmedm/100',
-     attendance: 72,
-     academicDrop: 25,
-     engagementAr: 'منخفض جداً',
-     engagementEn: 'Very Low',
-     recentNotesAr: 'تغيب عن 3 حصص متتالية ولم يسلم الواجب الأخير.',
-     recentNotesEn: 'Missed 3 consecutive classes and did not submit the last assignment.'
-  },
-  {
-     id: 's2',
-     name: 'سارة خالد',
-     nameEn: 'Sarah Khaled',
-     grade: '11',
-     className: '11-B',
-     avatar: 'https://picsum.photos/seed/sarahk/100',
-     attendance: 85,
-     academicDrop: 12,
-     engagementAr: 'متوسط',
-     engagementEn: 'Average',
-     recentNotesAr: 'تراجع ملحوظ في درجات الاختبارات القصيرة.',
-     recentNotesEn: 'Noticeable drop in short quiz grades.'
-  },
-  {
-     id: 's3',
-     name: 'يوسف العلي',
-     nameEn: 'Yousef Al-Ali',
-     grade: '10',
-     className: '10-A',
-     avatar: 'https://picsum.photos/seed/yousefa/100',
-     attendance: 65,
-     academicDrop: 30,
-     engagementAr: 'منعدم',
-     engagementEn: 'None',
-     recentNotesAr: 'لا يتفاعل في الفصل إطلاقاً ودرجاته متدنية.',
-     recentNotesEn: 'No in-class engagement, very low grades.'
-  },
-  {
-     id: 's4',
-     name: 'عمر زيدان',
-     nameEn: 'Omar Zaidan',
-     grade: '12',
-     className: '12-C',
-     avatar: 'https://picsum.photos/seed/omarz/100',
-     attendance: 98,
-     academicDrop: 0,
-     engagementAr: 'مرتفع',
-     engagementEn: 'High',
-     recentNotesAr: 'مستوى مستقر ممتاز، تمت معالجة التأخر السابق بنجاح.',
-     recentNotesEn: 'Excellent stable level, previous delay successfully handled.'
-  },
-  {
-     id: 's5',
-     name: 'ليان مصطفى',
-     nameEn: 'Layan Mustafa',
-     grade: '10',
-     className: '10-B',
-     avatar: 'https://picsum.photos/seed/layanm/100',
-     attendance: 82,
-     academicDrop: 8,
-     engagementAr: 'متوسط',
-     engagementEn: 'Average',
-     recentNotesAr: 'تحتاج إلى دعم في مادة الرياضيات.',
-     recentNotesEn: 'Needs support in Mathematics.'
-  },
-  {
-     id: 's6',
-     name: 'خالد النجار',
-     nameEn: 'Khaled Al-Najjar',
-     grade: '11',
-     className: '11-A',
-     avatar: 'https://picsum.photos/seed/khaledn/100',
-     attendance: 96,
-     academicDrop: 0,
-     engagementAr: 'مرتفع',
-     engagementEn: 'High',
-     recentNotesAr: 'مشاركة فعالة ومستوى متقدم.',
-     recentNotesEn: 'Active participation and advanced level.'
-  },
-  {
-     id: 's7',
-     name: 'دانة سالم',
-     nameEn: 'Dana Salem',
-     grade: '11',
-     className: '11-B',
-     avatar: 'https://picsum.photos/seed/danas/100',
-     attendance: 68,
-     academicDrop: 20,
-     engagementAr: 'منخفض',
-     engagementEn: 'Low',
-     recentNotesAr: 'عدم تسليم المشاريع وتغيب متكرر.',
-     recentNotesEn: 'Missing projects and frequent absences.'
-  },
-  {
-     id: 's8',
-     name: 'طارق عبدلله',
-     nameEn: 'Tariq Abdullah',
-     grade: '12',
-     className: '12-A',
-     avatar: 'https://picsum.photos/seed/tariqa/100',
-     attendance: 88,
-     academicDrop: 15,
-     engagementAr: 'منخفض',
-     engagementEn: 'Low',
-     recentNotesAr: 'تراجع الاهتمام في الأسابيع الأخيرة.',
-     recentNotesEn: 'Decreased interest in recent weeks.'
-  },
-  {
-     id: 's9',
-     name: 'نور حسن',
-     nameEn: 'Noor Hassan',
-     grade: '10',
-     className: '10-A',
-     avatar: 'https://picsum.photos/seed/noorh/100',
-     attendance: 100,
-     academicDrop: 0,
-     engagementAr: 'مرتفع',
-     engagementEn: 'High',
-     recentNotesAr: 'طالبة مثالية ومتميزة.',
-     recentNotesEn: 'Ideal and outstanding student.'
-  },
-  {
-     id: 's10',
-     name: 'عبدالرحمن سعد',
-     nameEn: 'Abdulrahman Saad',
-     grade: '12',
-     className: '12-C',
-     avatar: 'https://picsum.photos/seed/abdulrahmans/100',
-     attendance: 60,
-     academicDrop: 35,
-     engagementAr: 'منعدم',
-     engagementEn: 'None',
-     recentNotesAr: 'انقطاع مستمر عن الحضور.',
-     recentNotesEn: 'Continuous absence.'
-  }
-];
 
 const CANNED_RESPONSES = {
   ar: [
@@ -234,7 +91,7 @@ function FlatDropdown({ options, value, onChange, placeholder }: { options: {id:
   );
 }
 
-export function EarlyWarningRadar({ language = 'ar' }: { language?: 'ar' | 'en' }) {
+export function EarlyWarningRadar({ language = 'ar', teacherId, authUser }: { language?: 'ar' | 'en'; teacherId?: string; authUser?: any }) {
   const isRtl = language === 'ar';
   
   const [activeFilter, setActiveFilter] = useState<'all' | 'critical' | 'warning'>('all');
@@ -242,30 +99,58 @@ export function EarlyWarningRadar({ language = 'ar' }: { language?: 'ar' | 'en' 
 
   const [gradeFilter, setGradeFilter] = useState('all');
   const [classFilter, setClassFilter] = useState('all');
+  const [subjectFilter, setSubjectFilter] = useState('all');
 
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [selectedStudentForMessage, setSelectedStudentForMessage] = useState<StudentRisk | null>(null);
   const [messageText, setMessageText] = useState('');
   const [sendToParent, setSendToParent] = useState(true);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [sendMessageError, setSendMessageError] = useState('');
+
+  const [rawStudents, setRawStudents] = useState<StudentRisk[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!teacherId) { setIsLoading(false); return; }
+    setIsLoading(true);
+    getRiskDataForTeacher(teacherId, authUser?.subjects || [], subjectFilter).then((data) => {
+      setRawStudents(data.map((s) => ({
+        id: s.id,
+        name: s.name,
+        nameEn: s.name,
+        grade: s.grade,
+        className: s.className,
+        avatar: `https://picsum.photos/seed/${s.id}/100`,
+        attendance: s.attendance,
+        overallAverage: s.overallAverage,
+        gradedCount: s.gradedCount,
+        recentNote: s.recentNote,
+      })));
+      setIsLoading(false);
+    });
+  }, [teacherId, authUser?.subjects, subjectFilter]);
 
   // Settings state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [criticalAttThreshold, setCriticalAttThreshold] = useState(75);
-  const [criticalDropThreshold, setCriticalDropThreshold] = useState(15);
+  const [criticalMinAverage, setCriticalMinAverage] = useState(50);
   const [warningAttThreshold, setWarningAttThreshold] = useState(85);
-  const [warningDropThreshold, setWarningDropThreshold] = useState(5);
+  const [warningMinAverage, setWarningMinAverage] = useState(65);
 
   const computedStudents = useMemo(() => {
-    return MOCK_STUDENTS.map(s => {
+    return rawStudents.map(s => {
       let risk: RiskLevel = 'stable';
-      if (s.attendance < criticalAttThreshold || s.academicDrop > criticalDropThreshold) {
+      const belowCriticalAvg = s.overallAverage !== null && s.overallAverage < criticalMinAverage;
+      const belowWarningAvg = s.overallAverage !== null && s.overallAverage < warningMinAverage;
+      if (s.attendance < criticalAttThreshold || belowCriticalAvg) {
         risk = 'critical';
-      } else if (s.attendance < warningAttThreshold || s.academicDrop > warningDropThreshold) {
+      } else if (s.attendance < warningAttThreshold || belowWarningAvg) {
         risk = 'warning';
       }
       return { ...s, risk };
     });
-  }, [criticalAttThreshold, criticalDropThreshold, warningAttThreshold, warningDropThreshold]);
+  }, [rawStudents, criticalAttThreshold, criticalMinAverage, warningAttThreshold, warningMinAverage]);
 
   const filteredStudents = computedStudents.filter(s => {
     if (s.risk === 'stable') return false;
@@ -290,19 +175,50 @@ export function EarlyWarningRadar({ language = 'ar' }: { language?: 'ar' | 'en' 
     }
   };
 
-  const gradeOptions = [
-    { id: '10', label: isRtl ? 'الصف العاشر' : 'Grade 10' },
-    { id: '11', label: isRtl ? 'الصف الحادي عشر' : 'Grade 11' },
-    { id: '12', label: isRtl ? 'الصف الثاني عشر' : 'Grade 12' },
-  ];
+  const gradeOptions = Array.from(new Set(rawStudents.map(s => s.grade))).map(g => ({ id: g, label: isRtl ? `الصف ${g}` : `Grade ${g}` }));
 
-  const classOptions = Array.from(new Set(MOCK_STUDENTS.map(s => s.className))).map(c => ({ id: c, label: c }));
+  const classOptions = Array.from(new Set(rawStudents.map(s => s.className))).map(c => ({ id: c, label: c }));
+
+  const subjectOptions = (authUser?.subjects || []).map((subj: string) => ({ id: subj, label: subj }));
 
   const openMessageModal = (student: StudentRisk) => {
     setSelectedStudentForMessage(student);
     setMessageText('');
     setSendToParent(true);
+    setSendMessageError('');
     setIsMessageModalOpen(true);
+  };
+
+  const handleSendAlert = async () => {
+    if (!selectedStudentForMessage || !teacherId || !authUser?.name || !messageText.trim()) return;
+    setIsSendingMessage(true);
+    setSendMessageError('');
+    const result = sendToParent
+      ? await sendMessageToStudentParent({
+          senderId: teacherId,
+          senderRole: 'teacher',
+          senderName: authUser.name,
+          studentId: selectedStudentForMessage.id,
+          subject: isRtl ? `تنبيه بخصوص ${selectedStudentForMessage.name}` : `Alert regarding ${selectedStudentForMessage.nameEn}`,
+          content: messageText.trim(),
+        })
+      : await sendMessage({
+          senderId: teacherId,
+          senderRole: 'teacher',
+          senderName: authUser.name,
+          recipientId: selectedStudentForMessage.id,
+          recipientRole: 'student',
+          subject: isRtl ? 'تنبيه' : 'Alert',
+          content: messageText.trim(),
+          relatedStudentId: selectedStudentForMessage.id,
+        });
+    setIsSendingMessage(false);
+    if (result.ok) {
+      setIsMessageModalOpen(false);
+      setMessageText('');
+    } else {
+      setSendMessageError(result.error || (isRtl ? 'حصل خطأ' : 'Something went wrong'));
+    }
   };
 
   const cannedList = CANNED_RESPONSES[isRtl ? 'ar' : 'en'];
@@ -340,7 +256,7 @@ export function EarlyWarningRadar({ language = 'ar' }: { language?: 'ar' | 'en' 
                 </p>
                 <Info size={14} className="text-red-400 cursor-help" />
                 <div className="absolute top-[calc(100%-10px)] start-0 w-[240px] bg-gray-800 text-white text-[11px] font-bold p-3 rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 shadow-none border border-gray-700">
-                  {isRtl ? `الغياب أقل من ${criticalAttThreshold}% | تراجع أكاديمي أكثر من ${criticalDropThreshold}%` : `Attendance < ${criticalAttThreshold}% | Academic drop > ${criticalDropThreshold}%`}
+                  {isRtl ? `الغياب أقل من ${criticalAttThreshold}% | متوسط الأداء أقل من ${criticalMinAverage}%` : `Attendance < ${criticalAttThreshold}% | Overall average < ${criticalMinAverage}%`}
                 </div>
               </div>
               <h2 className="text-3xl font-black text-red-700">{stats.critical}</h2>
@@ -358,7 +274,7 @@ export function EarlyWarningRadar({ language = 'ar' }: { language?: 'ar' | 'en' 
                 </p>
                 <Info size={14} className="text-amber-400 cursor-help" />
                 <div className="absolute top-[calc(100%-10px)] start-0 w-[240px] bg-gray-800 text-white text-[11px] font-bold p-3 rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 shadow-none border border-gray-700">
-                  {isRtl ? `الغياب أقل من ${warningAttThreshold}% | تراجع أكاديمي أكثر من ${warningDropThreshold}%` : `Attendance < ${warningAttThreshold}% | Academic drop > ${warningDropThreshold}%`}
+                  {isRtl ? `الغياب أقل من ${warningAttThreshold}% | متوسط الأداء أقل من ${warningMinAverage}%` : `Attendance < ${warningAttThreshold}% | Overall average < ${warningMinAverage}%`}
                 </div>
               </div>
               <h2 className="text-3xl font-black text-amber-700">{stats.warning}</h2>
@@ -418,6 +334,12 @@ export function EarlyWarningRadar({ language = 'ar' }: { language?: 'ar' | 'en' 
 
           <div className="flex items-center gap-3 w-full md:w-auto overflow-visible relative">
              <FlatDropdown 
+               options={subjectOptions} 
+               value={subjectFilter} 
+               onChange={setSubjectFilter} 
+               placeholder={isRtl ? 'المادة' : 'Subject'} 
+             />
+             <FlatDropdown 
                options={gradeOptions} 
                value={gradeFilter} 
                onChange={setGradeFilter} 
@@ -434,7 +356,9 @@ export function EarlyWarningRadar({ language = 'ar' }: { language?: 'ar' | 'en' 
 
         {/* The Student Risk Roster */}
         <div className="space-y-3 z-0 relative">
-          {filteredStudents.map(student => (
+          {isLoading ? (
+            <div className="py-16 text-center text-gray-400 text-sm">{isRtl ? 'جاري التحميل...' : 'Loading...'}</div>
+          ) : filteredStudents.map(student => (
             <div 
               key={student.id} 
               className={`bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-none transition-colors border-s-4 ${
@@ -479,37 +403,19 @@ export function EarlyWarningRadar({ language = 'ar' }: { language?: 'ar' | 'en' 
                   <div className="flex flex-col bg-gray-50 border border-gray-100 rounded-xl p-3 shadow-none">
                      <span className="text-[10px] font-bold text-gray-400 mb-1 flex items-center gap-1.5">
                        <TrendingDown size={12} className="text-gray-500" />
-                       {isRtl ? 'التراجع الأكاديمي' : 'Academic Drop'}
+                       {isRtl ? 'متوسط الأداء' : 'Overall Average'}
                      </span>
                      <div className="flex items-center gap-2">
                        <span className="font-black text-sm text-red-600" dir="ltr">
-                         {student.academicDrop}%
+                         {student.overallAverage !== null ? `${student.overallAverage.toFixed(0)}%` : (isRtl ? 'لا توجد بيانات' : 'No data yet')}
                        </span>
                      </div>
-                  </div>
-
-                  <div className="flex flex-col bg-gray-50 border border-gray-100 rounded-xl p-3 shadow-none">
-                     <span className="text-[10px] font-bold text-gray-400 mb-1 flex items-center gap-1.5">
-                       <Activity size={12} className="text-gray-500" />
-                       {isRtl ? 'التفاعل' : 'Engagement'}
-                     </span>
-                     <span className="font-bold text-sm text-gray-700 truncate">
-                       {isRtl ? student.engagementAr : student.engagementEn}
-                     </span>
+                     {student.gradedCount > 0 && <span className="text-[10px] text-gray-400 mt-0.5">{isRtl ? `${student.gradedCount} تقييم` : `${student.gradedCount} assessments`}</span>}
                   </div>
                 </div>
 
                 {/* 3. Quick Actions */}
                 <div className="flex items-center gap-2 lg:w-auto shrink-0 mt-4 lg:mt-0">
-                  <button 
-                    className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-orange-50 text-orange-600 hover:bg-orange-100 rounded-xl text-sm font-bold transition-colors border border-transparent hover:border-orange-200 shadow-none"
-                    onClick={() => {
-                      alert(isRtl ? 'تم تخصيص مسار التمكين بنجاح' : 'Empowerment path assigned successfully');
-                    }}
-                  >
-                    <Sparkles size={16} />
-                    {isRtl ? 'مسار التمكين' : 'Empower'}
-                  </button>
                   <button 
                     className="w-10 h-10 flex items-center justify-center bg-gray-50 text-gray-600 hover:bg-orange-50 hover:text-orange-600 border border-gray-200 rounded-xl transition-colors shrink-0 shadow-none"
                     title={isRtl ? 'مراسلة ولي الأمر' : 'Contact Parent'}
@@ -532,7 +438,7 @@ export function EarlyWarningRadar({ language = 'ar' }: { language?: 'ar' | 'en' 
                    <div className="bg-orange-50/30 border border-orange-100 rounded-xl p-4 shadow-none">
                      <p className="text-sm text-gray-700 leading-relaxed font-medium flex items-start gap-2">
                        <Bot size={18} className="text-orange-500 shrink-0 mt-0.5" />
-                       <span className="italic">{isRtl ? student.recentNotesAr : student.recentNotesEn}</span>
+                       <span className="italic">{student.recentNote || (isRtl ? 'لا توجد ملاحظات سلوكية بعد' : 'No behavior notes yet')}</span>
                      </p>
                    </div>
                 </div>
@@ -637,16 +543,14 @@ export function EarlyWarningRadar({ language = 'ar' }: { language?: 'ar' | 'en' 
                      {isRtl ? 'إلغاء' : 'Cancel'}
                    </button>
                    <button 
-                     disabled={!messageText.trim()}
-                     onClick={() => {
-                        setIsMessageModalOpen(false);
-                        alert(isRtl ? 'تم إرسال التنبيه بنجاح' : 'Alert sent successfully');
-                     }}
-                     className={`px-6 py-2 text-sm font-bold text-white rounded-xl transition-colors shadow-none ${messageText.trim() ? 'bg-orange-500 hover:bg-orange-600 border border-orange-500' : 'bg-gray-300 border-gray-300 cursor-not-allowed'}`}
+                     disabled={!messageText.trim() || isSendingMessage}
+                     onClick={handleSendAlert}
+                     className={`px-6 py-2 text-sm font-bold text-white rounded-xl transition-colors shadow-none ${messageText.trim() && !isSendingMessage ? 'bg-orange-500 hover:bg-orange-600 border border-orange-500' : 'bg-gray-300 border-gray-300 cursor-not-allowed'}`}
                    >
-                     {isRtl ? 'إرسال' : 'Send'}
+                     {isSendingMessage ? (isRtl ? 'جاري الإرسال...' : 'Sending...') : (isRtl ? 'إرسال' : 'Send')}
                    </button>
                 </div>
+                {sendMessageError && <p className="px-6 pb-4 text-sm text-rose-600">{sendMessageError}</p>}
 
              </motion.div>
            </div>
@@ -704,11 +608,11 @@ export function EarlyWarningRadar({ language = 'ar' }: { language?: 'ar' | 'en' 
                          />
                        </div>
                        <div>
-                         <label className="block text-xs font-bold text-gray-500 mb-1.5">{isRtl ? 'تراجع أكاديمي أكثر من (%)' : 'Academic drop greater than (%)'}</label>
+                         <label className="block text-xs font-bold text-gray-500 mb-1.5">{isRtl ? 'متوسط الأداء العام أقل من (%)' : 'Overall performance average below (%)'}</label>
                          <input 
                            type="number" 
-                           value={criticalDropThreshold}
-                           onChange={(e) => setCriticalDropThreshold(Number(e.target.value))}
+                           value={criticalMinAverage}
+                           onChange={(e) => setCriticalMinAverage(Number(e.target.value))}
                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-800 focus:outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400 transition-colors shadow-none"
                          />
                        </div>
@@ -728,11 +632,11 @@ export function EarlyWarningRadar({ language = 'ar' }: { language?: 'ar' | 'en' 
                          />
                        </div>
                        <div>
-                         <label className="block text-xs font-bold text-gray-500 mb-1.5">{isRtl ? 'تراجع أكاديمي أكثر من (%)' : 'Academic drop greater than (%)'}</label>
+                         <label className="block text-xs font-bold text-gray-500 mb-1.5">{isRtl ? 'متوسط الأداء العام أقل من (%)' : 'Overall performance average below (%)'}</label>
                          <input 
                            type="number" 
-                           value={warningDropThreshold}
-                           onChange={(e) => setWarningDropThreshold(Number(e.target.value))}
+                           value={warningMinAverage}
+                           onChange={(e) => setWarningMinAverage(Number(e.target.value))}
                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-800 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors shadow-none"
                          />
                        </div>
@@ -750,10 +654,7 @@ export function EarlyWarningRadar({ language = 'ar' }: { language?: 'ar' | 'en' 
                      {isRtl ? 'إلغاء' : 'Cancel'}
                    </button>
                    <button 
-                     onClick={() => {
-                        setIsSettingsOpen(false);
-                        alert(isRtl ? 'تم حفظ المعايير بنجاح' : 'Criteria saved successfully');
-                     }}
+                     onClick={() => setIsSettingsOpen(false)}
                      className="px-6 py-2 text-sm font-bold text-white bg-gray-800 hover:bg-gray-900 border border-gray-800 rounded-xl transition-colors shadow-none flex items-center gap-2"
                    >
                      <Save size={16} />

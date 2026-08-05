@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Image as ImageIcon, Video, FileText, BarChart2, MessageSquare, 
@@ -8,6 +8,9 @@ import {
   Tag, Star, Trophy, PartyPopper, Brain, Link as LinkIcon, Play, Plus, X, Zap, Sparkles, ArrowRight, ChevronRight, Calendar
 } from 'lucide-react';
 import Image from 'next/image';
+import { getRealPosts, createRealPost, getRealSchoolPosts, createRealSchoolPost, reactToRealPost, addRealComment, getActiveChallenge, createChallenge, submitToChallenge, getMyChallengeSubmission, getChallengeSubmissions, gradeChallengeSubmission, getTopChallengers, getUpcomingSchoolEvents, createSchoolEvent, getSchoolAnnouncements, createSchoolAnnouncement, RealChallenge, ChallengeSubmission, SchoolEvent, SchoolAnnouncement } from '@/services/classSpaceData';
+import { getAssignments, getSubmissionsForAssignment, getSubmissionFileUrl } from '@/services/assignmentData';
+import { getMaterialFiles } from '@/services/libraryData';
 
 interface Post {
   id: string;
@@ -191,8 +194,9 @@ const MOCK_POSTS: Post[] = [
   }
 ];
 
-function PostCard({ post }: { post: Post }) {
+function PostCard({ post, onReact, onAddComment }: { post: Post; onReact?: (postId: string, type: keyof Post['interactions']) => void; onAddComment?: (postId: string, text: string) => void }) {
   const [showAllComments, setShowAllComments] = useState(false);
+  const [commentText, setCommentText] = useState('');
   const visibleComments = showAllComments ? post.comments : post.comments.slice(0, 2);
 
   if (post.type === 'challenge' && post.challenge) {
@@ -403,23 +407,23 @@ function PostCard({ post }: { post: Post }) {
 
       {/* Interaction Bar */}
       <div className="px-6 py-3 border-t border-slate-50 flex flex-wrap items-center gap-2">
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-yellow-50 text-slate-500 hover:text-yellow-600 transition-colors text-sm font-medium">
+        <button onClick={() => onReact?.(post.id, 'insightful')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-yellow-50 text-slate-500 hover:text-yellow-600 transition-colors text-sm font-medium">
           <Lightbulb size={18} className="text-yellow-500" /> 
           <span>{post.interactions.insightful}</span>
         </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-emerald-50 text-slate-500 hover:text-emerald-600 transition-colors text-sm font-medium">
+        <button onClick={() => onReact?.(post.id, 'helpful')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-emerald-50 text-slate-500 hover:text-emerald-600 transition-colors text-sm font-medium">
           <CheckCircle size={18} className="text-emerald-500" /> 
           <span>{post.interactions.helpful}</span>
         </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-pink-50 text-slate-500 hover:text-pink-600 transition-colors text-sm font-medium">
+        <button onClick={() => onReact?.(post.id, 'love')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-pink-50 text-slate-500 hover:text-pink-600 transition-colors text-sm font-medium">
           <Heart size={18} className="text-pink-500" /> 
           <span>{post.interactions.love}</span>
         </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-orange-50 text-slate-500 hover:text-orange-600 transition-colors text-sm font-medium">
+        <button onClick={() => onReact?.(post.id, 'celebration')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-orange-50 text-slate-500 hover:text-orange-600 transition-colors text-sm font-medium">
           <PartyPopper size={18} className="text-orange-500" /> 
           <span>{post.interactions.celebration}</span>
         </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-purple-50 text-slate-500 hover:text-purple-600 transition-colors text-sm font-medium">
+        <button onClick={() => onReact?.(post.id, 'thinking')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-purple-50 text-slate-500 hover:text-purple-600 transition-colors text-sm font-medium">
           <Brain size={18} className="text-purple-500" /> 
           <span>{post.interactions.thinking}</span>
         </button>
@@ -464,6 +468,31 @@ function PostCard({ post }: { post: Post }) {
               {showAllComments ? 'Show fewer comments' : `View ${post.comments.length - 2} more comments`}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Add Comment */}
+      {onAddComment && (
+        <div className="px-6 py-4 border-t border-slate-50 flex gap-2">
+          <input
+            type="text"
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && commentText.trim()) {
+                onAddComment(post.id, commentText.trim());
+                setCommentText('');
+              }
+            }}
+            placeholder="Write a comment..."
+            className="flex-1 bg-slate-50 border border-slate-200 rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-100"
+          />
+          <button
+            onClick={() => { if (commentText.trim()) { onAddComment(post.id, commentText.trim()); setCommentText(''); } }}
+            className="p-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full transition-colors"
+          >
+            <Send size={16} />
+          </button>
         </div>
       )}
     </motion.div>
@@ -728,49 +757,321 @@ function Composer({ onPublishChallenge, onPublishPost, language = 'en' }: { onPu
   );
 }
 
-function SpacesSidebar({ space, language = 'en' }: { space: 'school' | 'class' | 'subject', language?: 'ar' | 'en' }) {
+function ChallengeSubmitForm({ challenge, studentId, onSubmitted }: { challenge: RealChallenge; studentId: string; onSubmitted: () => void }) {
+  const [content, setContent] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const handleSubmit = async () => {
+    if (!content.trim() || !studentId) return;
+    setIsSaving(true);
+    const { ok } = await submitToChallenge(challenge.id, studentId, content.trim());
+    setIsSaving(false);
+    if (ok) onSubmitted();
+  };
+  return (
+    <div className="p-5 space-y-3.5">
+      <label className="block text-xs font-bold text-slate-700">Your Answer</label>
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        rows={5}
+        placeholder="Write your response to the challenge..."
+        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm outline-none focus:border-orange-400 resize-none"
+      />
+      <button
+        onClick={handleSubmit}
+        disabled={!content.trim() || isSaving}
+        className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white rounded-xl font-bold transition-colors"
+      >
+        {isSaving ? 'Submitting...' : 'Submit'}
+      </button>
+    </div>
+  );
+}
+
+function ChallengeSubmissionRow({ submission, maxXp, onGraded }: { submission: ChallengeSubmission; maxXp: number; onGraded: () => void }) {
+  const [xpInput, setXpInput] = useState(submission.xpAwarded !== null ? String(submission.xpAwarded) : '');
+  const [isSaving, setIsSaving] = useState(false);
+  const handleGrade = async () => {
+    const xp = parseInt(xpInput) || 0;
+    setIsSaving(true);
+    await gradeChallengeSubmission(submission.id, xp, maxXp);
+    setIsSaving(false);
+    onGraded();
+  };
+  return (
+    <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-bold text-slate-800">{submission.studentName}</span>
+        <span className="text-[10px] text-slate-400">{new Date(submission.submittedAt).toLocaleString()}</span>
+      </div>
+      <p className="text-sm text-slate-600 mb-3">{submission.content}</p>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          max={maxXp}
+          min={0}
+          value={xpInput}
+          onChange={(e) => setXpInput(e.target.value)}
+          placeholder="0"
+          className="w-20 border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold text-center outline-none focus:ring-2 focus:ring-orange-100"
+        />
+        <span className="text-xs text-slate-400">/ {maxXp} XP</span>
+        <button
+          onClick={handleGrade}
+          disabled={isSaving}
+          className="ml-auto px-4 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white rounded-lg text-xs font-bold transition-colors"
+        >
+          {isSaving ? '...' : submission.xpAwarded !== null ? 'Update' : 'Award XP'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CreateEventPanel({ isOpen, onClose, creatorId, creatorRole, onSaved }: { isOpen: boolean; onClose: () => void; creatorId: string; creatorRole: string; onSaved: () => void }) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [location, setLocation] = useState('');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('10:00');
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const reset = () => { setTitle(''); setDescription(''); setLocation(''); setDate(''); setTime('10:00'); setError(''); };
+
+  const handleSave = async (status: 'draft' | 'published') => {
+    if (!creatorId || !title.trim() || !date) return;
+    setIsSaving(true);
+    setError('');
+    const { ok, error: err } = await createSchoolEvent({
+      creatorId,
+      creatorRole,
+      title: title.trim(),
+      description: description.trim(),
+      location: location.trim(),
+      eventDate: `${date}T${time || '10:00'}`,
+      status,
+    });
+    setIsSaving(false);
+    if (ok) {
+      reset();
+      onClose();
+      onSaved();
+    } else {
+      setError(err || 'Unknown error');
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 bg-slate-900/40 z-[150]" />
+          <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-[160] flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-slate-800">New Event</h3>
+              <button onClick={onClose} className="p-2 hover:bg-slate-50 rounded-full text-slate-400"><X size={20} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Title</label>
+                <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Science Fair" className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Date</label>
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Time</label>
+                  <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Location</label>
+                <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Main Hall" className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Description</label>
+                <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} placeholder="Optional details..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+              </div>
+              {error && <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3">{error}</p>}
+            </div>
+            <div className="p-6 border-t border-slate-100 flex gap-3">
+              <button onClick={() => handleSave('draft')} disabled={!title.trim() || !date || isSaving} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 disabled:opacity-60 text-slate-700 rounded-xl font-bold transition-colors">
+                Save Draft
+              </button>
+              <button onClick={() => handleSave('published')} disabled={!title.trim() || !date || isSaving} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl font-bold transition-colors">
+                {isSaving ? 'Saving...' : 'Publish'}
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function CreateAnnouncementPanel({ isOpen, onClose, creatorId, creatorRole, onSaved }: { isOpen: boolean; onClose: () => void; creatorId: string; creatorRole: string; onSaved: () => void }) {
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const reset = () => { setTitle(''); setContent(''); setError(''); };
+
+  const handleSave = async (status: 'draft' | 'published') => {
+    if (!creatorId || !title.trim() || !content.trim()) return;
+    setIsSaving(true);
+    setError('');
+    const { ok, error: err } = await createSchoolAnnouncement({ creatorId, creatorRole, title: title.trim(), content: content.trim(), status });
+    setIsSaving(false);
+    if (ok) {
+      reset();
+      onClose();
+      onSaved();
+    } else {
+      setError(err || 'Unknown error');
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 bg-slate-900/40 z-[150]" />
+          <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-[160] flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-slate-800">New Announcement</h3>
+              <button onClick={onClose} className="p-2 hover:bg-slate-50 rounded-full text-slate-400"><X size={20} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Title</label>
+                <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Winter Break Schedule" className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Message</label>
+                <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={6} placeholder="Write the announcement..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+              </div>
+              {error && <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3">{error}</p>}
+            </div>
+            <div className="p-6 border-t border-slate-100 flex gap-3">
+              <button onClick={() => handleSave('draft')} disabled={!title.trim() || !content.trim() || isSaving} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 disabled:opacity-60 text-slate-700 rounded-xl font-bold transition-colors">
+                Save Draft
+              </button>
+              <button onClick={() => handleSave('published')} disabled={!title.trim() || !content.trim() || isSaving} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl font-bold transition-colors">
+                {isSaving ? 'Saving...' : 'Publish'}
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function SpacesSidebar({ space, language = 'en', classId, subject, teacherId, authUser, isRealScope, topChallengers = [], hasActiveChallenge }: { space: 'school' | 'class' | 'subject', language?: 'ar' | 'en', classId?: string, subject?: string, teacherId?: string, authUser?: any, isRealScope?: boolean, topChallengers?: ChallengeSubmission[], hasActiveChallenge?: boolean }) {
+  const creatorId = authUser?.teacherId || authUser?.userId || '';
+  const creatorRole = authUser?.role === 'teacher' ? 'teacher' : 'admin';
+
+  const [events, setEvents] = useState<SchoolEvent[]>([]);
+  const [announcements, setSchoolAnnouncements] = useState<SchoolAnnouncement[]>([]);
+  const [isEventPanelOpen, setIsEventPanelOpen] = useState(false);
+  const [isAnnouncementPanelOpen, setIsAnnouncementPanelOpen] = useState(false);
+
+  const refreshSchoolWidgets = () => {
+    getUpcomingSchoolEvents().then(setEvents);
+    getSchoolAnnouncements().then(setSchoolAnnouncements);
+  };
+
+  useEffect(() => {
+    if (space === 'school') refreshSchoolWidgets();
+  }, [space]);
+
+  const [pendingItems, setPendingItems] = useState<{ id: string; title: string; sub: string; badge: string }[]>([]);
+  const [resources, setResources] = useState<{ id: string; title: string; type: string; size: string; url: string }[]>([]);
+  const [isLoadingSidebarData, setIsLoadingSidebarData] = useState(false);
+
+  useEffect(() => {
+    if (!isRealScope || space !== 'subject' || !classId || !subject || !teacherId) return;
+    setIsLoadingSidebarData(true);
+    (async () => {
+      const [assignments, files] = await Promise.all([
+        getAssignments({ teacherId, classId, subject }),
+        getMaterialFiles({ teacherId, classId, subject }),
+      ]);
+      const pending: { id: string; title: string; sub: string; badge: string }[] = [];
+      for (const a of assignments.filter((x) => x.status === 'Active')) {
+        const subs = await getSubmissionsForAssignment(a.id, classId);
+        const toGrade = subs.filter((s) => s.status === 'Submitted' || s.status === 'Late').length;
+        if (toGrade > 0) pending.push({ id: a.id, title: a.title, sub: `${toGrade} submissions`, badge: `${toGrade} Review` });
+      }
+      setPendingItems(pending.slice(0, 3));
+      setResources(files.slice(0, 3).map((f) => ({ id: f.id, title: f.name, type: f.type, size: f.size, url: f.storagePath ? getSubmissionFileUrl(f.storagePath) : '' })));
+      setIsLoadingSidebarData(false);
+    })();
+  }, [isRealScope, space, classId, subject, teacherId]);
   if (space === 'school') {
     return (
       <div className="w-80 flex-shrink-0 hidden xl:block space-y-6">
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <Star className="text-yellow-500" size={20} /> Upcoming Events
-          </h3>
-          <ul className="space-y-4">
-            <li className="flex gap-3">
-              <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex flex-col items-center justify-center flex-shrink-0">
-                <span className="text-xs font-bold uppercase">Oct</span>
-                <span className="text-lg font-black leading-none">24</span>
-              </div>
-              <div>
-                <h4 className="font-semibold text-slate-800 text-sm">Science Fair</h4>
-                <p className="text-xs text-slate-500">Main Hall • 2:00 PM</p>
-              </div>
-            </li>
-            <li className="flex gap-3">
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex flex-col items-center justify-center flex-shrink-0">
-                <span className="text-xs font-bold uppercase">Nov</span>
-                <span className="text-lg font-black leading-none">02</span>
-              </div>
-              <div>
-                <h4 className="font-semibold text-slate-800 text-sm">Parent-Teacher Meet</h4>
-                <p className="text-xs text-slate-500">Online • 5:00 PM</p>
-              </div>
-            </li>
-          </ul>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <Star className="text-yellow-500" size={20} /> Upcoming Events
+            </h3>
+            <button onClick={() => setIsEventPanelOpen(true)} className="w-7 h-7 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-600 flex items-center justify-center transition-colors" title="Add Event">
+              <Plus size={16} />
+            </button>
+          </div>
+          {events.length === 0 ? (
+            <p className="text-sm text-slate-400">No upcoming events.</p>
+          ) : (
+            <ul className="space-y-4">
+              {events.map((ev) => {
+                const d = new Date(ev.eventDate);
+                return (
+                  <li key={ev.id} className="flex gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex flex-col items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold uppercase">{d.toLocaleDateString(undefined, { month: 'short' })}</span>
+                      <span className="text-lg font-black leading-none">{d.getDate()}</span>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-slate-800 text-sm">{ev.title}</h4>
+                      <p className="text-xs text-slate-500">{ev.location ? `${ev.location} • ` : ''}{d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
 
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <MessageSquare className="text-blue-500" size={20} /> Official Announcements
-          </h3>
-          <div className="space-y-3">
-            <div className="p-3 bg-blue-50 rounded-2xl border border-blue-100">
-              <h4 className="font-semibold text-blue-800 text-sm">Winter Break Schedule</h4>
-              <p className="text-xs text-blue-600 mt-1">School will be closed from Dec 20 to Jan 3.</p>
-            </div>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <MessageSquare className="text-blue-500" size={20} /> Official Announcements
+            </h3>
+            <button onClick={() => setIsAnnouncementPanelOpen(true)} className="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-colors" title="Add Announcement">
+              <Plus size={16} />
+            </button>
           </div>
+          {announcements.length === 0 ? (
+            <p className="text-sm text-slate-400">No announcements yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {announcements.map((a) => (
+                <div key={a.id} className="p-3 bg-blue-50 rounded-2xl border border-blue-100">
+                  <h4 className="font-semibold text-blue-800 text-sm">{a.title}</h4>
+                  <p className="text-xs text-blue-600 mt-1">{a.content}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+
+        <CreateEventPanel isOpen={isEventPanelOpen} onClose={() => setIsEventPanelOpen(false)} creatorId={creatorId} creatorRole={creatorRole} onSaved={refreshSchoolWidgets} />
+        <CreateAnnouncementPanel isOpen={isAnnouncementPanelOpen} onClose={() => setIsAnnouncementPanelOpen(false)} creatorId={creatorId} creatorRole={creatorRole} onSaved={refreshSchoolWidgets} />
       </div>
     );
   }
@@ -874,20 +1175,17 @@ function SpacesSidebar({ space, language = 'en' }: { space: 'school' | 'class' |
             <h4 className="text-sm font-bold text-slate-800">Pending Assessments</h4>
           </div>
           <div className="space-y-3">
-            <div className="flex items-center justify-between group cursor-pointer">
-              <div className="flex flex-col">
-                <h5 className="text-xs font-bold text-slate-700 group-hover:text-indigo-600 transition-colors truncate max-w-[140px]">Matrix Quiz</h5>
-                <p className="text-[10px] text-slate-400">12 submissions</p>
+            {!isRealScope || pendingItems.length === 0 ? (
+              <p className="text-xs text-slate-400">{language === 'ar' ? 'مفيش حاجة محتاجة تصحيح دلوقتي.' : 'Nothing pending grading right now.'}</p>
+            ) : pendingItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between group cursor-pointer">
+                <div className="flex flex-col">
+                  <h5 className="text-xs font-bold text-slate-700 group-hover:text-indigo-600 transition-colors truncate max-w-[140px]">{item.title}</h5>
+                  <p className="text-[10px] text-slate-400">{item.sub}</p>
+                </div>
+                <span className="text-[9px] font-bold text-orange-700 bg-orange-100 px-2 py-1 rounded-md">{item.badge}</span>
               </div>
-              <span className="text-[9px] font-bold text-orange-700 bg-orange-100 px-2 py-1 rounded-md">12 Review</span>
-            </div>
-            <div className="flex items-center justify-between group cursor-pointer">
-              <div className="flex flex-col">
-                <h5 className="text-xs font-bold text-slate-700 group-hover:text-indigo-600 transition-colors truncate max-w-[140px]">HW Week 2</h5>
-                <p className="text-[10px] text-slate-400">Grading deadline</p>
-              </div>
-              <span className="text-[9px] font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-md">Tomorrow</span>
-            </div>
+            ))}
           </div>
           <div className="flex justify-end mt-4 pt-3 border-t border-slate-50">
             <button className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1 transition-colors group/link">
@@ -901,28 +1199,21 @@ function SpacesSidebar({ space, language = 'en' }: { space: 'school' | 'class' |
             <LinkIcon className="text-indigo-500" size={20} /> Important Resources
           </h3>
           <ul className="space-y-3">
-            <li>
-              <a href="#" className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors group">
-                <div className="w-10 h-10 rounded-lg bg-red-50 text-red-500 flex items-center justify-center group-hover:bg-red-100 transition-colors">
-                  <FileText size={18} />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-slate-700 text-sm group-hover:text-indigo-600 transition-colors">Syllabus 2023</h4>
-                  <p className="text-xs text-slate-400">PDF • 1.2 MB</p>
-                </div>
-              </a>
-            </li>
-            <li>
-              <a href="#" className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors group">
-                <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                  <LinkIcon size={18} />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-slate-700 text-sm group-hover:text-indigo-600 transition-colors">Formula Cheat Sheet</h4>
-                  <p className="text-xs text-slate-400">External Link</p>
-                </div>
-              </a>
-            </li>
+            {!isRealScope || resources.length === 0 ? (
+              <p className="text-xs text-slate-400">{language === 'ar' ? 'مفيش مصادر مضافة لسه.' : 'No resources added yet.'}</p>
+            ) : resources.map((r) => (
+              <li key={r.id}>
+                <a href={r.url || '#'} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors group">
+                  <div className="w-10 h-10 rounded-lg bg-red-50 text-red-500 flex items-center justify-center group-hover:bg-red-100 transition-colors">
+                    <FileText size={18} />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-700 text-sm group-hover:text-indigo-600 transition-colors">{r.title}</h4>
+                    <p className="text-xs text-slate-400">{r.type.toUpperCase()} • {r.size}</p>
+                  </div>
+                </a>
+              </li>
+            ))}
           </ul>
         </div>
 
@@ -930,50 +1221,23 @@ function SpacesSidebar({ space, language = 'en' }: { space: 'school' | 'class' |
           <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
             🏆 Top Challengers
           </h3>
-          <ul className="space-y-2">
-            <li className="flex items-center gap-3 bg-amber-50/50 rounded-lg p-2">
-              <span className="text-xl">🥇</span>
-              <div className="w-8 h-8 rounded-full bg-slate-100 relative overflow-hidden shrink-0 border border-amber-200">
-                <Image 
-                  src="https://picsum.photos/seed/top1/100" 
-                  alt="Contributor" 
-                  fill
-                  className="object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-              <span className="font-bold text-slate-800 text-sm truncate">Emma Thompson</span>
-              <span className="ml-auto text-orange-600 font-bold text-sm">2,450 XP</span>
-            </li>
-            <li className="flex items-center gap-3 p-2">
-              <span className="text-xl">🥈</span>
-              <div className="w-8 h-8 rounded-full bg-slate-100 relative overflow-hidden shrink-0">
-                <Image 
-                  src="https://picsum.photos/seed/top2/100" 
-                  alt="Contributor" 
-                  fill
-                  className="object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-              <span className="font-medium text-slate-700 text-sm truncate">Liam Chen</span>
-              <span className="ml-auto text-slate-600 font-bold text-sm">2,120 XP</span>
-            </li>
-            <li className="flex items-center gap-3 p-2">
-              <span className="text-xl">🥉</span>
-              <div className="w-8 h-8 rounded-full bg-slate-100 relative overflow-hidden shrink-0">
-                <Image 
-                  src="https://picsum.photos/seed/top3/100" 
-                  alt="Contributor" 
-                  fill
-                  className="object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-              <span className="font-medium text-slate-700 text-sm truncate">Sophia Patel</span>
-              <span className="ml-auto text-slate-600 font-bold text-sm">1,980 XP</span>
-            </li>
-          </ul>
+          {!isRealScope ? (
+            <p className="text-sm text-slate-400">{language === 'ar' ? 'لسه مفيش تحدي حاليًا.' : 'No challenge yet.'}</p>
+          ) : !hasActiveChallenge ? (
+            <p className="text-sm text-slate-400">{language === 'ar' ? 'لسه مفيش تحدي حاليًا.' : 'No challenge yet.'}</p>
+          ) : topChallengers.length === 0 ? (
+            <p className="text-sm text-slate-400">{language === 'ar' ? 'لسه مفيش حد اتقيّم في التحدي ده.' : 'No one graded yet in this challenge.'}</p>
+          ) : (
+            <ul className="space-y-2">
+              {topChallengers.map((tc, idx) => (
+                <li key={tc.id} className={`flex items-center gap-3 rounded-lg p-2 ${idx === 0 ? 'bg-amber-50/50' : ''}`}>
+                  <span className="text-xl">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}</span>
+                  <span className={`text-sm truncate ${idx === 0 ? 'font-bold text-slate-800' : 'font-medium text-slate-700'}`}>{tc.studentName}</span>
+                  <span className={`ml-auto font-bold text-sm ${idx === 0 ? 'text-orange-600' : 'text-slate-600'}`}>{tc.xpAwarded} XP</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     );
@@ -982,21 +1246,108 @@ function SpacesSidebar({ space, language = 'en' }: { space: 'school' | 'class' |
   return null;
 }
 
-export function SpacesView({ space, language = 'en' }: { space: 'school' | 'class' | 'subject', language?: 'ar' | 'en' }) {
-  const [posts, setPosts] = useState(MOCK_POSTS);
+export function SpacesView({ space, language = 'en', classId, subject, authUser }: { space: 'school' | 'class' | 'subject', language?: 'ar' | 'en', classId?: string, subject?: string, authUser?: any }) {
+  const isRealScope = space === 'subject' && !!classId && !!subject;
+  const isRealSchoolScope = space === 'school';
+  const isAnyRealScope = isRealScope || isRealSchoolScope;
+  const currentUserId = authUser?.teacherId || authUser?.studentId || authUser?.userId || '';
+  const currentUserRole = authUser?.role || 'teacher';
+  const currentUserName = authUser?.name || 'User';
+
+  const [posts, setPosts] = useState<Post[]>(isAnyRealScope ? [] : MOCK_POSTS);
+  const [isLoadingReal, setIsLoadingReal] = useState(isAnyRealScope);
   const [toast, setToast] = useState<string | null>(null);
 
-  const filteredPosts = posts.filter(p => p.space === space);
+  const mapRealPost = (p: any): Post => ({
+    id: p.id,
+    space,
+    type: p.type || 'standard',
+    author: { name: p.author.name, role: p.author.role, avatar: p.author.avatar || `https://picsum.photos/seed/${p.author.id}/100` },
+    timestamp: p.timestamp,
+    content: p.content,
+    topicTag: p.topicTag,
+    media: p.media,
+    interactions: p.interactions,
+    comments: (p.comments || []).map((c: any) => ({
+      id: c.id,
+      author: { name: c.author.name, avatar: c.author.avatar || `https://picsum.photos/seed/${c.author.id}/100`, role: c.author.role },
+      content: c.content,
+      timestamp: c.timestamp,
+    })),
+  });
 
-  const handlePublishChallenge = (challenge: { title: string; xp: number; task: string }) => {
+  useEffect(() => {
+    if (!isAnyRealScope) return;
+    setIsLoadingReal(true);
+    const fetchPosts = isRealScope ? getRealPosts(classId!, subject!) : getRealSchoolPosts();
+    fetchPosts.then((real) => {
+      setPosts(real.map(mapRealPost));
+      setIsLoadingReal(false);
+    });
+  }, [isAnyRealScope, isRealScope, classId, subject]);
+
+  const [activeChallenge, setActiveChallenge] = useState<RealChallenge | null>(null);
+  const [topChallengers, setTopChallengers] = useState<ChallengeSubmission[]>([]);
+  const [isChallengeSubmitOpen, setIsChallengeSubmitOpen] = useState(false);
+  const [isChallengeGradeOpen, setIsChallengeGradeOpen] = useState(false);
+  const [challengeSubmissions, setChallengeSubmissions] = useState<ChallengeSubmission[]>([]);
+
+  const refreshChallenge = async () => {
+    if (!isRealScope) return;
+    const ch = await getActiveChallenge(classId!, subject!);
+    setActiveChallenge(ch);
+    if (ch) {
+      const top = await getTopChallengers(ch.id);
+      setTopChallengers(top);
+    } else {
+      setTopChallengers([]);
+    }
+  };
+
+  useEffect(() => {
+    refreshChallenge();
+  }, [isRealScope, classId, subject]);
+
+  const filteredPosts = isAnyRealScope ? posts : posts.filter(p => p.space === space);
+
+  const handleReact = async (postId: string, type: keyof Post['interactions']) => {
+    if (!isAnyRealScope || !currentUserId) return;
+    await reactToRealPost(postId, currentUserId, type);
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, interactions: { ...p.interactions, [type]: p.interactions[type] + 1 } } : p));
+  };
+
+  const handleAddComment = async (postId: string, text: string) => {
+    if (!isAnyRealScope || !currentUserId) return;
+    await addRealComment(postId, currentUserId, currentUserRole, currentUserName, text);
+    const newComment = { id: `local-${Date.now()}`, author: { name: currentUserName, avatar: `https://picsum.photos/seed/${currentUserId}/100`, role: currentUserRole }, content: text, timestamp: 'Just now' };
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p));
+  };
+
+  const handlePublishChallenge = async (challenge: { title: string; xp: number; task: string }) => {
+    if (isRealScope && currentUserId) {
+      const { ok } = await createChallenge({
+        classId: classId!,
+        subject: subject!,
+        teacherId: currentUserId,
+        title: challenge.title,
+        task: challenge.task,
+        maxXp: challenge.xp,
+      });
+      if (ok) {
+        await refreshChallenge();
+        setToast("🚀 Challenge Published to Space!");
+        setTimeout(() => setToast(null), 3000);
+      }
+      return;
+    }
     const newPost: Post = {
       id: `p-${Date.now()}`,
       space,
       type: 'challenge',
       author: {
-        name: 'Alex Johnson',
-        role: 'Teacher',
-        avatar: 'https://picsum.photos/seed/alex/100'
+        name: currentUserName,
+        role: currentUserRole,
+        avatar: `https://picsum.photos/seed/${currentUserId || 'user'}/100`
       },
       timestamp: 'Just now',
       content: challenge.task,
@@ -1013,25 +1364,48 @@ export function SpacesView({ space, language = 'en' }: { space: 'school' | 'clas
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handlePublishPost = (postData: { content: string, topicTag: string, media?: any }) => {
-    const newPost: Post = {
-      id: `p-${Date.now()}`,
-      space,
-      type: 'standard',
-      author: {
-        name: 'Current User',
-        role: 'Teacher',
-        avatar: 'https://picsum.photos/seed/alex/100'
-      },
-      timestamp: 'Just now',
-      content: postData.content,
-      topicTag: postData.topicTag || undefined,
-      media: postData.media,
-      interactions: { insightful: 0, helpful: 0, love: 0, celebration: 0, thinking: 0 },
-      comments: []
-    };
-    
-    setPosts(prev => [newPost, ...prev]);
+  const handlePublishPost = async (postData: { content: string, topicTag: string, media?: any }) => {
+    if (isRealScope && currentUserId) {
+      const newPost = await createRealPost({
+        classId: classId!,
+        subject: subject!,
+        authorId: currentUserId,
+        authorRole: currentUserRole,
+        authorName: currentUserName,
+        content: postData.content,
+        topicTag: postData.topicTag,
+        media: postData.media,
+      });
+      if (newPost) setPosts(prev => [mapRealPost(newPost), ...prev]);
+    } else if (isRealSchoolScope && currentUserId) {
+      const newPost = await createRealSchoolPost({
+        authorId: currentUserId,
+        authorRole: currentUserRole,
+        authorName: currentUserName,
+        content: postData.content,
+        topicTag: postData.topicTag,
+        media: postData.media,
+      });
+      if (newPost) setPosts(prev => [mapRealPost(newPost), ...prev]);
+    } else {
+      const newPost: Post = {
+        id: `p-${Date.now()}`,
+        space,
+        type: 'standard',
+        author: {
+          name: currentUserName,
+          role: currentUserRole,
+          avatar: `https://picsum.photos/seed/${currentUserId || 'user'}/100`
+        },
+        timestamp: 'Just now',
+        content: postData.content,
+        topicTag: postData.topicTag || undefined,
+        media: postData.media,
+        interactions: { insightful: 0, helpful: 0, love: 0, celebration: 0, thinking: 0 },
+        comments: []
+      };
+      setPosts(prev => [newPost, ...prev]);
+    }
     setToast(language === 'ar' ? 'تم نشر مشاركتك بنجاح!' : 'Post published successfully!');
     setTimeout(() => setToast(null), 3000);
   };
@@ -1081,16 +1455,53 @@ export function SpacesView({ space, language = 'en' }: { space: 'school' | 'clas
             language={language}
           />
 
+          {isRealScope && activeChallenge && (
+            <div className="border-2 border-orange-400 bg-gradient-to-br from-white to-orange-50/30 rounded-2xl p-6 shadow-sm relative overflow-hidden">
+              <Zap className="absolute -bottom-6 -right-6 w-48 h-48 opacity-5 text-orange-500" />
+              <div className="relative z-10">
+                <div className="bg-orange-100 text-orange-700 font-bold px-3 py-1 rounded-full text-xs uppercase tracking-wider inline-flex items-center gap-1 mb-4">
+                  <Zap size={14} className="fill-orange-700" /> {currentUserRole === 'teacher' ? 'Your Active Challenge' : 'New Challenge'}
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
+                  <h3 className="text-xl font-bold text-slate-800">{activeChallenge.title}</h3>
+                  <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white font-black px-4 py-1.5 rounded-full shadow-md shadow-orange-500/30 shrink-0">
+                    Up to {activeChallenge.maxXp} XP
+                  </div>
+                </div>
+                <p className="text-slate-600 leading-relaxed mb-6">{activeChallenge.task}</p>
+                {currentUserRole === 'teacher' ? (
+                  <button
+                    onClick={async () => { setChallengeSubmissions(await getChallengeSubmissions(activeChallenge.id)); setIsChallengeGradeOpen(true); }}
+                    className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-6 py-2.5 rounded-xl transition-transform active:scale-95 w-full sm:w-auto flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle size={18} /> View Submissions
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setIsChallengeSubmitOpen(true)}
+                    className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-6 py-2.5 rounded-xl transition-transform active:scale-95 w-full sm:w-auto flex items-center justify-center gap-2"
+                  >
+                    <Zap size={18} className="fill-white" /> Accept Challenge
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-6">
+            {isLoadingReal ? (
+              <p className="text-slate-400 text-center py-10">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
+            ) : (
             <AnimatePresence mode="popLayout">
               {filteredPosts.map((post) => (
-                <PostCard key={post.id} post={post} />
+                <PostCard key={post.id} post={post} onReact={isAnyRealScope ? handleReact : undefined} onAddComment={isAnyRealScope ? handleAddComment : undefined} />
               ))}
             </AnimatePresence>
+            )}
           </div>
         </div>
 
-        <SpacesSidebar space={space} language={language} />
+        <SpacesSidebar space={space} language={language} classId={classId} subject={subject} teacherId={authUser?.teacherId} authUser={authUser} isRealScope={isRealScope} topChallengers={topChallengers} hasActiveChallenge={!!activeChallenge} />
       </div>
 
       <AnimatePresence>
@@ -1103,6 +1514,51 @@ export function SpacesView({ space, language = 'en' }: { space: 'school' | 'clas
           >
             {toast}
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Student: Submit to Challenge */}
+      <AnimatePresence>
+        {isChallengeSubmitOpen && activeChallenge && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl">
+              <div className="bg-orange-500 p-4 text-white flex justify-between items-center">
+                <h3 className="font-extrabold text-sm">{activeChallenge.title}</h3>
+                <button onClick={() => setIsChallengeSubmitOpen(false)} className="text-white/80 hover:text-white"><X size={18} /></button>
+              </div>
+              <ChallengeSubmitForm
+                challenge={activeChallenge}
+                studentId={currentUserId}
+                onSubmitted={() => { setIsChallengeSubmitOpen(false); setToast('Submitted!'); setTimeout(() => setToast(null), 2000); }}
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Teacher: View & Grade Submissions */}
+      <AnimatePresence>
+        {isChallengeGradeOpen && activeChallenge && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl border border-slate-200 w-full max-w-lg overflow-hidden shadow-2xl max-h-[80vh] flex flex-col">
+              <div className="bg-slate-900 p-4 text-white flex justify-between items-center shrink-0">
+                <h3 className="font-extrabold text-sm">{activeChallenge.title} — Submissions</h3>
+                <button onClick={() => setIsChallengeGradeOpen(false)} className="text-white/80 hover:text-white"><X size={18} /></button>
+              </div>
+              <div className="p-5 space-y-3 overflow-y-auto">
+                {challengeSubmissions.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-6">No submissions yet.</p>
+                ) : challengeSubmissions.map((sub) => (
+                  <ChallengeSubmissionRow
+                    key={sub.id}
+                    submission={sub}
+                    maxXp={activeChallenge.maxXp}
+                    onGraded={async () => { setChallengeSubmissions(await getChallengeSubmissions(activeChallenge.id)); refreshChallenge(); }}
+                  />
+                ))}
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

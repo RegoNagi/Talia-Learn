@@ -155,3 +155,26 @@ export async function saveAttendanceSession(input: {
 
   return sessionId;
 }
+
+// بيحسب نسبة الحضور الحقيقية لكل طالب (من كل سجلات الحضور اللي اتسجّلت له)
+export async function getAttendancePercentagesForStudents(studentIds: string[]): Promise<Record<string, number>> {
+  if (studentIds.length === 0) return {};
+  const { data, error } = await supabase.from('attendance_records').select('student_id, status').in('student_id', studentIds);
+  if (error || !data) {
+    console.error('Error computing attendance percentages:', error);
+    return {};
+  }
+  const totals: Record<string, { present: number; total: number }> = {};
+  (data as any[]).forEach((row) => {
+    if (!totals[row.student_id]) totals[row.student_id] = { present: 0, total: 0 };
+    totals[row.student_id].total++;
+    if (row.status === 'Present' || row.status === 'Late') totals[row.student_id].present++;
+  });
+  const result: Record<string, number> = {};
+  studentIds.forEach((id) => {
+    const t = totals[id];
+    result[id] = t && t.total > 0 ? Math.round((t.present / t.total) * 100) : 0;
+  });
+  return result;
+}
+

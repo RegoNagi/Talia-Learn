@@ -176,10 +176,7 @@ export function LearningPathTab({
   // Smart Course Planner State
   const [isBuildingUnit, setIsBuildingUnit] = useState(false);
   const [newUnitTitle, setNewUnitTitle] = useState('');
-  const [newUnitMode, setNewUnitMode] = useState<'ai' | 'manual' | null>(null);
-  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
-  const [generatedPlan, setGeneratedPlan] = useState<any[] | null>(null);
-  const [previewPrompt, setPreviewPrompt] = useState<{title: string, prompt: string} | null>(null);
+  const [newUnitMode, setNewUnitMode] = useState<'manual' | null>(null);
 
   const [contentView, setContentView] = useState<'path' | 'material' | 'my-library'>('path');
 
@@ -287,65 +284,6 @@ export function LearningPathTab({
       }
       return unit;
     }));
-  };
-
-  const handleGeneratePlan = () => {
-    setIsGeneratingPlan(true);
-    setTimeout(() => {
-      setGeneratedPlan([
-        { id: 'gen1', title: 'Introduction to Expressions', type: 'video', effort: '15 mins', prompt: 'Create a 15-minute video script introducing algebraic expressions.', added: false },
-        { id: 'gen2', title: 'Simplifying Terms', type: 'pdf', effort: '20 mins', prompt: 'Generate a study guide on simplifying algebraic terms.', added: false },
-        { id: 'gen3', title: 'Expressions Quiz', type: 'quiz', effort: '10 mins', prompt: 'Create a 5-question multiple choice quiz on algebraic expressions.', added: false },
-        { id: 'gen4', title: 'Matrix Multiplication Practice Sheet', type: 'assignment', effort: '30 mins', prompt: 'Generate a practice worksheet with 10 problems on multiplying matrices of varying dimensions. Include an answer key.', added: false },
-      ]);
-      setIsGeneratingPlan(false);
-    }, 1500);
-  };
-
-  const handleAddGeneratedItem = (item: any) => {
-    let currentUnitId = units.find(u => u.title === newUnitTitle)?.id;
-    if (!currentUnitId) {
-      currentUnitId = `u${window.crypto.randomUUID()}`;
-      setUnits(prev => [...prev, { 
-        id: currentUnitId!, 
-        title: newUnitTitle || 'Untitled Module', 
-        weeks: 'Week 1', 
-        progress: 0, 
-        lessons: [],
-        isHidden: false,
-        isComplete: false,
-        sharedWith: [],
-      }]);
-      setExpandedUnits(prev => [...prev, currentUnitId!]);
-    }
-
-    const newLesson: Lesson = {
-      id: `l${window.crypto.randomUUID()}`,
-      title: item.title,
-      type: item.type,
-      source: 'ai',
-      week: 'Week 1',
-      completedCount: 0,
-      totalCount: 22,
-      status: 'upcoming',
-      isHidden: false,
-      isTopicComplete: false,
-    };
-
-    setUnits(prevUnits => prevUnits.map(unit => {
-      if (unit.id === currentUnitId) {
-        const updatedLessons = [...unit.lessons, newLesson];
-        const progress = Math.min(100, updatedLessons.length * 15);
-        return {
-          ...unit,
-          progress,
-          lessons: updatedLessons
-        };
-      }
-      return unit;
-    }));
-
-    setGeneratedPlan(prev => prev?.map(p => p.id === item.id ? { ...p, added: true } : p) || null);
   };
 
   const getStatusColor = (status: LessonStatus) => {
@@ -761,13 +699,6 @@ export function LearningPathTab({
               {!newUnitMode ? (
                 <div className="flex gap-3">
                   <button 
-                    onClick={() => setNewUnitMode('ai')}
-                    className="flex-1 flex items-center justify-center gap-2 py-4 border border-slate-200 rounded-2xl hover:border-purple-300 hover:bg-purple-50 transition-all shadow-none"
-                  >
-                    <Sparkles size={18} className="text-purple-600" />
-                    <span className="font-bold text-slate-700 text-sm">{language === 'ar' ? 'توليد بالذكاء الاصطناعي' : 'AI Generation'}</span>
-                  </button>
-                  <button 
                     onClick={() => setNewUnitMode('manual')}
                     className="flex-1 flex items-center justify-center gap-2 py-4 border border-slate-200 rounded-2xl hover:border-teal-300 hover:bg-teal-50 transition-all shadow-none"
                   >
@@ -775,7 +706,7 @@ export function LearningPathTab({
                     <span className="font-bold text-slate-700 text-sm">{language === 'ar' ? 'إنشاء يدوي' : 'Manual Build'}</span>
                   </button>
                 </div>
-              ) : newUnitMode === 'manual' ? (
+              ) : (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">{language === 'ar' ? 'اسم الوحدة' : 'Module Title'}</label>
                   <input 
@@ -809,102 +740,6 @@ export function LearningPathTab({
                       {language === 'ar' ? 'إضافة' : 'Add'}
                     </button>
                   </div>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Module Title</label>
-                  <input 
-                    type="text" 
-                    value={newUnitTitle}
-                    onChange={(e) => setNewUnitTitle(e.target.value)}
-                    placeholder="e.g.: Algebraic Expressions"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-none mb-4"
-                  />
-                {!generatedPlan ? (
-                    <button 
-                      onClick={handleGeneratePlan}
-                      disabled={!newUnitTitle || isGeneratingPlan}
-                      className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 shadow-none"
-                    >
-                      {isGeneratingPlan ? (
-                        <>
-                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          Analyzing curriculum...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles size={18} />
-                          Generate Full Plan
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between mb-4">
-                        <h4 className="font-bold text-slate-800">AI Suggested Plan</h4>
-                        <span className="text-xs font-medium text-purple-600 bg-purple-50 px-2 py-1 rounded-md shadow-none">Standards Based</span>
-                      </div>
-                      
-                      {generatedPlan.map((item, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-4 border border-slate-100 rounded-2xl bg-white shadow-none">
-                          <div className="flex items-center gap-4">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0
-                              ${item.type === 'video' ? 'bg-pink-50 text-pink-500' :
-                                item.type === 'pdf' ? 'bg-blue-50 text-blue-500' :
-                                item.type === 'quiz' ? 'bg-purple-50 text-purple-500' :
-                                'bg-teal-50 text-teal-500'
-                              }`}
-                            >
-                              {item.type === 'video' ? <PlayCircle size={20} /> :
-                               item.type === 'pdf' ? <FileText size={20} /> :
-                               item.type === 'quiz' ? <BrainCircuit size={20} /> :
-                               <ClipboardCheck size={20} />}
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h5 className="font-medium text-slate-700">{item.title}</h5>
-                                <span className="flex items-center gap-1 bg-purple-50 text-purple-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border border-purple-100 shadow-none">
-                                  <Sparkles size={10} /> AI Generated
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-3 mt-1">
-                                <span className="text-xs text-slate-500 flex items-center gap-1"><Clock size={12} /> {item.effort}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {item.type === 'assignment' && (
-                              <button 
-                                onClick={() => setPreviewPrompt({ title: item.title, prompt: item.prompt })}
-                                className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors shadow-none"
-                              >
-                                Preview Prompt
-                              </button>
-                            )}
-                            <button 
-                              onClick={() => handleAddGeneratedItem(item)}
-                              disabled={item.added}
-                              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 shadow-none
-                                ${item.added ? 'bg-emerald-50 text-emerald-600' : 'bg-teal-50 text-teal-600 hover:bg-teal-100'}`}
-                            >
-                              {item.added ? <CheckCircle2 size={14} /> : <Plus size={14} />}
-                              {item.added ? 'Added' : 'Add to Module'}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-
-                      <div className="pt-4 border-t border-slate-100 mt-4">
-                        <button 
-                          onClick={() => setNewUnitMode('manual')}
-                          className="w-full py-3 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 shadow-none"
-                        >
-                          <Plus size={18} />
-                          Add Item Manually
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -1057,45 +892,6 @@ export function LearningPathTab({
         anchorRect={activeCompletion?.rect || null}
       />
 
-      {/* Preview Prompt Modal */}
-      {previewPrompt && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl shadow-none max-w-lg w-full overflow-hidden border border-slate-100"
-          >
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                <Sparkles size={18} className="text-purple-500" />
-                AI Prompt Preview
-              </h3>
-              <button onClick={() => setPreviewPrompt(null)} className="text-slate-400 hover:text-slate-600 shadow-none">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-6 bg-slate-50">
-              <p className="text-sm font-medium text-slate-700 mb-2">Target Item:</p>
-              <p className="text-sm text-slate-600 mb-4">{previewPrompt.title}</p>
-              
-              <p className="text-sm font-medium text-slate-700 mb-2">Generated Prompt:</p>
-              <div className="p-4 bg-white border border-slate-200 rounded-xl text-sm text-slate-600 font-mono leading-relaxed text-left shadow-none">
-                {previewPrompt.prompt}
-              </div>
-            </div>
-            <div className="p-6 border-t border-slate-100 flex justify-end">
-              <button 
-                onClick={() => setPreviewPrompt(null)}
-                className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-medium transition-colors shadow-none"
-              >
-                Close
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Edit Unit Modal */}
       <AnimatePresence>
         {editingUnit && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">

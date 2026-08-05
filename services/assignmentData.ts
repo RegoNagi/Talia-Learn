@@ -364,3 +364,141 @@ export function getSubmissionFileUrl(storagePath: string): string {
   const { data } = supabase.storage.from('library-files').getPublicUrl(storagePath);
   return data.publicUrl;
 }
+
+export interface QuizAttempt {
+  id: string;
+  quizId: string;
+  studentId: string;
+  answers: Record<string, any>;
+  score: number | null;
+  maxScore: number | null;
+  needsManualReview: boolean;
+  status: 'in_progress' | 'submitted' | 'graded';
+  startedAt: string;
+  submittedAt: string | null;
+}
+
+function mapQuizAttempt(row: any): QuizAttempt {
+  return {
+    id: row.id,
+    quizId: row.quiz_id,
+    studentId: row.student_id,
+    answers: row.answers || {},
+    score: row.score,
+    maxScore: row.max_score,
+    needsManualReview: row.needs_manual_review,
+    status: row.status,
+    startedAt: row.started_at,
+    submittedAt: row.submitted_at,
+  };
+}
+
+// بيبدأ محاولة جديدة للطالب في الكويز، أو يرجّع المحاولة الموجودة لو فيه واحدة أصلًا
+export async function startOrGetQuizAttempt(quizId: string, studentId: string): Promise<QuizAttempt | null> {
+  const { data: existing } = await supabase.from('quiz_attempts').select('*').eq('quiz_id', quizId).eq('student_id', studentId).maybeSingle();
+  if (existing) return mapQuizAttempt(existing);
+  const { data, error } = await supabase.from('quiz_attempts').insert({ quiz_id: quizId, student_id: studentId, answers: {} }).select('*').single();
+  if (error || !data) {
+    console.error('Error starting quiz attempt:', error);
+    return null;
+  }
+  return mapQuizAttempt(data);
+}
+
+// بيحفظ إجابة سؤال واحد أثناء ما الطالب لسه بياخد الكويز
+export async function saveQuizAnswer(attemptId: string, questionId: string, answer: any): Promise<void> {
+  const { data } = await supabase.from('quiz_attempts').select('answers').eq('id', attemptId).maybeSingle();
+  const answers = { ...(data?.answers || {}), [questionId]: answer };
+  await supabase.from('quiz_attempts').update({ answers }).eq('id', attemptId);
+}
+
+// بيسلّم الكويز ويصحح تلقائيًا الأسئلة اللي ليها إجابة صحيحة محددة (اختيار من متعدد / صح وغلط)
+export async function submitQuizAttempt(attemptId: string, quiz: Quiz): Promise<{ ok: boolean; score: number; maxScore: number; needsManualReview: boolean; error: string | null }> {
+  const { data: attempt } = await supabase.from('quiz_attempts').select('answers').eq('id', attemptId).maybeSingle();
+  const answers = attempt?.answers || {};
+  let score = 0;
+  let maxScore = 0;
+  let needsManualReview = false;
+
+  for (const q of quiz.questions || []) {
+    maxScore += q.points || 0;
+    if (q.type === 'multiple_choice' || q.type === 'true_false') {
+      const correctOption = (q.options || []).find((o: any) => o.isCorrect);
+      const studentAnswer = answers[q.id];
+      if (correctOption && studentAnswer === correctOption.id) {
+        score += q.points || 0;
+      }
+    } else {
+      // short_answer و file_upload محتاجين مراجعة يدوية من المعلم
+      needsManualReview = true;
+    }
+  }
+
+  const { error } = await supabase
+    .from('quiz_attempts')
+    .update({
+      status: needsManualReview ? 'submitted' : 'graded',
+      score,
+      max_score: maxScore,
+      needs_manual_review: needsManualReview,
+      submitted_at: new Date().toISOString(),
+    })
+    .eq('id', attemptId);
+
+  return { ok: !error, score, maxScore, needsManualReview, error: error?.message || null };
+}
+
+export async function getMyQuizAttempt(quizId: string, studentId: string): Promise<QuizAttempt | null> {
+  const { data, error } = await supabase.from('quiz_attempts').select('*').eq('quiz_id', quizId).eq('student_id', studentId).maybeSingle();
+  if (error || !data) return null;
+  return mapQuizAttempt(data);
+}
+
+export async function getQuizAttemptsForQuiz(quizId: string, classId: string): Promise<(QuizAttempt & { studentName: string })[]> {
+  const roster = await getClassRoster(classId);
+  const { data } = await supabase.from('quiz_attempts').select('*').eq('quiz_id', quizId);
+  return roster.map((s) => {
+    const row = (data || []).find((a: any) => a.student_id === s.id);
+    if (row) return { ...mapQuizAttempt(row), studentName: s.name };
+    return { id: '', quizId, studentId: s.id, answers: {}, score: null, maxScore: null, needsManualReview: false, status: 'in_progress' as const, startedAt: '', submittedAt: null, studentName: s.name };
+  });
+}
+
+export async function gradeQuizManualQuestion(attemptId: string, extraScore: number): Promise<{ ok: boolean; error: string | null }> {
+  const { data: attempt } = await supabase.from('quiz_attempts').select('score').eq('id', attemptId).maybeSingle();
+  const newScore = (attempt?.score || 0) + extraScore;
+  const { error } = await supabase.from('quiz_attempts').update({ score: newScore, status: 'graded', needs_manual_review: false }).eq('id', attemptId);
+  return { ok: !error, error: error?.message || null };
+}
+
+// ============ بنك الأسئلة (Question Bank) ============
+
+export interface BankQuestion {
+  id: string;
+  question: any;
+  createdAt: string;
+}
+
+export async function saveQuestionToBank(teacherId: string, subject: string, question: any): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await supabase.from('question_bank').insert({ teacher_id: teacherId, subject, question });
+  return { ok: !error, error: error?.message || null };
+}
+
+export async function getQuestionBank(teacherId: string, subject: string): Promise<BankQuestion[]> {
+  const { data, error } = await supabase
+    .from('question_bank')
+    .select('id, question, created_at')
+    .eq('teacher_id', teacherId)
+    .eq('subject', subject)
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('Error fetching question bank:', error);
+    return [];
+  }
+  return (data || []).map((row: any) => ({ id: row.id, question: row.question, createdAt: row.created_at }));
+}
+
+export async function deleteQuestionFromBank(id: string): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await supabase.from('question_bank').delete().eq('id', id);
+  return { ok: !error, error: error?.message || null };
+}

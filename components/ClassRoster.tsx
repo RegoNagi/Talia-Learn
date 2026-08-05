@@ -1,9 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
-import { Search, ChevronDown, Check, LayoutGrid, List as ListIcon, X, MessageSquare, Phone, AlertCircle, FileText, ImageIcon, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Search, ChevronDown, Check, LayoutGrid, List as ListIcon, X, MessageSquare, AlertCircle, FileText, ImageIcon, Plus, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { getMyClassSections, getStudentsByIds, getAttendancePercentagesForStudents } from '@/services/attendanceData';
+import { getStudentNotes, getNoteCountsForStudents, addStudentNote, updateStudentNote, deleteStudentNote, getTodayAbsentStudentIds } from '@/services/rosterData';
+import { sendMessageToStudentParent } from '@/services/messagesData';
 
 export interface BehaviorNote {
   id: string;
@@ -19,29 +23,64 @@ interface Student {
   academicId: string;
   className: string;
   attendance: number;
-  grade: number;
-  path: 'standard' | 'empowerment' | 'excellence';
   avatar: string;
   status: 'active' | 'absent_today';
-  phone: string;
   notesCount: number;
   notes: BehaviorNote[];
 }
 
-const MOCK_STUDENTS: Student[] = [
-  { id: '1', nameAr: 'أحمد محمود', nameEn: 'Ahmed Mahmoud', academicId: 'STD-2401', className: '10-A', attendance: 94, grade: 88, path: 'excellence', avatar: 'https://picsum.photos/seed/ahmad/100', status: 'active', phone: '+971 50 123 4567', notesCount: 2, notes: [{ id: 'n1', text: 'تأخر في تسليم الواجب', date: '2023-10-25' }, { id: 'n2', text: 'مشاغبة في الفصل', date: '2023-10-26' }] },
-  { id: '2', nameAr: 'سارة خالد', nameEn: 'Sarah Khaled', academicId: 'STD-2402', className: '10-B', attendance: 71, grade: 65, path: 'empowerment', avatar: 'https://picsum.photos/seed/sarak/100', status: 'absent_today', phone: '+971 50 234 5678', notesCount: 5, notes: [{ id: 'n3', text: 'غياب متكرر', date: '2023-10-20' }, { id: 'n4', text: 'عدم الانتباه في الحصة', date: '2023-10-22' }, { id: 'n5', text: 'تأخر عن الطابور الصباحي', date: '2023-10-24' }, { id: 'n6', text: 'عدم إحضار الكتاب المدرسي', date: '2023-10-25' }, { id: 'n7', text: 'تحدث أثناء الشرح', date: '2023-10-26' }] },
-  { id: '3', nameAr: 'يوسف العلي', nameEn: 'Yousef Al-Ali', academicId: 'STD-2403', className: '10-A', attendance: 98, grade: 92, path: 'standard', avatar: 'https://picsum.photos/seed/yousef/100', status: 'active', phone: '+971 50 345 6789', notesCount: 0, notes: [] },
-  { id: '4', nameAr: 'فاطمة محمد', nameEn: 'Fatima Mohammed', academicId: 'STD-2404', className: '11-C', attendance: 85, grade: 78, path: 'standard', avatar: 'https://picsum.photos/seed/fatima/100', status: 'active', phone: '+971 50 456 7890', notesCount: 1, notes: [{ id: 'n8', text: 'نسيان الواجب', date: '2023-10-21' }] },
-  { id: '5', nameAr: 'عمر زيدان', nameEn: 'Omar Zaidan', academicId: 'STD-2405', className: '10-B', attendance: 99, grade: 96, path: 'excellence', avatar: 'https://picsum.photos/seed/omar/100', status: 'active', phone: '+971 50 567 8901', notesCount: 0, notes: [] },
-  { id: '6', nameAr: 'لينة حسن', nameEn: 'Leena Hassan', academicId: 'STD-2406', className: '11-C', attendance: 82, grade: 74, path: 'empowerment', avatar: 'https://picsum.photos/seed/leena/100', status: 'active', phone: '+971 50 678 9012', notesCount: 3, notes: [{ id: 'n9', text: 'استخدام الهاتف المحمول في الفصل', date: '2023-10-18' }, { id: 'n10', text: 'تأخر عن الحصة الأولى', date: '2023-10-23' }, { id: 'n11', text: 'عدم الالتزام بالزي المدرسي', date: '2023-10-26' }] },
-  { id: '7', nameAr: 'محمد جابر', nameEn: 'Mohammed Jaber', academicId: 'STD-2407', className: '10-A', attendance: 95, grade: 89, path: 'standard', avatar: 'https://picsum.photos/seed/jaber/100', status: 'absent_today', phone: '+971 50 789 0123', notesCount: 1, notes: [{ id: 'n12', text: 'التحدث بصوت عالٍ في الممرات', date: '2023-10-25' }] },
-];
-
-export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
+export function ClassRoster({ language = 'ar', teacherId, authUser }: { language?: 'ar' | 'en'; teacherId?: string; authUser?: any }) {
   const isRtl = language === 'ar';
-  
-  const [students, setStudents] = useState<Student[]>(MOCK_STUDENTS);
+  const router = useRouter();
+
+  const [students, setStudents] = useState<Student[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [classOptions, setClassOptions] = useState<string[]>([]);
+  const [classIdByName, setClassIdByName] = useState<Record<string, string>>({});
+
+  const [isMessageParentOpen, setIsMessageParentOpen] = useState(false);
+  const [messageParentText, setMessageParentText] = useState('');
+  const [isSendingParentMessage, setIsSendingParentMessage] = useState(false);
+  const [parentMessageResult, setParentMessageResult] = useState('');
+
+  const loadRoster = async () => {
+    if (!teacherId) { setIsLoading(false); return; }
+    setIsLoading(true);
+    const sections = await getMyClassSections(teacherId);
+    setClassOptions(sections.map((s) => s.name));
+    setClassIdByName(Object.fromEntries(sections.map((s) => [s.name, s.id])));
+
+    const allStudentIds = Array.from(new Set(sections.flatMap((s) => s.students)));
+    const [studentRows, attendanceMap, noteCounts, absentTodayIds] = await Promise.all([
+      getStudentsByIds(allStudentIds),
+      getAttendancePercentagesForStudents(allStudentIds),
+      getNoteCountsForStudents(allStudentIds),
+      getTodayAbsentStudentIds(allStudentIds),
+    ]);
+
+    const classByStudent: Record<string, string> = {};
+    sections.forEach((sec) => sec.students.forEach((sid) => { classByStudent[sid] = sec.name; }));
+
+    const mapped: Student[] = studentRows.map((s) => ({
+      id: s.id,
+      nameAr: s.name,
+      nameEn: s.name,
+      academicId: s.id.slice(0, 8).toUpperCase(),
+      className: classByStudent[s.id] || '',
+      attendance: attendanceMap[s.id] ?? 0,
+      avatar: `https://picsum.photos/seed/${s.id}/100`,
+      status: absentTodayIds.has(s.id) ? 'absent_today' : 'active',
+      notesCount: noteCounts[s.id] || 0,
+      notes: [],
+    }));
+    setStudents(mapped);
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    loadRoster();
+  }, [teacherId]);
+
   
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,7 +89,6 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isClassFilterOpen, setIsClassFilterOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterPath, setFilterPath] = useState<string>('all');
   const [filterClass, setFilterClass] = useState<string>('all');
 
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
@@ -61,63 +99,39 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
   const filteredStudents = students.filter(s => {
     const matchesSearch = s.nameAr.includes(searchQuery) || s.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) || s.academicId.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = filterStatus === 'all' || s.status === filterStatus;
-    const matchesPath = filterPath === 'all' || s.path === filterPath;
     const matchesClass = filterClass === 'all' || s.className === filterClass;
-    return matchesSearch && matchesStatus && matchesPath && matchesClass;
+    return matchesSearch && matchesStatus && matchesClass;
   });
 
-  const handleSaveNote = () => {
-    if (!noteText.trim() || !selectedStudent) return;
-    
-    const newNote = {
-      id: editingNoteId || Date.now().toString(),
-      text: noteText,
-      date: new Date().toISOString().split('T')[0]
-    };
+  const mapNotes = (notes: { id: string; text: string; published: boolean; createdAt: string }[]): BehaviorNote[] =>
+    notes.map(n => ({ id: n.id, text: n.text, published: n.published, date: new Date(n.createdAt).toLocaleDateString() }));
 
-    setStudents(prev => prev.map(s => {
-      if (s.id === selectedStudent.id) {
-        if (editingNoteId) {
-          const updatedNotes = s.notes.map(n => n.id === editingNoteId ? newNote : n);
-          return { ...s, notes: updatedNotes };
-        } else {
-          return { ...s, notesCount: s.notesCount + 1, notes: [...s.notes, newNote] };
-        }
-      }
-      return s;
-    }));
-    
-    setSelectedStudent(prev => {
-      if (!prev) return null;
-      if (editingNoteId) {
-        const updatedNotes = prev.notes.map(n => n.id === editingNoteId ? newNote : n);
-        return { ...prev, notes: updatedNotes };
-      } else {
-        return { ...prev, notesCount: prev.notesCount + 1, notes: [...prev.notes, newNote] };
-      }
-    });
-    
+  const handleSaveNote = async () => {
+    if (!noteText.trim() || !selectedStudent || !teacherId) return;
+
+    if (editingNoteId) {
+      await updateStudentNote(editingNoteId, { text: noteText });
+    } else {
+      await addStudentNote({ studentId: selectedStudent.id, teacherId, text: noteText, published: false });
+    }
+
+    const freshNotes = mapNotes(await getStudentNotes(selectedStudent.id));
+    setSelectedStudent(prev => prev ? { ...prev, notes: freshNotes, notesCount: freshNotes.length } : null);
+    setStudents(prev => prev.map(s => s.id === selectedStudent.id ? { ...s, notesCount: freshNotes.length } : s));
+
     setNoteText('');
     setEditingNoteId(null);
     setIsNoteModalOpen(false);
   };
 
-  const handleDeleteNote = (noteId: string) => {
+  const handleDeleteNote = async (noteId: string) => {
     if (!selectedStudent) return;
-    
+
     if (confirm(isRtl ? 'هل أنت متأكد من حذف هذه الملاحظة؟' : 'Are you sure you want to delete this note?')) {
-      setStudents(prev => prev.map(s => {
-        if (s.id === selectedStudent.id) {
-          return { ...s, notesCount: Math.max(0, s.notesCount - 1), notes: s.notes.filter(n => n.id !== noteId) };
-        }
-        return s;
-      }));
-      
-      setSelectedStudent(prev => prev ? { 
-        ...prev, 
-        notesCount: Math.max(0, prev.notesCount - 1), 
-        notes: prev.notes.filter(n => n.id !== noteId) 
-      } : null);
+      await deleteStudentNote(noteId);
+      const freshNotes = mapNotes(await getStudentNotes(selectedStudent.id));
+      setSelectedStudent(prev => prev ? { ...prev, notes: freshNotes, notesCount: freshNotes.length } : null);
+      setStudents(prev => prev.map(s => s.id === selectedStudent.id ? { ...s, notesCount: freshNotes.length } : s));
     }
   };
 
@@ -133,46 +147,67 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
     setIsNoteModalOpen(true);
   };
 
-  const handlePublishNote = (noteId: string) => {
+  const handlePublishNote = async (noteId: string) => {
     if (!selectedStudent) return;
-    
-    setStudents(prev => prev.map(s => {
-      if (s.id === selectedStudent.id) {
-        return { 
-          ...s, 
-          notes: s.notes.map(n => n.id === noteId ? { ...n, published: !n.published } : n) 
-        };
-      }
-      return s;
-    }));
-    
-    setSelectedStudent(prev => prev ? { 
-      ...prev, 
-      notes: prev.notes.map(n => n.id === noteId ? { ...n, published: !n.published } : n) 
-    } : null);
+    const note = selectedStudent.notes.find(n => n.id === noteId);
+    if (!note) return;
+    await updateStudentNote(noteId, { published: !note.published });
+    const freshNotes = mapNotes(await getStudentNotes(selectedStudent.id));
+    setSelectedStudent(prev => prev ? { ...prev, notes: freshNotes } : null);
   };
 
-  const getPathBadge = (path: string) => {
-    if (path === 'empowerment') {
-      return (
-        <span className="inline-block px-2.5 py-1 text-[10px] font-bold rounded-md bg-orange-50 text-orange-600 border border-orange-100">
-          {isRtl ? 'مسار التمكين' : 'Empowerment Path'}
-        </span>
-      );
-    }
-    if (path === 'excellence') {
-      return (
-        <span className="inline-block px-2.5 py-1 text-[10px] font-bold rounded-md bg-green-50 text-green-600 border border-green-100">
-          {isRtl ? 'مسار التميز' : 'Excellence Path'}
-        </span>
-      );
-    }
-    return (
-      <span className="inline-block px-2.5 py-1 text-[10px] font-bold rounded-md bg-gray-50 text-gray-600 border border-gray-100">
-        {isRtl ? 'المسار الأساسي' : 'Standard Path'}
-      </span>
-    );
+  const openStudentDetail = async (student: Student) => {
+    setSelectedStudent(student);
+    const freshNotes = mapNotes(await getStudentNotes(student.id));
+    setSelectedStudent(prev => prev && prev.id === student.id ? { ...prev, notes: freshNotes } : prev);
   };
+
+  const [isSubjectPickerOpen, setIsSubjectPickerOpen] = useState(false);
+  const [pendingGradebookStudent, setPendingGradebookStudent] = useState<Student | null>(null);
+
+  const navigateToGradebook = (student: Student, subject: string) => {
+    const classId = classIdByName[student.className];
+    if (!classId || !subject) return;
+    router.push(`/courses/${classId}__${encodeURIComponent(subject)}?tab=gradebook`);
+  };
+
+  const goToGradebook = (student: Student) => {
+    const subjects = authUser?.subjects || [];
+    if (subjects.length === 0) return;
+    if (subjects.length === 1) {
+      navigateToGradebook(student, subjects[0]);
+      return;
+    }
+    setPendingGradebookStudent(student);
+    setIsSubjectPickerOpen(true);
+  };
+
+  const handleSendParentMessage = async () => {
+    if (!selectedStudent || !teacherId || !authUser?.name || !messageParentText.trim()) return;
+    setIsSendingParentMessage(true);
+    setParentMessageResult('');
+    const { ok, error } = await sendMessageToStudentParent({
+      senderId: teacherId,
+      senderRole: 'teacher',
+      senderName: authUser.name,
+      studentId: selectedStudent.id,
+      subject: `Regarding ${isRtl ? selectedStudent.nameAr : selectedStudent.nameEn}`,
+      content: messageParentText.trim(),
+    });
+    setIsSendingParentMessage(false);
+    if (ok) {
+      setMessageParentText('');
+      setIsMessageParentOpen(false);
+    } else {
+      setParentMessageResult(error || (isRtl ? 'حصل خطأ' : 'Something went wrong'));
+    }
+  };
+
+  const getClassBadge = (className: string) => (
+    <span className="inline-block px-2.5 py-1 text-[10px] font-bold rounded-md bg-indigo-50 text-indigo-600 border border-indigo-100">
+      {className || (isRtl ? 'غير محدد' : 'Unassigned')}
+    </span>
+  );
 
   return (
     <div className={`w-full relative ${isRtl ? 'rtl' : 'ltr'}`} dir={isRtl ? 'rtl' : 'ltr'}>
@@ -214,7 +249,7 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                      className="absolute top-full mt-2 w-48 bg-white border border-gray-100 rounded-2xl p-2 shadow-none z-20 start-0 sm:start-auto sm:end-0 text-start"
                    >
                      <div className="space-y-1">
-                       {['all', '10-A', '10-B', '11-C'].map((cls) => (
+                       {['all', ...classOptions].map((cls) => (
                          <button
                            key={cls}
                            onClick={() => { setFilterClass(cls); setIsClassFilterOpen(false); }}
@@ -237,7 +272,7 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
              <div className="relative">
                <button 
                  onClick={() => setIsFilterOpen(!isFilterOpen)}
-                 className={`flex items-center justify-between gap-2 px-4 py-2 border rounded-xl text-sm font-medium transition-colors w-full sm:w-auto ${isFilterOpen || filterStatus !== 'all' || filterPath !== 'all' ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                 className={`flex items-center justify-between gap-2 px-4 py-2 border rounded-xl text-sm font-medium transition-colors w-full sm:w-auto ${isFilterOpen || filterStatus !== 'all' ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
                >
                  {isRtl ? 'تصفية النتائج' : 'Filter Results'}
                  <ChevronDown size={16} className={`transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
@@ -271,31 +306,10 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                            ))}
                          </div>
                        </div>
-                       <div className="h-px bg-gray-100 w-full" />
-                       <div>
-                         <label className="block text-xs font-bold text-gray-500 mb-2 uppercase">{isRtl ? 'المسار التعليمي' : 'Learning Path'}</label>
-                         <div className="space-y-1 text-sm">
-                           {['all', 'standard', 'empowerment', 'excellence'].map((path) => (
-                             <button
-                               key={path}
-                               onClick={() => setFilterPath(path)}
-                               className="flex items-center justify-between w-full px-2 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 text-start"
-                             >
-                               <span>
-                                 {path === 'all' && (isRtl ? 'الكل' : 'All')}
-                                 {path === 'standard' && (isRtl ? 'المسار الأساسي' : 'Standard Path')}
-                                 {path === 'empowerment' && (isRtl ? 'مسار التمكين' : 'Empowerment Path')}
-                                 {path === 'excellence' && (isRtl ? 'مسار التميز' : 'Excellence Path')}
-                               </span>
-                               {filterPath === path && <Check size={14} className="text-orange-500" />}
-                             </button>
-                           ))}
-                         </div>
-                       </div>
                      </div>
-                     {(filterStatus !== 'all' || filterPath !== 'all') && (
+                     {filterStatus !== 'all' && (
                        <button 
-                         onClick={() => { setFilterStatus('all'); setFilterPath('all'); }}
+                         onClick={() => { setFilterStatus('all'); }}
                          className="mt-4 w-full py-1.5 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                        >
                          {isRtl ? 'مسح التصفية' : 'Clear Filters'}
@@ -330,13 +344,17 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
         </div>
 
         {/* Roster Area */}
-        {filteredStudents.length === 0 ? (
+        {isLoading ? (
+          <div className="py-20 text-center bg-white border border-gray-100 rounded-2xl flex flex-col items-center justify-center shadow-none">
+            <p className="text-sm text-gray-400">{isRtl ? 'جاري التحميل...' : 'Loading...'}</p>
+          </div>
+        ) : filteredStudents.length === 0 ? (
           <div className="py-20 text-center bg-white border border-gray-100 rounded-2xl flex flex-col items-center justify-center shadow-none">
             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4 border border-gray-100">
                <Search size={24} className="text-gray-400" />
             </div>
-            <h3 className="text-lg font-bold text-gray-700">{isRtl ? 'لا توجد نتائج مطابقة' : 'No matching results'}</h3>
-            <p className="text-sm text-gray-500 mt-1">{isRtl ? 'جرب البحث باسم آخر أو تغيير إعدادات التصفية' : 'Try searching with a different name or clear filters'}</p>
+            <h3 className="text-lg font-bold text-gray-700">{students.length === 0 ? (isRtl ? 'لا يوجد طلاب بعد' : 'No students yet') : (isRtl ? 'لا توجد نتائج مطابقة' : 'No matching results')}</h3>
+            <p className="text-sm text-gray-500 mt-1">{students.length === 0 ? (isRtl ? 'مفيش طلاب مسجّلين في فصولك لسه' : 'No students enrolled in your classes yet') : (isRtl ? 'جرب البحث باسم آخر أو تغيير إعدادات التصفية' : 'Try searching with a different name or clear filters')}</p>
           </div>
         ) : (
           <div className="relative">
@@ -348,7 +366,7 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                       <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-start">{isRtl ? 'الطالب' : 'Student'}</th>
                       <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-start">{isRtl ? 'الرقم الأكاديمي' : 'Student ID'}</th>
                       <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">{isRtl ? 'الحضور' : 'Attendance'}</th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">{isRtl ? 'التقييم' : 'Grade'}</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">{isRtl ? 'الدرجات' : 'Grades'}</th>
                       <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-start">{isRtl ? 'المسار التعليمي' : 'Learning Path'}</th>
                       <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-end"></th>
                     </tr>
@@ -357,7 +375,7 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                     {filteredStudents.map(student => (
                       <tr 
                         key={student.id} 
-                        onClick={() => setSelectedStudent(student)}
+                        onClick={() => openStudentDetail(student)}
                         className="hover:bg-gray-50 cursor-pointer transition-colors"
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -385,18 +403,22 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <span className="font-bold text-gray-800 border-none m-0 leading-tight">
-                            {student.grade}%
-                          </span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); goToGradebook(student); }}
+                            className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            {isRtl ? 'فتح السجل' : 'Open Gradebook'}
+                          </button>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {getPathBadge(student.path)}
+                          {getClassBadge(student.className)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-end">
                           <button 
                             onClick={(e) => { 
                                e.stopPropagation(); 
-                               alert(isRtl ? `بدء محادثة مع: ${student.nameAr}` : `Start chat with: ${student.nameEn}`);
+                               openStudentDetail(student);
+                               setIsMessageParentOpen(true);
                             }}
                             className="text-gray-400 hover:text-orange-500 hover:bg-orange-50 p-2 rounded-lg transition-colors shadow-none"
                             title={isRtl ? 'مراسلة مباشرة' : 'Direct Message'}
@@ -416,14 +438,15 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                 {filteredStudents.map(student => (
                   <div 
                     key={student.id}
-                    onClick={() => setSelectedStudent(student)}
+                    onClick={() => openStudentDetail(student)}
                     className="bg-white border border-gray-100 rounded-2xl p-5 shadow-none hover:border-gray-300 transition-all cursor-pointer relative group flex flex-col"
                   >
                     <div className="absolute top-4 start-4 z-10 hidden sm:block">
                       <button 
                          onClick={(e) => { 
                            e.stopPropagation(); 
-                           alert(isRtl ? `بدء محادثة مع: ${student.nameAr}` : `Start chat with: ${student.nameEn}`);
+                           openStudentDetail(student);
+                           setIsMessageParentOpen(true);
                          }}
                          className="text-gray-400 hover:text-orange-500 hover:bg-orange-50 p-2 rounded-lg transition-colors shadow-none"
                          title={isRtl ? 'مراسلة مباشرة' : 'Direct Message'}
@@ -432,7 +455,7 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                       </button>
                     </div>
                     <div className="absolute top-4 end-4 z-10">
-                      {getPathBadge(student.path)}
+                      {getClassBadge(student.className)}
                     </div>
                     
                     <div className="flex flex-col items-center mt-3 text-center mb-5">
@@ -456,10 +479,13 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                          <span className="text-[10px] text-gray-500 font-bold mb-1">{isRtl ? 'الحضور' : 'Attendance'}</span>
                          <span className={`font-black text-sm ${student.attendance < 80 ? 'text-red-500' : 'text-gray-700'}`}>{student.attendance}%</span>
                       </div>
-                      <div className="flex flex-col items-center bg-gray-50 rounded-xl p-2 border border-gray-100">
-                         <span className="text-[10px] text-gray-500 font-bold mb-1">{isRtl ? 'التقييم العام' : 'Grade'}</span>
-                         <span className="font-black text-sm text-gray-700">{student.grade}%</span>
-                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); goToGradebook(student); }}
+                        className="flex flex-col items-center justify-center bg-indigo-50 hover:bg-indigo-100 rounded-xl p-2 border border-indigo-100 transition-colors"
+                      >
+                         <span className="text-[10px] text-indigo-500 font-bold mb-1">{isRtl ? 'الدرجات' : 'Grades'}</span>
+                         <span className="font-black text-xs text-indigo-700">{isRtl ? 'فتح السجل' : 'Open Gradebook'}</span>
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -505,7 +531,7 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-1">{isRtl ? selectedStudent.nameAr : selectedStudent.nameEn}</h3>
                   <p className="text-sm text-gray-500 font-mono mb-3">{selectedStudent.academicId}</p>
-                  {getPathBadge(selectedStudent.path)}
+                  {getClassBadge(selectedStudent.className)}
                 </div>
 
                 <div className="space-y-6">
@@ -531,30 +557,26 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                     </div>
                   </div>
 
-                  {/* Contact Info */}
-                  <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center shrink-0 border border-gray-100 text-gray-500">
-                        <Phone size={14} />
+                  {/* Contact Parent */}
+                  <div className="bg-white border border-gray-100 rounded-2xl p-4">
+                    <button
+                      onClick={() => setIsMessageParentOpen(true)}
+                      className="w-full flex items-center gap-3 hover:bg-gray-50 rounded-xl p-1 transition-colors"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0 border border-indigo-100 text-indigo-600">
+                        <MessageSquare size={14} />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-bold text-gray-400">{isRtl ? 'هاتف ولي الأمر' : 'Parent Phone'}</p>
-                        <p className="text-sm font-bold text-gray-700" dir="ltr">{selectedStudent.phone}</p>
+                      <div className="flex-1 min-w-0 text-start">
+                        <p className="text-sm font-bold text-gray-700">{isRtl ? 'راسل ولي الأمر' : 'Message Parent'}</p>
+                        <p className="text-[11px] text-gray-400">{isRtl ? 'تصله في صفحة الرسائل' : 'Delivered to their Messages'}</p>
                       </div>
-                    </div>
+                    </button>
                   </div>
 
                   {/* Inter-module action buttons */}
                   <div className="pt-2 flex flex-col gap-2">
                     <button 
-                      onClick={() => alert(isRtl ? `تم فتح المحادثة الفورية مع: ${selectedStudent.nameAr}` : `Opened instant chat with: ${selectedStudent.nameEn}`)}
-                      className="w-full flex items-center justify-center gap-2 py-3.5 bg-orange-50 text-orange-600 hover:bg-orange-100 rounded-xl text-sm font-bold transition-all border border-transparent hover:border-orange-200"
-                    >
-                      <MessageSquare size={18} />
-                      {isRtl ? 'فتح محادثة فورية' : 'Open Instant Chat'}
-                    </button>
-                    <button 
-                      onClick={() => alert(isRtl ? `عرض السجل الأكاديمي للطالب: ${selectedStudent.nameAr}` : `View academic profile for: ${selectedStudent.nameEn}`)}
+                      onClick={() => goToGradebook(selectedStudent)}
                       className="w-full flex items-center justify-center gap-2 py-3 bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold transition-all"
                     >
                       <FileText size={18} className="text-gray-400" />
@@ -695,6 +717,66 @@ export function ClassRoster({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                 </div>
              </motion.div>
            </div>
+        )}
+      </AnimatePresence>
+
+      {/* Subject Picker for Gradebook */}
+      <AnimatePresence>
+        {isSubjectPickerOpen && pendingGradebookStudent && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl border border-gray-200 w-full max-w-sm overflow-hidden shadow-2xl">
+              <div className="bg-gray-900 p-4 text-white flex justify-between items-center">
+                <h3 className="font-extrabold text-sm">{isRtl ? 'اختر المادة' : 'Select Subject'}</h3>
+                <button onClick={() => setIsSubjectPickerOpen(false)} className="text-white/80 hover:text-white"><X size={18} /></button>
+              </div>
+              <div className="p-4 space-y-2">
+                {(authUser?.subjects || []).map((subj: string) => (
+                  <button
+                    key={subj}
+                    onClick={() => {
+                      navigateToGradebook(pendingGradebookStudent, subj);
+                      setIsSubjectPickerOpen(false);
+                    }}
+                    className="w-full text-left px-4 py-3 rounded-xl border border-gray-100 hover:bg-gray-50 hover:border-indigo-200 text-sm font-bold text-gray-700 transition-colors"
+                  >
+                    {subj}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Message Parent Modal */}
+      <AnimatePresence>
+        {isMessageParentOpen && selectedStudent && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl">
+              <div className="bg-indigo-600 p-4 text-white flex justify-between items-center">
+                <h3 className="font-extrabold text-sm">{isRtl ? `رسالة لولي أمر ${selectedStudent.nameAr}` : `Message to ${selectedStudent.nameEn}'s Parent`}</h3>
+                <button onClick={() => setIsMessageParentOpen(false)} className="text-white/80 hover:text-white"><X size={18} /></button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-sm text-slate-500">{isRtl ? 'هتوصل الرسالة دي مباشرة لحساب ولي الأمر في صفحة الرسائل.' : 'This message will be delivered directly to the parent\'s account in Messages.'}</p>
+                <textarea
+                  value={messageParentText}
+                  onChange={(e) => setMessageParentText(e.target.value)}
+                  rows={5}
+                  placeholder={isRtl ? 'اكتب رسالتك هنا...' : 'Write your message here...'}
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none"
+                />
+                {parentMessageResult && <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3">{parentMessageResult}</p>}
+                <button
+                  onClick={handleSendParentMessage}
+                  disabled={!messageParentText.trim() || isSendingParentMessage}
+                  className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
+                >
+                  <Send size={16} /> {isSendingParentMessage ? (isRtl ? 'جاري الإرسال...' : 'Sending...') : (isRtl ? 'إرسال' : 'Send')}
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

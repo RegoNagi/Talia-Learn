@@ -33,26 +33,7 @@ export function PostCard({ post, currentUser, onReact, onAddComment }: PostCardP
     setCommentText('');
   };
 
-  const sampleComments = post.comments.length > 0 ? post.comments : [
-    {
-      id: 'c-1',
-      author: { id: 'p1', name: 'Parent A', role: 'parent' as const, avatar: 'https://picsum.photos/seed/parenta/100' },
-      content: 'Can not wait!',
-      timestamp: '1 hour ago'
-    },
-    {
-      id: 'c-2',
-      author: { id: 'p2', name: 'Parent B', role: 'parent' as const, avatar: 'https://picsum.photos/seed/parentb/100' },
-      content: 'Will there be parking?',
-      timestamp: '45 mins ago'
-    },
-    {
-      id: 'c-3',
-      author: { id: 'p3', name: 'Admin', role: 'admin' as const, avatar: 'https://picsum.photos/seed/skinner/100' },
-      content: 'Yes, overflow parking is available.',
-      timestamp: '10 mins ago'
-    }
-  ];
+  const comments = post.comments;
 
   return (
     <motion.div
@@ -82,9 +63,11 @@ export function PostCard({ post, currentUser, onReact, onAddComment }: PostCardP
             </div>
           </div>
 
-          <span className="bg-indigo-50 text-indigo-700 text-[10px] font-black px-2.5 py-1 rounded-lg">
-            #Event
-          </span>
+          {post.topicTag && (
+            <span className="bg-indigo-50 text-indigo-700 text-[10px] font-black px-2.5 py-1 rounded-lg">
+              #{post.topicTag}
+            </span>
+          )}
         </div>
 
         {/* Post text */}
@@ -93,33 +76,35 @@ export function PostCard({ post, currentUser, onReact, onAddComment }: PostCardP
         </p>
       </div>
 
-      {/* Media Image */}
-      <div className="px-4 pb-3">
-        <div className="relative w-full h-60 rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
-          <Image
-            src={post.media?.url || 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1000&q=80'}
-            alt="Post media"
-            fill
-            className="object-cover"
-            referrerPolicy="no-referrer"
-          />
+      {/* Media Image (only when the post actually has one) */}
+      {post.media?.url && (
+        <div className="px-4 pb-3">
+          <div className="relative w-full h-60 rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
+            <Image
+              src={post.media.url}
+              alt="Post media"
+              fill
+              className="object-cover"
+              referrerPolicy="no-referrer"
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Reaction bar */}
       <div className="px-4 py-2.5 bg-slate-50/60 border-t border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-3 text-xs font-bold text-slate-600">
           <button onClick={() => onReact(post.id, 'insightful')} className="flex items-center gap-1 hover:text-amber-600">
-            <span>💡</span> <span>{post.interactions.insightful || 12}</span>
+            <span>💡</span> <span>{post.interactions.insightful}</span>
           </button>
           <button onClick={() => onReact(post.id, 'helpful')} className="flex items-center gap-1 hover:text-emerald-600">
-            <span>✅</span> <span>{post.interactions.helpful || 45}</span>
+            <span>✅</span> <span>{post.interactions.helpful}</span>
           </button>
           <button onClick={() => onReact(post.id, 'love')} className="flex items-center gap-1 hover:text-pink-600">
-            <span>❤️</span> <span>{post.interactions.love || 128}</span>
+            <span>❤️</span> <span>{post.interactions.love}</span>
           </button>
           <button onClick={() => onReact(post.id, 'celebration')} className="flex items-center gap-1 hover:text-orange-600">
-            <span>🎉</span> <span>{post.interactions.celebration || 50}</span>
+            <span>🎉</span> <span>{post.interactions.celebration}</span>
           </button>
         </div>
 
@@ -128,18 +113,18 @@ export function PostCard({ post, currentUser, onReact, onAddComment }: PostCardP
           className="text-xs font-bold text-slate-500 hover:text-indigo-600 flex items-center gap-1"
         >
           <MessageSquare size={14} />
-          <span>{sampleComments.length} Comments</span>
+          <span>{comments.length} Comments</span>
         </button>
       </div>
 
       {/* Comment Thread */}
       {showComments && (
         <div className="px-4 py-3 bg-slate-50/40 border-t border-slate-100 space-y-2.5">
-          {sampleComments.map((comm) => (
+          {comments.map((comm) => (
             <div key={comm.id} className="flex gap-2.5 items-start">
               <div className="w-7 h-7 rounded-full bg-slate-200 relative overflow-hidden shrink-0">
                 <Image
-                  src={comm.author.avatar}
+                  src={comm.author.avatar || `https://picsum.photos/seed/${comm.author.id}/100`}
                   alt={comm.author.name}
                   fill
                   className="object-cover"

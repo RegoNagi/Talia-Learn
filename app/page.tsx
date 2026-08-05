@@ -395,19 +395,19 @@ export default function Dashboard() {
                   />
                   )
                 ) : activeSpace === 'school' ? (
-                  <SpacesView space="school" language={language} />
+                  <SpacesView space="school" language={language} authUser={authUser} />
                 ) : activeSpace === 'messages' ? (
-                  <MessagesCenter language={language} />
+                  <MessagesCenter language={language} authUser={authUser} />
                 ) : activeSpace === 'radar' ? (
-                  <EarlyWarningRadar language={language} />
+                  <EarlyWarningRadar language={language} teacherId={authUser?.teacherId} authUser={authUser} />
                 ) : activeSpace === 'roster' ? (
-                  <ClassRoster language={language} />
+                  <ClassRoster language={language} teacherId={authUser?.teacherId} authUser={authUser} />
                 ) : activeSpace === 'attendance' && authUser?.teacherId ? (
                   <TakeAttendance language={language} teacherId={authUser.teacherId} />
                 ) : activeSpace === 'calendar' ? (
-                  <EducationalCalendar language={language} />
+                  <EducationalCalendar language={language} teacherId={authUser?.teacherId} authUser={authUser} />
                 ) : activeSpace === 'home' ? (
-                  <TeacherDashboard language={language} userRole={userRole || 'student'} />
+                  <TeacherDashboard language={language} userRole={userRole || 'student'} authUser={authUser} onNavigate={setActiveSpace} />
                 ) : (
                   authUser && (
                   <MyClassesView 

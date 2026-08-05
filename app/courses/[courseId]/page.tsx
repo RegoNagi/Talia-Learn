@@ -19,13 +19,11 @@ import { Plus, Wand2, FileText, PenTool, Video, Book, Layout, MessageSquare, Arr
 import Link from 'next/link';
 import { useSearchParams, useParams, useRouter } from 'next/navigation';
 
-import { useSmartToDo } from '@/hooks/useSmartToDo';
 import { ScheduleSessionPopup } from '@/components/ScheduleSessionPopup';
 import { useAuth } from '@/contexts/AuthContext';
 import { getClassSectionById } from '@/services/academicData';
 
 // ملحوظة: بيانات المستخدم بقت حقيقية (من AuthContext) بدل الاسم الثابت اللي كان هنا
-const mockTasks: Task[] = [];
 
 const mockAlerts: ActionAlert[] = [];
 
@@ -69,6 +67,11 @@ function CourseWorkspaceContent() {
   const router = useRouter();
   const { authUser, logout, isAuthLoading } = useAuth();
 
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam) setActiveTab(tabParam);
+  }, [searchParams]);
+
   const handleLogoutAndRedirect = () => {
     logout();
     router.push('/');
@@ -84,7 +87,6 @@ function CourseWorkspaceContent() {
   const [realClassId, encodedSubject] = rawCourseId.split('__');
   const realSubject = encodedSubject ? decodeURIComponent(encodedSubject) : '';
 
-  const smartTasks = useSmartToDo(mockTasks);
   const [realClassInfo, setRealClassInfo] = useState<{ id: string; name: string; gradeLevel: string } | null>(null);
 
   useEffect(() => {
@@ -187,7 +189,7 @@ function CourseWorkspaceContent() {
       <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-gray-50/30">
         {activeSpace && activeSpace !== 'subject' ? (
           <div className="flex-1 overflow-y-auto">
-            <SpacesView space={activeSpace as 'school' | 'class'} />
+            <SpacesView space={activeSpace as 'school' | 'class'} authUser={authUser} />
           </div>
         ) : (
           <>
@@ -285,12 +287,12 @@ function CourseWorkspaceContent() {
                   </>
                 ) : (
                   <>
-                    {activeTab === 'subject-space' && <SpacesView space="subject" />}
+                    {activeTab === 'subject-space' && <SpacesView space="subject" classId={realClassId} subject={realSubject} authUser={authUser} />}
                     {activeTab === 'learning-path' && <LearningPathTab viewRole={viewRole} demoAssessments={demoAssessments} language={language} onAssessmentClick={(id) => { setCurrentAssessmentId(id); setEngineView('ASSESSMENT_LANDING'); }} teacherId={authUser?.teacherId} classId={realClassId} subject={realSubject} grade={realClassInfo?.gradeLevel} />}
-                    {activeTab === 'live-sessions' && <LiveSessionsTab viewRole={viewRole} />}
-                    {activeTab === 'timeline' && <TimelineTab role={viewRole.toLowerCase()} language={language} />}
+                    {activeTab === 'live-sessions' && <LiveSessionsTab viewRole={viewRole} classId={realClassId} subject={realSubject} teacherId={authUser?.teacherId} teacherName={authUser?.name} studentId={authUser?.studentId} className={realClassInfo?.name} />}
+                    {activeTab === 'timeline' && <TimelineTab role={viewRole.toLowerCase()} language={language} classId={realClassId} subject={realSubject} grade={realClassInfo?.gradeLevel} teacherId={authUser?.teacherId} onOpenAssessments={() => setActiveTab('assessments')} />}
                     {activeTab === 'assessments' && <AssessmentsTab role={viewRole.toLowerCase() as any} teacherId={authUser?.teacherId} studentId={authUser?.studentId} classId={realClassId} subject={realSubject} grade={realClassInfo?.gradeLevel} />}
-                    {activeTab === 'gradebook' && <GradebookTab viewRole={viewRole} demoAssessments={demoAssessments} />}
+                    {activeTab === 'gradebook' && <GradebookTab viewRole={viewRole} classId={realClassId} subject={realSubject} grade={realClassInfo?.gradeLevel} studentId={authUser?.studentId} teacherId={authUser?.teacherId} teacherName={authUser?.name} />}
                   </>
                 )}
               </div>

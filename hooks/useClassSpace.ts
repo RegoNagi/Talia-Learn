@@ -8,13 +8,13 @@ import {
   HomeworkItem, 
   QuizItem, 
   ResourceItem, 
-  StudentHealthData, 
-  StudentSkillsData,
   ClassSpaceFilterState,
   User
 } from '@/types/classSpace';
 
-export function useClassSpace() {
+import { getRealPosts, createRealPost, reactToRealPost, addRealComment, getRealHomeworkItems, createRealHomeworkItem, getRealQuizItems, getRealResourceItems } from '@/services/classSpaceData';
+
+export function useClassSpace(scope?: { authUser?: any; userRole?: 'teacher' | 'student' | 'parent'; classId?: string; subject?: string; grade?: string; className?: string }) {
   const [filters, setFilters] = useState<ClassSpaceFilterState>({
     grade: 'Grade 10',
     className: 'All Classes',
@@ -30,8 +30,6 @@ export function useClassSpace() {
   const [homeworkList, setHomeworkList] = useState<HomeworkItem[]>([]);
   const [quizzes, setQuizzes] = useState<QuizItem[]>([]);
   const [resources, setResources] = useState<ResourceItem[]>([]);
-  const [healthData, setHealthData] = useState<StudentHealthData[]>([]);
-  const [skillsData, setSkillsData] = useState<StudentSkillsData[]>([]);
 
   // Search/Filter states for Resources
   const [resourceSearch, setResourceSearch] = useState('');
@@ -43,8 +41,6 @@ export function useClassSpace() {
   const [isLoadingHomework, setIsLoadingHomework] = useState(true);
   const [isLoadingQuizzes, setIsLoadingQuizzes] = useState(true);
   const [isLoadingResources, setIsLoadingResources] = useState(true);
-  const [isLoadingHealth, setIsLoadingHealth] = useState(true);
-  const [isLoadingSkills, setIsLoadingSkills] = useState(true);
 
   // Notification Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -58,21 +54,35 @@ export function useClassSpace() {
 
   // Fetch Current User
   useEffect(() => {
-    classSpaceApi.getCurrentUser().then(setCurrentUser);
-  }, []);
+    if (scope?.authUser) {
+      setCurrentUser({
+        id: scope.authUser.teacherId || scope.authUser.studentId || scope.authUser.userId,
+        name: scope.authUser.name,
+        role: (scope.userRole || 'student') as any,
+        avatar: '',
+      });
+    } else {
+      classSpaceApi.getCurrentUser().then(setCurrentUser);
+    }
+  }, [scope?.authUser, scope?.userRole]);
 
   // Fetch Posts
   const fetchPosts = useCallback(async () => {
     setIsLoadingPosts(true);
     try {
-      const data = await classSpaceApi.getPosts(filters);
-      setPosts(data);
+      if (scope?.classId && scope?.subject) {
+        const data = await getRealPosts(scope.classId, scope.subject);
+        setPosts(data);
+      } else {
+        const data = await classSpaceApi.getPosts(filters);
+        setPosts(data);
+      }
     } catch (e) {
       console.error('Failed to fetch posts', e);
     } finally {
       setIsLoadingPosts(false);
     }
-  }, [filters]);
+  }, [filters, scope?.classId, scope?.subject]);
 
   // Fetch Live Sessions
   const fetchLiveSessions = useCallback(async () => {
@@ -88,69 +98,60 @@ export function useClassSpace() {
   }, [filters]);
 
   // Fetch Homework
+  const hasRealScope = !!(scope?.classId && scope?.subject && (scope?.authUser?.teacherId));
+
   const fetchHomework = useCallback(async () => {
     setIsLoadingHomework(true);
     try {
-      const data = await classSpaceApi.getHomeworkList(filters);
-      setHomeworkList(data);
+      if (hasRealScope) {
+        const data = await getRealHomeworkItems({ teacherId: scope!.authUser.teacherId, classId: scope!.classId!, subject: scope!.subject!, grade: scope?.grade || '', className: scope?.className || '' });
+        setHomeworkList(data);
+      } else {
+        const data = await classSpaceApi.getHomeworkList(filters);
+        setHomeworkList(data);
+      }
     } catch (e) {
       console.error('Failed to fetch homework', e);
     } finally {
       setIsLoadingHomework(false);
     }
-  }, [filters]);
+  }, [filters, hasRealScope, scope?.classId, scope?.subject]);
 
   // Fetch Quizzes
   const fetchQuizzes = useCallback(async () => {
     setIsLoadingQuizzes(true);
     try {
-      const data = await classSpaceApi.getQuizzesList(filters);
-      setQuizzes(data);
+      if (hasRealScope) {
+        const data = await getRealQuizItems({ teacherId: scope!.authUser.teacherId, classId: scope!.classId!, subject: scope!.subject!, grade: scope?.grade || '', className: scope?.className || '' });
+        setQuizzes(data);
+      } else {
+        const data = await classSpaceApi.getQuizzesList(filters);
+        setQuizzes(data);
+      }
     } catch (e) {
       console.error('Failed to fetch quizzes', e);
     } finally {
       setIsLoadingQuizzes(false);
     }
-  }, [filters]);
+  }, [filters, hasRealScope, scope?.classId, scope?.subject]);
 
   // Fetch Resources
   const fetchResources = useCallback(async () => {
     setIsLoadingResources(true);
     try {
-      const data = await classSpaceApi.getResourcesList(resourceSearch, resourceCategory);
-      setResources(data);
+      if (hasRealScope) {
+        const data = await getRealResourceItems({ teacherId: scope!.authUser.teacherId, classId: scope!.classId!, subject: scope!.subject!, grade: scope?.grade || '' });
+        setResources(data);
+      } else {
+        const data = await classSpaceApi.getResourcesList(resourceSearch, resourceCategory);
+        setResources(data);
+      }
     } catch (e) {
       console.error('Failed to fetch resources', e);
     } finally {
       setIsLoadingResources(false);
     }
-  }, [resourceSearch, resourceCategory]);
-
-  // Fetch Segregated Health Data
-  const fetchHealthData = useCallback(async () => {
-    setIsLoadingHealth(true);
-    try {
-      const data = await classSpaceApi.getHealthData(filters);
-      setHealthData(data);
-    } catch (e) {
-      console.error('Failed to fetch health data', e);
-    } finally {
-      setIsLoadingHealth(false);
-    }
-  }, [filters]);
-
-  // Fetch Segregated Skills Data
-  const fetchSkillsData = useCallback(async () => {
-    setIsLoadingSkills(true);
-    try {
-      const data = await classSpaceApi.getSkillsData(filters);
-      setSkillsData(data);
-    } catch (e) {
-      console.error('Failed to fetch skills data', e);
-    } finally {
-      setIsLoadingSkills(false);
-    }
-  }, [filters]);
+  }, [resourceSearch, resourceCategory, hasRealScope, scope?.classId, scope?.subject]);
 
   // Execute all fetches on filter change
   useEffect(() => {
@@ -158,9 +159,7 @@ export function useClassSpace() {
     fetchLiveSessions();
     fetchHomework();
     fetchQuizzes();
-    fetchHealthData();
-    fetchSkillsData();
-  }, [fetchPosts, fetchLiveSessions, fetchHomework, fetchQuizzes, fetchHealthData, fetchSkillsData]);
+  }, [fetchPosts, fetchLiveSessions, fetchHomework, fetchQuizzes]);
 
   useEffect(() => {
     fetchResources();
@@ -169,8 +168,22 @@ export function useClassSpace() {
   // Mutations
   const createPost = async (postData: Partial<Post>) => {
     try {
-      const newPost = await classSpaceApi.createPost(postData);
-      setPosts(prev => [newPost, ...prev]);
+      if (scope?.classId && scope?.subject && currentUser) {
+        const newPost = await createRealPost({
+          classId: scope.classId,
+          subject: scope.subject,
+          authorId: currentUser.id,
+          authorRole: currentUser.role,
+          authorName: currentUser.name,
+          content: postData.content || '',
+          topicTag: postData.topicTag,
+          media: postData.media,
+        });
+        if (newPost) setPosts(prev => [newPost, ...prev]);
+      } else {
+        const newPost = await classSpaceApi.createPost(postData);
+        setPosts(prev => [newPost, ...prev]);
+      }
       showNotification('Post published successfully to Class Space!');
     } catch (e) {
       showNotification('Failed to publish post.');
@@ -179,8 +192,13 @@ export function useClassSpace() {
 
   const reactToPost = async (postId: string, reaction: keyof Post['interactions']) => {
     try {
-      const updated = await classSpaceApi.reactToPost(postId, reaction);
-      setPosts(prev => prev.map(p => p.id === postId ? updated : p));
+      if (scope?.classId && scope?.subject && currentUser) {
+        await reactToRealPost(postId, currentUser.id, reaction);
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, interactions: { ...p.interactions, [reaction]: p.interactions[reaction] + 1 } } : p));
+      } else {
+        const updated = await classSpaceApi.reactToPost(postId, reaction);
+        setPosts(prev => prev.map(p => p.id === postId ? updated : p));
+      }
     } catch (e) {
       console.error(e);
     }
@@ -188,8 +206,14 @@ export function useClassSpace() {
 
   const addComment = async (postId: string, commentText: string) => {
     try {
-      const updated = await classSpaceApi.addComment(postId, commentText);
-      setPosts(prev => prev.map(p => p.id === postId ? updated : p));
+      if (scope?.classId && scope?.subject && currentUser) {
+        await addRealComment(postId, currentUser.id, currentUser.role, currentUser.name, commentText);
+        const newComment = { id: `local-${Date.now()}`, author: currentUser, content: commentText, timestamp: 'Just now' };
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p));
+      } else {
+        const updated = await classSpaceApi.addComment(postId, commentText);
+        setPosts(prev => prev.map(p => p.id === postId ? updated : p));
+      }
       showNotification('Comment added!');
     } catch (e) {
       console.error(e);
@@ -208,8 +232,13 @@ export function useClassSpace() {
 
   const createHomework = async (data: Omit<HomeworkItem, 'id' | 'submittedCount' | 'status'>) => {
     try {
-      const newHw = await classSpaceApi.createHomework(data);
-      setHomeworkList(prev => [newHw, ...prev]);
+      if (hasRealScope) {
+        const newHw = await createRealHomeworkItem({ teacherId: scope!.authUser.teacherId, classId: scope!.classId!, subject: scope!.subject! }, { title: data.title, dueDate: data.dueDate, instructions: data.instructions });
+        if (newHw) setHomeworkList(prev => [newHw, ...prev]);
+      } else {
+        const newHw = await classSpaceApi.createHomework(data);
+        setHomeworkList(prev => [newHw, ...prev]);
+      }
       showNotification('Homework assignment created!');
     } catch (e) {
       showNotification('Error creating homework.');
@@ -259,12 +288,6 @@ export function useClassSpace() {
     setResourceSearch,
     resourceCategory,
     setResourceCategory,
-    // Health Data
-    healthData,
-    isLoadingHealth,
-    // Skills Data
-    skillsData,
-    isLoadingSkills,
     // Toast
     toastMessage,
     showNotification

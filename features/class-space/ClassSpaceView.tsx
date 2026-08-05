@@ -1,10 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   MessageSquare, 
-  HeartPulse, 
-  Brain, 
   CheckSquare, 
   BookOpen, 
   CheckCircle2,
@@ -17,6 +15,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useClassSpace } from '@/hooks/useClassSpace';
+import { getClassRoster } from '@/services/assignmentData';
 import { ClassSpaceHeader } from './ClassSpaceHeader';
 import { PostComposer } from './PostComposer';
 import { PostCard } from './PostCard';
@@ -25,10 +24,31 @@ import { HomeworkWidget } from './HomeworkWidget';
 import { QuizzesWidget } from './QuizzesWidget';
 import { ResourcesWidget } from './ResourcesWidget';
 import { GradingWidget } from './GradingWidget';
-import { HealthDataWidget } from './HealthDataWidget';
-import { SkillsDataWidget } from './SkillsDataWidget';
 
-export function ClassSpaceView() {
+interface ClassSpaceViewProps {
+  authUser?: any;
+  userRole?: 'teacher' | 'student' | 'parent';
+  classId?: string;
+  subject?: string;
+  grade?: string;
+  className?: string;
+  myClasses?: { id: string; name: string; gradeLevel: string }[];
+  mySubjects?: string[];
+}
+
+export function ClassSpaceView({ authUser, userRole, classId: initialClassId, subject: initialSubject, grade: initialGrade, className: initialClassName, myClasses = [], mySubjects = [] }: ClassSpaceViewProps) {
+  const [activeClassId, setActiveClassId] = useState(initialClassId);
+  const [activeSubject, setActiveSubject] = useState(initialSubject);
+  const [activeGrade, setActiveGrade] = useState(initialGrade);
+  const [activeClassName, setActiveClassName] = useState(initialClassName);
+
+  useEffect(() => {
+    setActiveClassId(initialClassId);
+    setActiveSubject(initialSubject);
+    setActiveGrade(initialGrade);
+    setActiveClassName(initialClassName);
+  }, [initialClassId, initialSubject]);
+
   const {
     filters,
     updateFilters,
@@ -53,21 +73,27 @@ export function ClassSpaceView() {
     setResourceSearch,
     resourceCategory,
     setResourceCategory,
-    healthData,
-    isLoadingHealth,
-    skillsData,
-    isLoadingSkills,
     toastMessage
-  } = useClassSpace();
+  } = useClassSpace({ authUser, userRole, classId: activeClassId, subject: activeSubject, grade: activeGrade, className: activeClassName });
 
-  const [activeTab, setActiveTab] = useState<'wall' | 'assessments' | 'resources' | 'health' | 'skills'>('wall');
+  const [activeTab, setActiveTab] = useState<'wall' | 'assessments' | 'resources'>('wall');
   const [wallFocus, setWallFocus] = useState<'all' | 'live' | 'homework' | 'quizzes' | 'resources' | 'grading'>('all');
 
-  const liveCount = liveSessions.filter(s => s.status === 'live').length || 1;
-  const homeworkCount = homeworkList.filter(h => h.status === 'active').length || 3;
-  const quizCount = quizzes.length || 2;
-  const resourceCount = resources.length || 4;
-  const pendingGradingCount = 5;
+  const [realStudentCount, setRealStudentCount] = useState(0);
+
+  useEffect(() => {
+    if (activeClassId) {
+      getClassRoster(activeClassId).then((roster) => setRealStudentCount(roster.length));
+    } else {
+      setRealStudentCount(0);
+    }
+  }, [activeClassId]);
+
+  const liveCount = liveSessions.filter(s => s.status === 'live').length;
+  const homeworkCount = homeworkList.filter(h => h.status === 'active').length;
+  const quizCount = quizzes.length;
+  const resourceCount = resources.length;
+  const pendingGradingCount = homeworkList.filter(h => h.status === 'grading').length;
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] text-slate-900 font-sans" dir="ltr">
@@ -90,9 +116,15 @@ export function ClassSpaceView() {
       <ClassSpaceHeader
         filters={filters}
         onFilterChange={updateFilters}
-        activeStudentsCount={28}
+        activeStudentsCount={realStudentCount}
         liveSessionsCount={liveCount}
         activeHomeworkCount={homeworkCount}
+        myClasses={myClasses}
+        mySubjects={mySubjects}
+        activeClassId={activeClassId}
+        activeSubject={activeSubject}
+        onSelectClass={(cls) => { setActiveClassId(cls.id); setActiveGrade(cls.gradeLevel); setActiveClassName(cls.name); }}
+        onSelectSubject={(subj) => setActiveSubject(subj)}
       />
 
       {/* Reordered & Highlighted Navigation Sub-Tabs */}
@@ -143,38 +175,6 @@ export function ClassSpaceView() {
             <span>SCORM & Resources</span>
             <span className="bg-teal-100 text-teal-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
               {resourceCount} Docs
-            </span>
-          </button>
-
-          {/* 4. Health & Wellbeing (Data Tab) */}
-          <button
-            onClick={() => setActiveTab('health')}
-            className={`px-4 py-3 text-xs font-black border-b-2 transition-all flex items-center gap-2 whitespace-nowrap rounded-t-lg ${
-              activeTab === 'health'
-                ? 'border-rose-500 text-rose-600 bg-rose-50/50'
-                : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <HeartPulse size={16} className="text-rose-500" />
-            <span>Health & Wellbeing</span>
-            <span className="bg-rose-100 text-rose-800 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full">
-              Segregated Data
-            </span>
-          </button>
-
-          {/* 5. Skills & Bloom's Taxonomy (Data Tab) */}
-          <button
-            onClick={() => setActiveTab('skills')}
-            className={`px-4 py-3 text-xs font-black border-b-2 transition-all flex items-center gap-2 whitespace-nowrap rounded-t-lg ${
-              activeTab === 'skills'
-                ? 'border-indigo-500 text-indigo-600 bg-indigo-50/50'
-                : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <Brain size={16} className="text-indigo-500" />
-            <span>Skills & Bloom&apos;s Taxonomy</span>
-            <span className="bg-indigo-100 text-indigo-800 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full">
-              Segregated Data
             </span>
           </button>
         </div>
@@ -336,6 +336,8 @@ export function ClassSpaceView() {
                     quizzes={quizzes}
                     isLoading={isLoadingQuizzes}
                     onCreateQuiz={createQuiz}
+                    classId={activeClassId}
+                    subject={activeSubject}
                   />
                 </div>
               </div>
@@ -383,27 +385,11 @@ export function ClassSpaceView() {
                 </div>
 
                 <div className={`transition-all rounded-2xl ${wallFocus === 'grading' ? 'ring-4 ring-indigo-400 ring-offset-2 shadow-lg' : ''}`}>
-                  <GradingWidget />
+                  <GradingWidget classId={activeClassId} subject={activeSubject} grade={activeGrade} />
                 </div>
               </div>
             </div>
           </div>
-        )}
-
-        {/* Segregated Health Data Tab */}
-        {activeTab === 'health' && (
-          <HealthDataWidget
-            healthData={healthData}
-            isLoading={isLoadingHealth}
-          />
-        )}
-
-        {/* Segregated Skills Data Tab */}
-        {activeTab === 'skills' && (
-          <SkillsDataWidget
-            skillsData={skillsData}
-            isLoading={isLoadingSkills}
-          />
         )}
 
         {/* Assessments Tab */}
@@ -418,6 +404,8 @@ export function ClassSpaceView() {
               quizzes={quizzes}
               isLoading={isLoadingQuizzes}
               onCreateQuiz={createQuiz}
+              classId={activeClassId}
+              subject={activeSubject}
             />
           </div>
         )}
