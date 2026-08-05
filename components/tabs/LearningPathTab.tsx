@@ -1044,6 +1044,7 @@ export function LearningPathTab({
         unitTitle={targetUnitTitle}
         classId={classId}
         subject={subject}
+        grade={grade}
         unitId={targetUnitId}
         assessmentType={newAssessmentType}
       />

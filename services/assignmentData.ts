@@ -81,7 +81,7 @@ export async function getAssignmentById(id: string): Promise<Assignment | null> 
   return mapAssignment(data);
 }
 
-export async function createAssignment(scope: AssignmentScope, input: { title: string; instructions: string; dueDate: string | null; settings?: Record<string, any>; rubric?: any[]; attachments?: { name: string; storagePath: string }[] }): Promise<{ id: string | null; error: string | null }> {
+export async function createAssignment(scope: AssignmentScope, input: { title: string; instructions: string; dueDate: string | null; status?: 'Active' | 'Draft'; unitId?: string | null; settings?: Record<string, any>; rubric?: any[]; attachments?: { name: string; storagePath: string }[] }): Promise<{ id: string | null; error: string | null }> {
   const { data, error } = await supabase
     .from('assignments')
     .insert({
@@ -92,7 +92,8 @@ export async function createAssignment(scope: AssignmentScope, input: { title: s
       type: 'assignment',
       instructions: input.instructions,
       due_date: input.dueDate,
-      status: 'Active',
+      status: input.status || 'Active',
+      unit_id: input.unitId || null,
       settings: input.settings || {},
       rubric: input.rubric || [],
       attachments: input.attachments || [],
@@ -143,7 +144,7 @@ export async function getQuizById(id: string): Promise<Quiz | null> {
   return mapQuiz(data);
 }
 
-export async function createQuiz(scope: AssignmentScope, input: { title: string; dueDate: string | null; releaseAt: string | null; settings?: Record<string, any>; questions: any[]; sections: any[] }): Promise<{ id: string | null; error: string | null }> {
+export async function createQuiz(scope: AssignmentScope, input: { title: string; dueDate: string | null; releaseAt: string | null; status?: 'Active' | 'Draft'; unitId?: string | null; settings?: Record<string, any>; questions: any[]; sections: any[] }): Promise<{ id: string | null; error: string | null }> {
   const { data, error } = await supabase
     .from('assignments')
     .insert({
@@ -154,7 +155,8 @@ export async function createQuiz(scope: AssignmentScope, input: { title: string;
       type: 'quiz',
       due_date: input.dueDate,
       release_at: input.releaseAt,
-      status: 'Active',
+      status: input.status || 'Active',
+      unit_id: input.unitId || null,
       settings: input.settings || {},
       questions: input.questions || [],
       sections: input.sections || [],
@@ -181,6 +183,16 @@ export async function updateAssignment(id: string, input: { title?: string; inst
 export async function deleteAssignment(id: string): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('assignments').delete().eq('id', id);
   return { ok: !error, error: error?.message || null };
+}
+
+// بيجيب الوحدات (Modules) الحقيقية للفصل والمادة دي، عشان تقدر تربط الواجب/الكويز بوحدة
+export async function getUnitsForAssignment(classId: string, subject: string): Promise<{ id: string; title: string }[]> {
+  const { data, error } = await supabase.from('learning_units').select('id, title').eq('class_id', classId).eq('subject', subject).order('display_order', { ascending: true });
+  if (error) {
+    console.error('Error fetching units for assignment:', error);
+    return [];
+  }
+  return data || [];
 }
 
 // بيجيب كل الطلاب المسجّلين في الفصل + حالة تسليمهم للواجب (Pending لو لسه ملموش سطر)

@@ -27,6 +27,11 @@ interface AssessmentSidebarProps {
   setStatus: (val: 'draft' | 'published') => void;
   category: string;
   setCategory: (val: string) => void;
+  gradebookCategories?: string[];
+  selectedUnitId?: string;
+  setSelectedUnitId?: (val: string) => void;
+  availableUnits?: { id: string; title: string }[];
+  isUnitLocked?: boolean;
   isAutoCalc: boolean;
   setIsAutoCalc: (val: boolean) => void;
   maxScore: number;
@@ -96,6 +101,11 @@ export function AssessmentSidebar({
   setStatus,
   category,
   setCategory,
+  gradebookCategories = [],
+  selectedUnitId = '',
+  setSelectedUnitId = () => {},
+  availableUnits = [],
+  isUnitLocked = false,
   isAutoCalc,
   setIsAutoCalc,
   maxScore,
@@ -312,6 +322,65 @@ export function AssessmentSidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
+        {/* Shared fields (Quiz & Assignment) */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-600 mb-1.5">{isRtl ? 'الوحدة (Module)' : 'Module'}</label>
+            {isUnitLocked ? (
+              <div className="w-full bg-slate-100 border border-slate-200 rounded-xl py-2 px-3 text-sm font-medium text-slate-500 flex items-center gap-2">
+                <Lock size={12} />
+                {availableUnits.find((u) => u.id === selectedUnitId)?.title || (isRtl ? 'الوحدة الحالية' : 'Current module')}
+              </div>
+            ) : (
+              <select
+                value={selectedUnitId}
+                onChange={(e) => setSelectedUnitId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-orange-100"
+              >
+                <option value="">{isRtl ? 'بدون وحدة' : 'No module'}</option>
+                {availableUnits.map((u) => (
+                  <option key={u.id} value={u.id}>{u.title}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-600 mb-1.5">{isRtl ? 'الحالة' : 'Status'}</label>
+            <div className="flex bg-slate-100 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setStatus('draft')}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${status === 'draft' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400'}`}
+              >
+                {isRtl ? 'مسودة' : 'Draft'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatus('published')}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${status === 'published' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-400'}`}
+              >
+                {isRtl ? 'منشور' : 'Publish'}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-600 mb-1.5">{isRtl ? 'فئة جدول الدرجات' : 'Gradebook Category'}</label>
+            <select 
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-orange-100"
+            >
+              {gradebookCategories.length === 0 && <option value="">{isRtl ? 'مفيش فئات معرّفة لسه' : 'No categories defined yet'}</option>}
+              {gradebookCategories.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <hr className="border-slate-200" />
+
         {activeTab === 'quiz' ? (
           <>
             {/* Quiz Global Settings */}
@@ -341,20 +410,6 @@ export function AssessmentSidebar({
                       {t.statusPublished}
                     </button>
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5">{t.category}</label>
-                  <select 
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-orange-100"
-                  >
-                    <option value="quiz">{t.catQuiz}</option>
-                    <option value="assignment">{t.catAssignment}</option>
-                    <option value="exam">{t.catExam}</option>
-                    <option value="participation">{t.catParticipation}</option>
-                  </select>
                 </div>
 
                 {activeTab === 'quiz' && (

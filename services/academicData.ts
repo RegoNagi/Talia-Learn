@@ -65,3 +65,18 @@ export async function getOfficialCurriculumResources(grade: string, subject: str
   return (data || []).map((row: any) => ({ id: row.id, title: row.title, type: row.type, url: row.url }));
 }
 
+// بيجيب فئات جدول الدرجات الحقيقية (من Talia 360) لمادة وصف معيّنين
+export async function getGradebookCategories(subject: string, grade: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('gradebook_configs')
+    .select('category_weights, gradebook_config_grades ( grade )')
+    .eq('subject_name', subject);
+  if (error || !data) {
+    console.error('Error fetching gradebook categories:', error);
+    return [];
+  }
+  const matching = data.find((row: any) => (row.gradebook_config_grades || []).some((g: any) => g.grade === grade));
+  if (!matching) return [];
+  return Object.keys((matching as any).category_weights || {});
+}
+

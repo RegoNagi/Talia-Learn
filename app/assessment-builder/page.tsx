@@ -18,7 +18,8 @@ import { createPortal } from 'react-dom';
 import { FloatingPortal } from '@floating-ui/react';
 import { AssessmentSidebar } from '@/components/AssessmentSidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { createAssignment, createQuiz, uploadAssignmentAttachment, getSubmissionFileUrl } from '@/services/assignmentData';
+import { createAssignment, createQuiz, uploadAssignmentAttachment, getSubmissionFileUrl, getUnitsForAssignment } from '@/services/assignmentData';
+import { getGradebookCategories } from '@/services/academicData';
 
 interface Question {
   id: string;
@@ -60,6 +61,14 @@ function AssessmentBuilderContent() {
   const scopeClassId = searchParams.get('classId') || '';
   const scopeSubject = searchParams.get('subject') || '';
   const scopeUnitId = searchParams.get('unitId') || '';
+  const [selectedUnitId, setSelectedUnitId] = useState(scopeUnitId);
+  const [availableUnits, setAvailableUnits] = useState<{ id: string; title: string }[]>([]);
+
+  useEffect(() => {
+    if (scopeClassId && scopeSubject) {
+      getUnitsForAssignment(scopeClassId, scopeSubject).then(setAvailableUnits);
+    }
+  }, [scopeClassId, scopeSubject]);
   const returnTo = searchParams.get('from') || '';
 
   const goBack = () => {
@@ -71,7 +80,18 @@ function AssessmentBuilderContent() {
   const initialType = (searchParams.get('type') === 'quiz' ? 'quiz' : 'assignment') as 'quiz' | 'assignment';
   const [activeTab] = useState<'quiz' | 'assignment'>(initialType);
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('quiz');
+  const [category, setCategory] = useState('');
+  const [gradebookCategories, setGradebookCategories] = useState<string[]>([]);
+
+  useEffect(() => {
+    const grade = searchParams.get('grade') || '';
+    if (scopeSubject && grade) {
+      getGradebookCategories(scopeSubject, grade).then((cats) => {
+        setGradebookCategories(cats);
+        if (cats.length > 0 && !category) setCategory(cats[0]);
+      });
+    }
+  }, [scopeSubject]);
   const [maxScore, setMaxScore] = useState(100);
   const [isAutoCalc, setIsAutoCalc] = useState(true);
   const [isGraded, setIsGraded] = useState(true);
@@ -198,6 +218,7 @@ function AssessmentBuilderContent() {
       const dueDateTime = dueDate ? `${dueDate}T${dueTime || '23:59'}` : null;
       const assignmentSettings = {
         maxScore,
+        category,
         attemptLimit,
         allowLateSubmission,
         latePenalty: allowLateSubmission ? latePenalty : 'none',
@@ -210,11 +231,11 @@ function AssessmentBuilderContent() {
       };
       const { id, error } = await createAssignment(
         { teacherId: authUser.teacherId, classId: scopeClassId, subject: scopeSubject },
-        { title: title.trim(), instructions: instructionsText, dueDate: dueDateTime, settings: assignmentSettings, rubric, attachments }
+        { title: title.trim(), instructions: instructionsText, dueDate: dueDateTime, status: status === 'draft' ? 'Draft' : 'Active', unitId: selectedUnitId || null, settings: assignmentSettings, rubric, attachments }
       );
       setIsSavingReal(false);
       if (id) {
-        addToast('Assignment Saved & Published!');
+        addToast('Assignment Saved!');
         setTimeout(() => goBack(), 1000);
       } else {
         setSaveError(error || 'Unknown error');
@@ -237,6 +258,7 @@ function AssessmentBuilderContent() {
     const quizReleaseDateTime = hasReleaseCondition && releaseDate ? `${releaseDate}T${releaseTime || '00:00'}` : null;
     const quizSettings = {
       maxScore,
+      category,
       timeLimitHours,
       timeLimitMinutes,
       attemptLimit,
@@ -249,11 +271,11 @@ function AssessmentBuilderContent() {
     };
     const { id: quizId, error: quizError } = await createQuiz(
       { teacherId: authUser.teacherId, classId: scopeClassId, subject: scopeSubject },
-      { title: title.trim(), dueDate: quizDueDateTime, releaseAt: quizReleaseDateTime, settings: quizSettings, questions, sections }
+      { title: title.trim(), dueDate: quizDueDateTime, releaseAt: quizReleaseDateTime, status: status === 'draft' ? 'Draft' : 'Active', unitId: selectedUnitId || null, settings: quizSettings, questions, sections }
     );
     setIsSavingReal(false);
     if (quizId) {
-      addToast('Quiz Saved & Published!');
+      addToast('Quiz Saved!');
       setTimeout(() => goBack(), 1000);
     } else {
       setSaveError(quizError || 'Unknown error');
@@ -430,7 +452,7 @@ function AssessmentBuilderContent() {
             disabled={isSavingReal}
             className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-60 transition-all shadow-lg shadow-indigo-200 flex items-center gap-2"
           >
-            <Save size={16} /> {isSavingReal ? 'Saving...' : 'Save & Publish'}
+            <Save size={16} /> {isSavingReal ? 'Saving...' : 'Save'}
           </button>
         </div>
       </header>
@@ -1114,8 +1136,15 @@ function AssessmentBuilderContent() {
           setTitle={setTitle}
           status={status as any}
           setStatus={(s) => setStatus(s as any)}
+          status={status}
+          setStatus={setStatus}
           category={category}
           setCategory={setCategory}
+          gradebookCategories={gradebookCategories}
+          selectedUnitId={selectedUnitId}
+          setSelectedUnitId={setSelectedUnitId}
+          availableUnits={availableUnits}
+          isUnitLocked={!!scopeUnitId}
           isAutoCalc={isAutoCalc}
           setIsAutoCalc={setIsAutoCalc}
           maxScore={maxScore}

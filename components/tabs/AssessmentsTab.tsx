@@ -19,9 +19,10 @@ interface AssessmentsTabProps {
   studentId?: string;
   classId?: string;
   subject?: string;
+  grade?: string;
 }
 
-export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId, subject }: AssessmentsTabProps) {
+export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId, subject, grade }: AssessmentsTabProps) {
   const router = useRouter();
   const scope = teacherId && classId && subject ? { teacherId, classId, subject } : null;
   const studentScope = studentId && classId && subject ? { studentId, classId, subject } : null;
@@ -265,13 +266,13 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
           <div className="flex items-center gap-3">
             <button onClick={() => {
               const from = typeof window !== 'undefined' ? encodeURIComponent(window.location.pathname + window.location.search) : '';
-              router.push(`/assessment-builder?type=quiz&classId=${classId || ''}&subject=${encodeURIComponent(subject || '')}&from=${from}`);
+              router.push(`/assessment-builder?type=quiz&classId=${classId || ''}&subject=${encodeURIComponent(subject || '')}&grade=${encodeURIComponent(grade || '')}&from=${from}`);
             }} className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm">
               <Plus size={16} /> Add Quiz
             </button>
             <button onClick={() => {
               const from = typeof window !== 'undefined' ? encodeURIComponent(window.location.pathname + window.location.search) : '';
-              router.push(`/assessment-builder?type=assignment&classId=${classId || ''}&subject=${encodeURIComponent(subject || '')}&from=${from}`);
+              router.push(`/assessment-builder?type=assignment&classId=${classId || ''}&subject=${encodeURIComponent(subject || '')}&grade=${encodeURIComponent(grade || '')}&from=${from}`);
             }} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm">
               <Plus size={16} /> New Assignment
             </button>
