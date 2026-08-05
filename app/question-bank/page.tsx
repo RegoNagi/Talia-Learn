@@ -457,12 +457,6 @@ export default function QuestionBank() {
     });
   };
 
-  useEffect(() => {
-    if (assessmentView === 'LIBRARY' && canContribute) {
-      refreshAssessments();
-    }
-  }, [assessmentView, canContribute]);
-
 
 
 
@@ -517,6 +511,12 @@ export default function QuestionBank() {
   // بوابة الصلاحية الحقيقية — إما مشرف بنك الأسئلة (وصول كامل) أو معلم عنده صلاحية "إضافة أسئلة" بس
   const isSupervisor = authUser?.role === 'qb_supervisor';
   const canContribute = isSupervisor || (authUser?.role === 'teacher' && !!authUser?.canUseQuestionBank);
+
+  useEffect(() => {
+    if (assessmentView === 'LIBRARY' && canContribute) {
+      refreshAssessments();
+    }
+  }, [assessmentView, canContribute]);
 
   useEffect(() => {
     if (!canContribute) return;
