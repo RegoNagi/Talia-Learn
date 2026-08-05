@@ -10,6 +10,8 @@ export interface Assignment {
   settings: Record<string, any>;
   rubric: any[];
   attachments: { name: string; storagePath: string }[];
+  assignedClasses: string[];
+  assignedStudents: string[];
 }
 
 export interface AssignmentSubmission {
@@ -36,6 +38,8 @@ export interface Quiz {
   settings: Record<string, any>;
   questions: any[];
   sections: any[];
+  assignedClasses: string[];
+  assignedStudents: string[];
 }
 
 interface AssignmentScope {
@@ -44,7 +48,7 @@ interface AssignmentScope {
   subject: string;
 }
 
-const ASSIGNMENT_SELECT = 'id, title, instructions, due_date, status, created_at, settings, rubric, attachments';
+const ASSIGNMENT_SELECT = 'id, title, instructions, due_date, status, created_at, settings, rubric, attachments, assigned_classes, assigned_students';
 
 function mapAssignment(row: any): Assignment {
   return {
@@ -57,6 +61,8 @@ function mapAssignment(row: any): Assignment {
     settings: row.settings || {},
     rubric: row.rubric || [],
     attachments: row.attachments || [],
+    assignedClasses: row.assigned_classes || [],
+    assignedStudents: row.assigned_students || [],
   };
 }
 
@@ -81,7 +87,7 @@ export async function getAssignmentById(id: string): Promise<Assignment | null> 
   return mapAssignment(data);
 }
 
-export async function createAssignment(scope: AssignmentScope, input: { title: string; instructions: string; dueDate: string | null; status?: 'Active' | 'Draft'; unitId?: string | null; settings?: Record<string, any>; rubric?: any[]; attachments?: { name: string; storagePath: string }[] }): Promise<{ id: string | null; error: string | null }> {
+export async function createAssignment(scope: AssignmentScope, input: { title: string; instructions: string; dueDate: string | null; status?: 'Active' | 'Draft'; unitId?: string | null; settings?: Record<string, any>; rubric?: any[]; attachments?: { name: string; storagePath: string }[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ id: string | null; error: string | null }> {
   const { data, error } = await supabase
     .from('assignments')
     .insert({
@@ -97,6 +103,8 @@ export async function createAssignment(scope: AssignmentScope, input: { title: s
       settings: input.settings || {},
       rubric: input.rubric || [],
       attachments: input.attachments || [],
+      assigned_classes: input.assignedClasses || [],
+      assigned_students: input.assignedStudents || [],
     })
     .select('id')
     .single();
@@ -107,7 +115,7 @@ export async function createAssignment(scope: AssignmentScope, input: { title: s
   return { id: data.id, error: null };
 }
 
-const QUIZ_SELECT = 'id, title, due_date, release_at, status, created_at, settings, questions, sections';
+const QUIZ_SELECT = 'id, title, due_date, release_at, status, created_at, settings, questions, sections, assigned_classes, assigned_students';
 
 function mapQuiz(row: any): Quiz {
   return {
@@ -120,6 +128,8 @@ function mapQuiz(row: any): Quiz {
     settings: row.settings || {},
     questions: row.questions || [],
     sections: row.sections || [],
+    assignedClasses: row.assigned_classes || [],
+    assignedStudents: row.assigned_students || [],
   };
 }
 
@@ -144,7 +154,7 @@ export async function getQuizById(id: string): Promise<Quiz | null> {
   return mapQuiz(data);
 }
 
-export async function createQuiz(scope: AssignmentScope, input: { title: string; dueDate: string | null; releaseAt: string | null; status?: 'Active' | 'Draft'; unitId?: string | null; settings?: Record<string, any>; questions: any[]; sections: any[] }): Promise<{ id: string | null; error: string | null }> {
+export async function createQuiz(scope: AssignmentScope, input: { title: string; dueDate: string | null; releaseAt: string | null; status?: 'Active' | 'Draft'; unitId?: string | null; settings?: Record<string, any>; questions: any[]; sections: any[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ id: string | null; error: string | null }> {
   const { data, error } = await supabase
     .from('assignments')
     .insert({
@@ -160,6 +170,8 @@ export async function createQuiz(scope: AssignmentScope, input: { title: string;
       settings: input.settings || {},
       questions: input.questions || [],
       sections: input.sections || [],
+      assigned_classes: input.assignedClasses || [],
+      assigned_students: input.assignedStudents || [],
     })
     .select('id')
     .single();
@@ -170,7 +182,7 @@ export async function createQuiz(scope: AssignmentScope, input: { title: string;
   return { id: data.id, error: null };
 }
 
-export async function updateAssignment(id: string, input: { title?: string; instructions?: string; dueDate?: string | null; status?: string; unitId?: string | null; settings?: Record<string, any>; rubric?: any[]; attachments?: { name: string; storagePath: string }[] }): Promise<{ ok: boolean; error: string | null }> {
+export async function updateAssignment(id: string, input: { title?: string; instructions?: string; dueDate?: string | null; status?: string; unitId?: string | null; settings?: Record<string, any>; rubric?: any[]; attachments?: { name: string; storagePath: string }[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ ok: boolean; error: string | null }> {
   const patch: any = {};
   if (input.title !== undefined) patch.title = input.title;
   if (input.instructions !== undefined) patch.instructions = input.instructions;
@@ -180,11 +192,13 @@ export async function updateAssignment(id: string, input: { title?: string; inst
   if (input.settings !== undefined) patch.settings = input.settings;
   if (input.rubric !== undefined) patch.rubric = input.rubric;
   if (input.attachments !== undefined) patch.attachments = input.attachments;
+  if (input.assignedClasses !== undefined) patch.assigned_classes = input.assignedClasses;
+  if (input.assignedStudents !== undefined) patch.assigned_students = input.assignedStudents;
   const { error } = await supabase.from('assignments').update(patch).eq('id', id);
   return { ok: !error, error: error?.message || null };
 }
 
-export async function updateQuiz(id: string, input: { title?: string; dueDate?: string | null; releaseAt?: string | null; status?: string; unitId?: string | null; settings?: Record<string, any>; questions?: any[]; sections?: any[] }): Promise<{ ok: boolean; error: string | null }> {
+export async function updateQuiz(id: string, input: { title?: string; dueDate?: string | null; releaseAt?: string | null; status?: string; unitId?: string | null; settings?: Record<string, any>; questions?: any[]; sections?: any[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ ok: boolean; error: string | null }> {
   const patch: any = {};
   if (input.title !== undefined) patch.title = input.title;
   if (input.dueDate !== undefined) patch.due_date = input.dueDate;
@@ -194,6 +208,8 @@ export async function updateQuiz(id: string, input: { title?: string; dueDate?: 
   if (input.settings !== undefined) patch.settings = input.settings;
   if (input.questions !== undefined) patch.questions = input.questions;
   if (input.sections !== undefined) patch.sections = input.sections;
+  if (input.assignedClasses !== undefined) patch.assigned_classes = input.assignedClasses;
+  if (input.assignedStudents !== undefined) patch.assigned_students = input.assignedStudents;
   const { error } = await supabase.from('assignments').update(patch).eq('id', id);
   return { ok: !error, error: error?.message || null };
 }
@@ -204,6 +220,21 @@ export async function deleteAssignment(id: string): Promise<{ ok: boolean; error
 }
 
 // بيجيب الوحدات (Modules) الحقيقية للفصل والمادة دي، عشان تقدر تربط الواجب/الكويز بوحدة
+// بيجيب فصول تانية بتاعة نفس المعلم عشان يقدر يشارك الواجب/الكويز معاها
+export async function getTeacherOtherClasses(teacherId: string, excludeClassId: string): Promise<{ id: string; name: string }[]> {
+  const { data, error } = await supabase.from('class_sections').select('id, name').eq('teacher_id', teacherId);
+  if (error) return [];
+  return (data || []).filter((c: any) => c.id !== excludeClassId);
+}
+
+// بيجيب طلاب الفصل الحالي عشان تقدر تخصص لطلاب معيّنين بس
+export async function getClassRoster(classId: string): Promise<{ id: string; name: string }[]> {
+  const { data, error } = await supabase.from('class_sections').select('enrollments ( student_id, students ( id, users ( name ) ) )').eq('id', classId).maybeSingle();
+  if (error || !data) return [];
+  const enrollments = (data as any).enrollments || [];
+  return enrollments.map((e: any) => ({ id: e.students?.id || e.student_id, name: e.students?.users?.name || '' })).filter((s: any) => s.id);
+}
+
 export async function getUnitsForAssignment(classId: string, subject: string): Promise<{ id: string; title: string }[]> {
   const { data, error } = await supabase.from('learning_units').select('id, title').eq('class_id', classId).eq('subject', subject).order('display_order', { ascending: true });
   if (error) {

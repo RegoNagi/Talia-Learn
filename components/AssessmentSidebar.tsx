@@ -32,6 +32,12 @@ interface AssessmentSidebarProps {
   setSelectedUnitId?: (val: string) => void;
   availableUnits?: { id: string; title: string }[];
   isUnitLocked?: boolean;
+  assignedClasses?: string[];
+  setAssignedClasses?: (val: string[]) => void;
+  assignedStudents?: string[];
+  setAssignedStudents?: (val: string[]) => void;
+  otherClasses?: { id: string; name: string }[];
+  classRoster?: { id: string; name: string }[];
   isAutoCalc: boolean;
   setIsAutoCalc: (val: boolean) => void;
   maxScore: number;
@@ -106,6 +112,12 @@ export function AssessmentSidebar({
   setSelectedUnitId = () => {},
   availableUnits = [],
   isUnitLocked = false,
+  assignedClasses = [],
+  setAssignedClasses = () => {},
+  assignedStudents = [],
+  setAssignedStudents = () => {},
+  otherClasses = [],
+  classRoster = [],
   isAutoCalc,
   setIsAutoCalc,
   maxScore,
@@ -377,6 +389,43 @@ export function AssessmentSidebar({
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-600 mb-1.5">{isRtl ? 'شارك مع فصولي التانية' : 'Assign to my other classes'}</label>
+            <div className="space-y-1.5 max-h-32 overflow-y-auto bg-slate-50 border border-slate-200 rounded-xl p-2">
+              {otherClasses.length === 0 && <p className="text-xs text-slate-400 px-2 py-1">{isRtl ? 'مفيش فصول تانية.' : 'No other classes.'}</p>}
+              {otherClasses.map((c) => (
+                <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={assignedClasses.includes(c.id)}
+                    onChange={() => setAssignedClasses(assignedClasses.includes(c.id) ? assignedClasses.filter((x) => x !== c.id) : [...assignedClasses, c.id])}
+                    className="accent-orange-500"
+                  />
+                  <span className="text-xs font-medium text-slate-700">{c.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-600 mb-1.5">{isRtl ? 'تخصيص لطلاب معيّنين (الفصل ده)' : 'Assign to specific students (this class)'}</label>
+            <div className="space-y-1.5 max-h-32 overflow-y-auto bg-slate-50 border border-slate-200 rounded-xl p-2">
+              {classRoster.length === 0 && <p className="text-xs text-slate-400 px-2 py-1">{isRtl ? 'مفيش طلاب لسه.' : 'No students yet.'}</p>}
+              {classRoster.map((s) => (
+                <label key={s.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={assignedStudents.includes(s.id)}
+                    onChange={() => setAssignedStudents(assignedStudents.includes(s.id) ? assignedStudents.filter((x) => x !== s.id) : [...assignedStudents, s.id])}
+                    className="accent-orange-500"
+                  />
+                  <span className="text-xs font-medium text-slate-700">{s.name}</span>
+                </label>
+              ))}
+            </div>
+            {assignedStudents.length === 0 && <p className="text-[11px] text-slate-400 mt-1.5">{isRtl ? 'مفيش تحديد = يبان لكل طلاب الفصل.' : 'None selected = visible to all students in this class.'}</p>}
           </div>
         </div>
         <hr className="border-slate-200" />

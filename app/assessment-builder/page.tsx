@@ -18,7 +18,7 @@ import { createPortal } from 'react-dom';
 import { FloatingPortal } from '@floating-ui/react';
 import { AssessmentSidebar } from '@/components/AssessmentSidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { createAssignment, createQuiz, uploadAssignmentAttachment, getSubmissionFileUrl, getUnitsForAssignment, getAssignmentById, getQuizById, updateAssignment, updateQuiz } from '@/services/assignmentData';
+import { createAssignment, createQuiz, uploadAssignmentAttachment, getSubmissionFileUrl, getUnitsForAssignment, getAssignmentById, getQuizById, updateAssignment, updateQuiz, getTeacherOtherClasses, getClassRoster } from '@/services/assignmentData';
 import { getGradebookCategories } from '@/services/academicData';
 
 interface Question {
@@ -65,6 +65,19 @@ function AssessmentBuilderContent() {
   const [isEditLoading, setIsEditLoading] = useState(!!editId);
   const [selectedUnitId, setSelectedUnitId] = useState(scopeUnitId);
   const [availableUnits, setAvailableUnits] = useState<{ id: string; title: string }[]>([]);
+  const [assignedClasses, setAssignedClasses] = useState<string[]>([]);
+  const [assignedStudents, setAssignedStudents] = useState<string[]>([]);
+  const [otherClasses, setOtherClasses] = useState<{ id: string; name: string }[]>([]);
+  const [classRoster, setClassRoster] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    if (authUser?.teacherId && scopeClassId) {
+      getTeacherOtherClasses(authUser.teacherId, scopeClassId).then(setOtherClasses);
+    }
+    if (scopeClassId) {
+      getClassRoster(scopeClassId).then(setClassRoster);
+    }
+  }, [authUser?.teacherId, scopeClassId]);
 
   useEffect(() => {
     if (scopeClassId && scopeSubject) {
@@ -231,7 +244,7 @@ function AssessmentBuilderContent() {
         gradingMethod,
         passPercentage,
       };
-      const assignmentPayload = { title: title.trim(), instructions: instructionsText, dueDate: dueDateTime, status: status === 'draft' ? 'Draft' as const : 'Active' as const, unitId: selectedUnitId || null, settings: assignmentSettings, rubric, attachments };
+      const assignmentPayload = { title: title.trim(), instructions: instructionsText, dueDate: dueDateTime, status: status === 'draft' ? 'Draft' as const : 'Active' as const, unitId: selectedUnitId || null, settings: assignmentSettings, rubric, attachments, assignedClasses, assignedStudents };
       const { id, error } = editId
         ? await updateAssignment(editId, assignmentPayload).then((r) => ({ id: r.ok ? editId : null, error: r.error }))
         : await createAssignment({ teacherId: authUser.teacherId, classId: scopeClassId, subject: scopeSubject }, assignmentPayload);
@@ -271,7 +284,7 @@ function AssessmentBuilderContent() {
       publishToTimeline,
       passPercentage,
     };
-    const quizPayload = { title: title.trim(), dueDate: quizDueDateTime, releaseAt: quizReleaseDateTime, status: status === 'draft' ? 'Draft' as const : 'Active' as const, unitId: selectedUnitId || null, settings: quizSettings, questions, sections };
+    const quizPayload = { title: title.trim(), dueDate: quizDueDateTime, releaseAt: quizReleaseDateTime, status: status === 'draft' ? 'Draft' as const : 'Active' as const, unitId: selectedUnitId || null, settings: quizSettings, questions, sections, assignedClasses, assignedStudents };
     const { id: quizId, error: quizError } = editId
       ? await updateQuiz(editId, quizPayload).then((r) => ({ id: r.ok ? editId : null, error: r.error }))
       : await createQuiz({ teacherId: authUser.teacherId, classId: scopeClassId, subject: scopeSubject }, quizPayload);
@@ -343,6 +356,8 @@ function AssessmentBuilderContent() {
           setStatus(q.status === 'Draft' ? 'draft' : 'published');
           setQuestions(q.questions || []);
           setSections(q.sections || []);
+          setAssignedClasses(q.assignedClasses || []);
+          setAssignedStudents(q.assignedStudents || []);
           const s = q.settings || {};
           if (s.maxScore !== undefined) setMaxScore(s.maxScore);
           if (s.category !== undefined) setCategory(s.category);
@@ -364,6 +379,8 @@ function AssessmentBuilderContent() {
           setStatus(a.status === 'Draft' ? 'draft' : 'published');
           setRubric(a.rubric || []);
           setAttachments(a.attachments || []);
+          setAssignedClasses(a.assignedClasses || []);
+          setAssignedStudents(a.assignedStudents || []);
           const s = a.settings || {};
           if (s.maxScore !== undefined) setMaxScore(s.maxScore);
           if (s.category !== undefined) setCategory(s.category);
@@ -1196,6 +1213,12 @@ function AssessmentBuilderContent() {
           setSelectedUnitId={setSelectedUnitId}
           availableUnits={availableUnits}
           isUnitLocked={!!scopeUnitId}
+          assignedClasses={assignedClasses}
+          setAssignedClasses={setAssignedClasses}
+          assignedStudents={assignedStudents}
+          setAssignedStudents={setAssignedStudents}
+          otherClasses={otherClasses}
+          classRoster={classRoster}
           isAutoCalc={isAutoCalc}
           setIsAutoCalc={setIsAutoCalc}
           maxScore={maxScore}
