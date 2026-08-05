@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation';
 import { 
   Users, CheckCircle, BarChart3, ArrowUpRight, Settings, Zap, PenTool, Eye,
   PlayCircle, FileText, Check, Upload, Clock, AlertCircle, ShieldAlert, ArrowLeft,
-  Save, Plus, X
+  Save, Plus, X, BrainCircuit, Trash2, Edit
 } from 'lucide-react';
 import {
   getAssignments, getQuizzes, getSubmissionsForAssignment, getMySubmission,
-  submitAssignment, gradeSubmission, getSubmissionFileUrl,
+  submitAssignment, gradeSubmission, getSubmissionFileUrl, deleteAssignment,
   Assignment, AssignmentSubmission, Quiz,
 } from '@/services/assignmentData';
 
@@ -66,6 +66,20 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
   }, [scope?.classId, scope?.subject, studentScope?.classId, studentScope?.subject]);
 
   // ============ Teacher: Grading ============
+  const handleDeleteItem = async (id: string, title: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete "${title}"? This cannot be undone.`)) return;
+    const { ok, error } = await deleteAssignment(id);
+    if (ok) refreshList();
+    else alert(`Error deleting: ${error}`);
+  };
+
+  const handleEditItem = (id: string, type: 'quiz' | 'assignment', e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const from = typeof window !== 'undefined' ? encodeURIComponent(window.location.pathname + window.location.search) : '';
+    router.push(`/assessment-builder?id=${id}&type=${type}&classId=${classId || ''}&subject=${encodeURIComponent(subject || '')}&grade=${encodeURIComponent(grade || '')}&from=${from}`);
+  };
+
   const openGradingList = async (assignment: Assignment) => {
     if (!scope) return;
     setActiveAssignment(assignment);
@@ -279,7 +293,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-white/40 backdrop-blur-2xl border border-white/60 rounded-[2rem] p-6 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Active Assignments</p>
@@ -287,6 +301,15 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
             </div>
             <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shadow-sm">
               <Zap className="text-indigo-500" size={24} />
+            </div>
+          </div>
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/60 rounded-[2rem] p-6 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Active Quizzes</p>
+              <p className="text-3xl font-black text-slate-800">{quizzes.filter(q => q.status === 'Active').length}</p>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 border border-purple-100 flex items-center justify-center shadow-sm">
+              <BrainCircuit className="text-purple-500" size={24} />
             </div>
           </div>
           <div className="bg-rose-50/30 backdrop-blur-2xl border border-rose-200 rounded-[2rem] p-6 shadow-sm flex items-center justify-between relative overflow-hidden">
@@ -319,13 +342,14 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
                   <th className="py-4 px-6 font-bold uppercase tracking-wider">Status</th>
                   <th className="py-4 px-6 font-bold uppercase tracking-wider">Submissions</th>
                   <th className="py-4 px-6 font-bold uppercase tracking-wider">Graded</th>
+                  <th className="py-4 px-6 font-bold uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100/50">
                 {isLoading ? (
-                  <tr><td colSpan={5} className="py-10 text-center text-slate-400">Loading...</td></tr>
+                  <tr><td colSpan={6} className="py-10 text-center text-slate-400">Loading...</td></tr>
                 ) : assignments.length === 0 && quizzes.length === 0 ? (
-                  <tr><td colSpan={5} className="py-10 text-center text-slate-400">No assessments yet. Create your first one.</td></tr>
+                  <tr><td colSpan={6} className="py-10 text-center text-slate-400">No assessments yet. Create your first one.</td></tr>
                 ) : (
                   <>
                     {quizzes.map(item => (
@@ -347,6 +371,16 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
                         </td>
                         <td className="py-4 px-6">
                           <span className="text-sm font-bold text-slate-400">-</span>
+                        </td>
+                        <td className="py-4 px-6">
+                          <div className="flex items-center gap-2">
+                            <button onClick={(e) => handleEditItem(item.id, 'quiz', e)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Edit">
+                              <Edit size={16} />
+                            </button>
+                            <button onClick={(e) => handleDeleteItem(item.id, item.title, e)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete">
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -371,6 +405,19 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
                           </td>
                           <td className="py-4 px-6">
                             <span className="text-sm font-bold text-slate-700">{counts.graded}/{counts.submitted}</span>
+                          </td>
+                          <td className="py-4 px-6">
+                            <div className="flex items-center gap-2">
+                              <button onClick={(e) => { e.stopPropagation(); openGradingList(item); }} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Open">
+                                <Eye size={16} />
+                              </button>
+                              <button onClick={(e) => handleEditItem(item.id, 'assignment', e)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Edit">
+                                <Edit size={16} />
+                              </button>
+                              <button onClick={(e) => handleDeleteItem(item.id, item.title, e)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete">
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );

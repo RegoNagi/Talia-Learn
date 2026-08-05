@@ -18,7 +18,7 @@ import { createPortal } from 'react-dom';
 import { FloatingPortal } from '@floating-ui/react';
 import { AssessmentSidebar } from '@/components/AssessmentSidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { createAssignment, createQuiz, uploadAssignmentAttachment, getSubmissionFileUrl, getUnitsForAssignment } from '@/services/assignmentData';
+import { createAssignment, createQuiz, uploadAssignmentAttachment, getSubmissionFileUrl, getUnitsForAssignment, getAssignmentById, getQuizById, updateAssignment, updateQuiz } from '@/services/assignmentData';
 import { getGradebookCategories } from '@/services/academicData';
 
 interface Question {
@@ -61,6 +61,8 @@ function AssessmentBuilderContent() {
   const scopeClassId = searchParams.get('classId') || '';
   const scopeSubject = searchParams.get('subject') || '';
   const scopeUnitId = searchParams.get('unitId') || '';
+  const editId = searchParams.get('id') || '';
+  const [isEditLoading, setIsEditLoading] = useState(!!editId);
   const [selectedUnitId, setSelectedUnitId] = useState(scopeUnitId);
   const [availableUnits, setAvailableUnits] = useState<{ id: string; title: string }[]>([]);
 
@@ -229,10 +231,10 @@ function AssessmentBuilderContent() {
         gradingMethod,
         passPercentage,
       };
-      const { id, error } = await createAssignment(
-        { teacherId: authUser.teacherId, classId: scopeClassId, subject: scopeSubject },
-        { title: title.trim(), instructions: instructionsText, dueDate: dueDateTime, status: status === 'draft' ? 'Draft' : 'Active', unitId: selectedUnitId || null, settings: assignmentSettings, rubric, attachments }
-      );
+      const assignmentPayload = { title: title.trim(), instructions: instructionsText, dueDate: dueDateTime, status: status === 'draft' ? 'Draft' as const : 'Active' as const, unitId: selectedUnitId || null, settings: assignmentSettings, rubric, attachments };
+      const { id, error } = editId
+        ? await updateAssignment(editId, assignmentPayload).then((r) => ({ id: r.ok ? editId : null, error: r.error }))
+        : await createAssignment({ teacherId: authUser.teacherId, classId: scopeClassId, subject: scopeSubject }, assignmentPayload);
       setIsSavingReal(false);
       if (id) {
         addToast('Assignment Saved!');
@@ -269,10 +271,10 @@ function AssessmentBuilderContent() {
       publishToTimeline,
       passPercentage,
     };
-    const { id: quizId, error: quizError } = await createQuiz(
-      { teacherId: authUser.teacherId, classId: scopeClassId, subject: scopeSubject },
-      { title: title.trim(), dueDate: quizDueDateTime, releaseAt: quizReleaseDateTime, status: status === 'draft' ? 'Draft' : 'Active', unitId: selectedUnitId || null, settings: quizSettings, questions, sections }
-    );
+    const quizPayload = { title: title.trim(), dueDate: quizDueDateTime, releaseAt: quizReleaseDateTime, status: status === 'draft' ? 'Draft' as const : 'Active' as const, unitId: selectedUnitId || null, settings: quizSettings, questions, sections };
+    const { id: quizId, error: quizError } = editId
+      ? await updateQuiz(editId, quizPayload).then((r) => ({ id: r.ok ? editId : null, error: r.error }))
+      : await createQuiz({ teacherId: authUser.teacherId, classId: scopeClassId, subject: scopeSubject }, quizPayload);
     setIsSavingReal(false);
     if (quizId) {
       addToast('Quiz Saved!');
@@ -328,6 +330,57 @@ function AssessmentBuilderContent() {
   const [sections, setSections] = useState<QuizSection[]>([]);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [draggedQId, setDraggedQId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editId) return;
+    setIsEditLoading(true);
+    if (initialType === 'quiz') {
+      getQuizById(editId).then((q) => {
+        if (q) {
+          setTitle(q.title);
+          if (q.dueDate) { const [d, t] = q.dueDate.split('T'); setDueDate(d); setDueTime(t?.slice(0, 5) || '23:59'); }
+          if (q.releaseAt) { const [d, t] = q.releaseAt.split('T'); setHasReleaseCondition(true); setReleaseDate(d); setReleaseTime(t?.slice(0, 5) || '00:00'); }
+          setStatus(q.status === 'Draft' ? 'draft' : 'published');
+          setQuestions(q.questions || []);
+          setSections(q.sections || []);
+          const s = q.settings || {};
+          if (s.maxScore !== undefined) setMaxScore(s.maxScore);
+          if (s.category !== undefined) setCategory(s.category);
+          if (s.timeLimitHours !== undefined) setTimeLimitHours(s.timeLimitHours);
+          if (s.timeLimitMinutes !== undefined) setTimeLimitMinutes(s.timeLimitMinutes);
+          if (s.attemptLimit !== undefined) setAttemptLimit(s.attemptLimit);
+          if (s.feedbackTiming !== undefined) setFeedbackTiming(s.feedbackTiming);
+          if (s.publishToTimeline !== undefined) setPublishToTimeline(s.publishToTimeline);
+          if (s.passPercentage !== undefined) setPassPercentage(s.passPercentage);
+        }
+        setIsEditLoading(false);
+      });
+    } else {
+      getAssignmentById(editId).then((a) => {
+        if (a) {
+          setTitle(a.title);
+          setInstructionsText(a.instructions);
+          if (a.dueDate) { const [d, t] = a.dueDate.split('T'); setDueDate(d); setDueTime(t?.slice(0, 5) || '23:59'); }
+          setStatus(a.status === 'Draft' ? 'draft' : 'published');
+          setRubric(a.rubric || []);
+          setAttachments(a.attachments || []);
+          const s = a.settings || {};
+          if (s.maxScore !== undefined) setMaxScore(s.maxScore);
+          if (s.category !== undefined) setCategory(s.category);
+          if (s.attemptLimit !== undefined) setAttemptLimit(s.attemptLimit);
+          if (s.allowLateSubmission !== undefined) setAllowLateSubmission(s.allowLateSubmission);
+          if (s.latePenalty !== undefined) setLatePenalty(s.latePenalty);
+          if (s.feedbackTiming !== undefined) setFeedbackTiming(s.feedbackTiming);
+          if (s.publishToTimeline !== undefined) setPublishToTimeline(s.publishToTimeline);
+          if (s.allowFileUpload !== undefined) setAllowFileUpload(s.allowFileUpload);
+          if (s.allowTextEntry !== undefined) setAllowTextEntry(s.allowTextEntry);
+          if (s.gradingMethod !== undefined) setGradingMethod(s.gradingMethod);
+          if (s.passPercentage !== undefined) setPassPercentage(s.passPercentage);
+        }
+        setIsEditLoading(false);
+      });
+    }
+  }, [editId]);
 
   const addSection = () => {
     const newSection: QuizSection = { id: `sec-${window.crypto.randomUUID()}`, title: `Section ${sections.length + 1}` };
@@ -1136,8 +1189,6 @@ function AssessmentBuilderContent() {
           setTitle={setTitle}
           status={status as any}
           setStatus={(s) => setStatus(s as any)}
-          status={status}
-          setStatus={setStatus}
           category={category}
           setCategory={setCategory}
           gradebookCategories={gradebookCategories}

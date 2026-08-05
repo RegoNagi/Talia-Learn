@@ -170,12 +170,30 @@ export async function createQuiz(scope: AssignmentScope, input: { title: string;
   return { id: data.id, error: null };
 }
 
-export async function updateAssignment(id: string, input: { title?: string; instructions?: string; dueDate?: string | null; status?: string }): Promise<{ ok: boolean; error: string | null }> {
+export async function updateAssignment(id: string, input: { title?: string; instructions?: string; dueDate?: string | null; status?: string; unitId?: string | null; settings?: Record<string, any>; rubric?: any[]; attachments?: { name: string; storagePath: string }[] }): Promise<{ ok: boolean; error: string | null }> {
   const patch: any = {};
   if (input.title !== undefined) patch.title = input.title;
   if (input.instructions !== undefined) patch.instructions = input.instructions;
   if (input.dueDate !== undefined) patch.due_date = input.dueDate;
   if (input.status !== undefined) patch.status = input.status;
+  if (input.unitId !== undefined) patch.unit_id = input.unitId;
+  if (input.settings !== undefined) patch.settings = input.settings;
+  if (input.rubric !== undefined) patch.rubric = input.rubric;
+  if (input.attachments !== undefined) patch.attachments = input.attachments;
+  const { error } = await supabase.from('assignments').update(patch).eq('id', id);
+  return { ok: !error, error: error?.message || null };
+}
+
+export async function updateQuiz(id: string, input: { title?: string; dueDate?: string | null; releaseAt?: string | null; status?: string; unitId?: string | null; settings?: Record<string, any>; questions?: any[]; sections?: any[] }): Promise<{ ok: boolean; error: string | null }> {
+  const patch: any = {};
+  if (input.title !== undefined) patch.title = input.title;
+  if (input.dueDate !== undefined) patch.due_date = input.dueDate;
+  if (input.releaseAt !== undefined) patch.release_at = input.releaseAt;
+  if (input.status !== undefined) patch.status = input.status;
+  if (input.unitId !== undefined) patch.unit_id = input.unitId;
+  if (input.settings !== undefined) patch.settings = input.settings;
+  if (input.questions !== undefined) patch.questions = input.questions;
+  if (input.sections !== undefined) patch.sections = input.sections;
   const { error } = await supabase.from('assignments').update(patch).eq('id', id);
   return { ok: !error, error: error?.message || null };
 }
