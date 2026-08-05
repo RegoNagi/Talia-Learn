@@ -1,11 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Search, Download, Upload, FileText, Plus, File, ExternalLink, X, Book, 
-  FileArchive, LayoutGrid, List, Folder, FolderPlus, Lock, Globe, Share2, 
-  MoreVertical, Trash2, Edit2, ChevronRight, Eye, Image as ImageIcon, Video, 
-  FileSpreadsheet, Film, Copy, Check, Palette, ArrowLeft, Layers, ShieldCheck
-} from 'lucide-react';
+import { Search, Upload, FileText, File, X, Book, FileArchive, LayoutGrid, List, Folder, FolderPlus, Lock, Globe, Share2, Trash2, ChevronRight, Eye, Image as ImageIcon, Video, FileSpreadsheet, Film, Palette, ArrowLeft, ShieldCheck } from 'lucide-react';
 import {
   getMaterialFolders, getMaterialFiles, getMyLibraryFolders, getMyLibraryFiles,
   createLibraryFolder, deleteLibraryFolder,
@@ -97,7 +92,6 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   // Share Modal State
   const [selectedTargetLibs, setSelectedTargetLibs] = useState<string[]>([]);
   const [selectedTargetTeachers, setSelectedTargetTeachers] = useState<string[]>([]);
-  const [shareLinkCopied, setShareLinkCopied] = useState(false);
   const [shareSuccessToast, setShareSuccessToast] = useState(false);
 
   // Active Folder Breadcrumb chain
@@ -243,7 +237,6 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
     setShareItem({ item, isFolder });
     setSelectedTargetLibs(item.sharedWithClasses || []);
     setSelectedTargetTeachers(item.sharedWithTeachers || []);
-    setShareLinkCopied(false);
   };
 
   const handleSaveShare = async () => {
@@ -627,7 +620,11 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
 
       {/* File & Folder Grid / List Display */}
       <div className="flex-1 overflow-y-auto min-h-0 pb-12 custom-scrollbar pr-1">
-        {currentFolders.length === 0 && currentFiles.length === 0 ? (
+        {isLoadingLibrary ? (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+            <p className="text-sm font-medium">{isRtl ? 'جاري التحميل...' : 'Loading...'}</p>
+          </div>
+        ) : currentFolders.length === 0 && currentFiles.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 rounded-3xl border border-dashed border-slate-200 text-center">
             <div className="w-16 h-16 bg-white rounded-2xl border border-slate-200 flex items-center justify-center text-slate-400 mb-4 shadow-xs">
               <FolderPlus size={28} className="text-indigo-500" />
@@ -831,6 +828,27 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
           )
         )}
       </div>
+
+      <AnimatePresence>
+        {previewFile && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4" onClick={() => setPreviewFile(null)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white rounded-2xl p-6 w-[420px] max-w-full shadow-none border border-slate-200" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between mb-4">
+                <h3 className="text-base font-bold text-slate-800">{previewFile.name}</h3>
+                <button onClick={() => setPreviewFile(null)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 flex flex-col items-center gap-3 text-slate-400">
+                <FileText size={40} />
+                <p className="text-sm font-medium">{isRtl ? 'مفيش معاينة حية متاحة لهذا الملف' : 'No live preview available for this file'}</p>
+              </div>
+              <div className="mt-4 text-xs text-slate-500 space-y-1">
+                <p>{isRtl ? 'النوع:' : 'Type:'} {previewFile.type.toUpperCase()}</p>
+                <p>{isRtl ? 'الحجم:' : 'Size:'} {previewFile.size}</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

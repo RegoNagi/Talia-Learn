@@ -5,12 +5,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, BrainCircuit, CheckCircle2, ChevronDown, Plus, 
   FileText, ListChecks, Image as ImageIcon, Type, 
-  MoreVertical, Trash2, GripVertical, Sparkles,
-  Settings, Clock, Shuffle, Eye, Calendar,
-  UploadCloud, Scale, GraduationCap, AlignLeft,
+  Trash2, GripVertical, Sparkles,
+  Settings, Clock, Eye,
+  UploadCloud, Scale,
   CheckSquare, Layout, Save, ArrowLeft, Pencil, Book,
-  User, Send, AlertCircle, HelpCircle, Info, ShieldCheck,
-  Search, Check, Lock, Copy, MessageSquare, Minus, Home
+  AlertCircle,
+  Search, Check, Copy, Minus, Home, Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -111,7 +111,6 @@ function AssessmentBuilderContent() {
   }, [scopeSubject]);
   const [maxScore, setMaxScore] = useState(100);
   const [isAutoCalc, setIsAutoCalc] = useState(true);
-  const [isGraded, setIsGraded] = useState(true);
   
   // Settings
   const [attemptLimit, setAttemptLimit] = useState('1');
@@ -124,7 +123,6 @@ function AssessmentBuilderContent() {
   const [dueTime, setDueTime] = useState('23:59');
   
   // Security & Display
-  const [isTimed, setIsTimed] = useState(true);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [oneAtATime, setOneAtATime] = useState(false);
   const [prohibitLateSubmissions, setProhibitLateSubmissions] = useState(false);
@@ -134,7 +132,6 @@ function AssessmentBuilderContent() {
   const [randomizePages, setRandomizePages] = useState(false);
   const [prohibitBacktracking, setProhibitBacktracking] = useState(false);
   const [feedbackTiming, setFeedbackTiming] = useState('instantly');
-  const [showFeedback, setShowFeedback] = useState(true);
   const [aiPlagiarism, setAiPlagiarism] = useState(true);
   const [publishToTimeline, setPublishToTimeline] = useState(true);
 
@@ -179,9 +176,7 @@ function AssessmentBuilderContent() {
   const [strategyTab, setStrategyTab] = useState<'strategy' | 'instant'>('strategy');
   const [isGeneratingStrategy, setIsGeneratingStrategy] = useState(false);
   const [hasGeneratedQuiz, setHasGeneratedQuiz] = useState(false);
-  const [activeLessonTab, setActiveLessonTab] = useState('1.1');
   const [selectedLessons, setSelectedLessons] = useState<string[]>(['1.1']);
-  const [selectedLOs, setSelectedLOs] = useState<string[]>(['Understand Dimensions']);
   const [selectedBloom, setSelectedBloom] = useState<string>('Application');
   const [difficulty, setDifficulty] = useState<string>('Intermediate');
   const [magicPrompt, setMagicPrompt] = useState('');
@@ -572,6 +567,17 @@ function AssessmentBuilderContent() {
   const updateRubricCriterion = (id: string, updates: Partial<RubricCriterion>) => {
     setRubric(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
   };
+
+  if (isEditLoading) {
+    return (
+      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-slate-400">
+          <Loader2 size={28} className="animate-spin" />
+          <span className="text-sm font-bold">Loading assessment...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] flex flex-col font-sans text-slate-900">

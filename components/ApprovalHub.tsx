@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { CheckCircle2, XCircle, Clock, Search, ShieldCheck, HelpCircle, FileText, Flag, ChevronDown, Calendar, PieChart, AlertCircle } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Search, ShieldCheck, HelpCircle, FileText, Flag, ChevronDown, Calendar, PieChart, AlertCircle, ArrowLeftRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getPendingQuestions, approveQuestion, rejectQuestion, getPendingAssessments, getPendingAssessmentDetail, approveAssessment, rejectAssessment, BankQuestion } from '@/services/questionBankData';
 import { getQuizById } from '@/services/assignmentData';
@@ -379,6 +379,91 @@ export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                               <div key={opt.id || idx} className={`flex items-center gap-4 p-4 rounded-xl border ${opt.isCorrect ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
                                 <span className={`text-sm ${opt.isCorrect ? 'font-bold text-emerald-800' : 'font-medium text-slate-700'}`}>{opt.text}</span>
                                 {opt.isCorrect && <div className="mr-auto"><CheckCircle2 size={20} className="text-emerald-500" /></div>}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (activeItem as any).type === 'إجابة رقمية' ? (
+                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm">
+                            <p className="font-bold text-emerald-700">{language === 'ar' ? 'الإجابة الصحيحة:' : 'Correct answer:'} {(activeItem as any).question?.numericAnswer} {(activeItem as any).question?.numericUnit || ''}</p>
+                            <p className="text-xs text-slate-500 mt-1">{language === 'ar' ? `هامش الخطأ المسموح: ±${(activeItem as any).question?.numericTolerance || 0}` : `Allowed tolerance: ±${(activeItem as any).question?.numericTolerance || 0}`}</p>
+                          </div>
+                        ) : (activeItem as any).type === 'توصيل' && Array.isArray((activeItem as any).question?.pairs) ? (
+                          <div className="space-y-2">
+                            {(activeItem as any).question.pairs.map((pair: any, idx: number) => (
+                              <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700">
+                                <span className="flex-1">{pair.left}</span>
+                                <ArrowLeftRight size={14} className="text-slate-400 shrink-0" />
+                                <span className="flex-1 text-emerald-700">{pair.right}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (activeItem as any).type === 'ترتيب' && Array.isArray((activeItem as any).question?.orderItems) ? (
+                          <div className="space-y-2">
+                            {(activeItem as any).question.orderItems.map((item: string, idx: number) => (
+                              <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700">
+                                <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs shrink-0">{idx + 1}</span>
+                                {item}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (activeItem as any).type === 'تصنيف' && Array.isArray((activeItem as any).question?.classifyItems) ? (
+                          <div className="space-y-2">
+                            {(activeItem as any).question.classifyItems.map((item: any, idx: number) => (
+                              <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700">
+                                <span>{item.text}</span>
+                                <span className="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg text-xs">{item.category}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (activeItem as any).type === 'سحب وإفلات' && Array.isArray((activeItem as any).question?.dragItems) ? (
+                          <div className="space-y-2">
+                            {(activeItem as any).question.dragItems.map((item: any, idx: number) => (
+                              <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700">
+                                <span>{item.text}</span>
+                                <span className="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg text-xs">{item.zone}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (activeItem as any).type === 'منطقة تفاعلية' && (activeItem as any).question?.imageUrl ? (
+                          <div className="relative inline-block border border-slate-200 rounded-xl overflow-hidden">
+                            <img src={(activeItem as any).question.imageUrl} alt="" className="max-w-full max-h-80 block" />
+                            {((activeItem as any).question.hotspots || []).map((hs: any, idx: number) => (
+                              <div key={idx} style={{ left: `${hs.xPercent}%`, top: `${hs.yPercent}%` }} className={`absolute -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold ${hs.isCorrect ? 'bg-emerald-500 border-white text-white' : 'bg-white/90 border-slate-300 text-slate-500'}`}>
+                                {hs.label}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (activeItem as any).type === 'مقطع صوتي' ? (
+                          <div className="space-y-3">
+                            {(activeItem as any).question?.audioUrl && <audio src={(activeItem as any).question.audioUrl} controls className="w-full" />}
+                            <div className="space-y-3">
+                              {((activeItem as any).options || []).map((opt: any, idx: number) => (
+                                <div key={opt.id || idx} className={`flex items-center gap-4 p-4 rounded-xl border ${opt.isCorrect ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+                                  <span className={`text-sm ${opt.isCorrect ? 'font-bold text-emerald-800' : 'font-medium text-slate-700'}`}>{opt.text}</span>
+                                  {opt.isCorrect && <div className="mr-auto"><CheckCircle2 size={20} className="text-emerald-500" /></div>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (activeItem as any).type === 'قطعة' ? (
+                          <div className="space-y-4">
+                            {(activeItem as any).question?.passageText && (
+                              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
+                                {(activeItem as any).question.passageText}
+                              </div>
+                            )}
+                            {((activeItem as any).question?.subQuestions || []).map((sq: any, sqIdx: number) => (
+                              <div key={sq.id} className="border-t border-slate-100 pt-3">
+                                <div className="flex items-center justify-between mb-2">
+                                  <p className="font-bold text-slate-800 text-sm">{sqIdx + 1}. {sq.title}</p>
+                                  <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full shrink-0">{sq.points} pts</span>
+                                </div>
+                                {Array.isArray(sq.options) && sq.options.map((opt: any, oIdx: number) => (
+                                  <div key={oIdx} className={`flex items-center gap-3 p-2.5 rounded-lg border text-sm mb-1.5 ${opt.isCorrect ? 'border-emerald-200 bg-emerald-50 font-bold text-emerald-800' : 'border-slate-200 bg-white text-slate-600'}`}>
+                                    {opt.isCorrect && <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />}
+                                    {opt.text}
+                                  </div>
+                                ))}
                               </div>
                             ))}
                           </div>

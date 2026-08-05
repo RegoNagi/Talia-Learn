@@ -3,39 +3,10 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import Image from 'next/image';
-import { getLiveSessions, createLiveSession, deleteLiveSession, RealLiveSession } from '@/services/liveSessionsData';
+import { getLiveSessions, createLiveSession, updateLiveSession, deleteLiveSession, RealLiveSession } from '@/services/liveSessionsData';
 import { broadcastMessageToClass, getClassAnnouncementsForStudent, AppMessage } from '@/services/messagesData';
 import { getClassRoster } from '@/services/assignmentData';
-import { 
-  Video, 
-  Calendar, 
-  Users, 
-  Play, 
-  Sparkles, 
-  Users2, 
-  MoreVertical, 
-  MessageSquare,
-  Clock,
-  ChevronRight,
-  Radio,
-  Plus,
-  X,
-  FileText,
-  Download,
-  BarChart3,
-  PieChart,
-  CalendarPlus,
-  Trash2,
-  Edit,
-  EyeOff,
-  UploadCloud,
-  CheckCircle2,
-  AlertCircle,
-  Search,
-  Filter,
-  RefreshCw,
-  Book
-} from 'lucide-react';
+import { Video, Calendar, Users, Play, Sparkles, Users2, MoreVertical, MessageSquare, Clock, ChevronRight, Radio, X, FileText, Download, BarChart3, PieChart, CalendarPlus, Trash2, UploadCloud, CheckCircle2, AlertCircle, Search, Filter, RefreshCw, Book, Edit } from 'lucide-react';
 
 interface Session {
   id: string;
@@ -123,12 +94,20 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
   const [newJoinUrl, setNewJoinUrl] = useState('');
   const [isSavingSession, setIsSavingSession] = useState(false);
   const [scheduleError, setScheduleError] = useState('');
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
 
   const handleCreateSession = async () => {
     if (!classId || !subject || !teacherId || !newTitle.trim() || !newDate || !newJoinUrl.trim()) return;
     setIsSavingSession(true);
     setScheduleError('');
-    const { ok, error } = await createLiveSession({
+    const { ok, error } = editingSessionId
+      ? await updateLiveSession(editingSessionId, {
+          title: newTitle.trim(),
+          agenda: newAgenda.trim(),
+          scheduledAt: `${newDate}T${newTime || '10:00'}`,
+          joinUrl: newJoinUrl.trim(),
+        })
+      : await createLiveSession({
       classId,
       subject,
       teacherId,
@@ -140,6 +119,7 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
     setIsSavingSession(false);
     if (ok) {
       setShowScheduleFormModal(false);
+      setEditingSessionId(null);
       setNewTitle('');
       setNewDate('');
       setNewTime('10:00');
@@ -196,12 +176,16 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
               <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-[2rem] blur opacity-10 group-hover:opacity-20 transition duration-1000"></div>
               
               <div className="relative bg-white rounded-[2rem] border border-slate-100 shadow-none p-8">
-                {!activeSession ? (
+                {isLoading ? (
+                  <div className="text-center py-8">
+                    <p className="text-slate-400 font-medium">Loading...</p>
+                  </div>
+                ) : !activeSession ? (
                   <div className="text-center py-8">
                     <Video size={36} className="mx-auto text-slate-300 mb-3" />
                     <p className="text-slate-500 font-medium mb-4">{isTeacher ? 'No upcoming session scheduled yet.' : 'No upcoming session scheduled yet.'}</p>
                     {isTeacher && (
-                      <button onClick={() => setShowScheduleFormModal(true)} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all">
+                      <button onClick={() => { setEditingSessionId(null); setNewTitle(''); setNewDate(''); setNewTime('10:00'); setNewAgenda(''); setNewJoinUrl(''); setShowScheduleFormModal(true); }} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all">
                         Schedule a Session
                       </button>
                     )}
@@ -360,12 +344,22 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
                                   className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-none border border-slate-100 py-2 z-50"
                                 >
                                   {[
+                                    { id: 'edit', icon: <Edit size={14} />, label: 'Edit Session', color: 'text-slate-700' },
                                     { id: 'delete', icon: <Trash2 size={14} />, label: 'Delete Session', color: 'text-rose-600' },
                                   ].map((item) => (
                                     <button
                                       key={item.id}
                                       onClick={async () => {
-                                        if (confirm(`Delete "${session.title}"?`)) {
+                                        if (item.id === 'edit') {
+                                          setEditingSessionId(session.id);
+                                          setNewTitle(session.title);
+                                          const [d, t] = session.scheduledAt.split('T');
+                                          setNewDate(d);
+                                          setNewTime(t?.slice(0, 5) || '10:00');
+                                          setNewAgenda(session.agenda || '');
+                                          setNewJoinUrl(session.joinUrl);
+                                          setShowScheduleFormModal(true);
+                                        } else if (confirm(`Delete "${session.title}"?`)) {
                                           await deleteLiveSession(session.id);
                                           refresh();
                                         }
@@ -595,7 +589,7 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
                     <span className="hidden sm:inline">Sync Outlook</span>
                   </button>
                   <button 
-                    onClick={() => setShowScheduleFormModal(true)}
+                    onClick={() => { setEditingSessionId(null); setNewTitle(''); setNewDate(''); setNewTime('10:00'); setNewAgenda(''); setNewJoinUrl(''); setShowScheduleFormModal(true); }}
                     className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-none shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-[0.98]"
                   >
                     <CalendarPlus size={18} />
@@ -928,8 +922,8 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
             >
               <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between bg-white shrink-0">
                 <div className="space-y-1">
-                  <h3 className="text-xl font-bold text-slate-800">Schedule New Session</h3>
-                  <p className="text-sm font-medium text-slate-400">Add a session to {className || subject || 'this class'}</p>
+                  <h3 className="text-xl font-bold text-slate-800">{editingSessionId ? 'Edit Session' : 'Schedule New Session'}</h3>
+                  <p className="text-sm font-medium text-slate-400">{editingSessionId ? 'Update this session\'s details' : `Add a session to ${className || subject || 'this class'}`}</p>
                 </div>
                 <button onClick={() => setShowScheduleFormModal(false)} className="p-2.5 hover:bg-slate-50 rounded-xl transition-colors text-slate-900 border border-transparent">
                   <X size={20} />
@@ -1007,7 +1001,7 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
                   disabled={!newTitle.trim() || !newDate || !newJoinUrl.trim() || isSavingSession}
                   className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-bold text-sm shadow-none shadow-indigo-100 hover:bg-indigo-700 disabled:opacity-60 transition-all active:scale-[0.99]"
                 >
-                  {isSavingSession ? 'Creating...' : 'Create Session'}
+                  {isSavingSession ? (editingSessionId ? 'Saving...' : 'Creating...') : (editingSessionId ? 'Save Changes' : 'Create Session')}
                 </button>
               </div>
             </motion.div>

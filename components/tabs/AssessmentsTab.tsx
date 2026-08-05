@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Users, CheckCircle, BarChart3, ArrowUpRight, Settings, Zap, PenTool, Eye,
-  PlayCircle, FileText, Check, Upload, UploadCloud, Clock, AlertCircle, ShieldAlert, ArrowLeft,
-  Save, Plus, X, BrainCircuit, Trash2, Edit, ChevronUp, ChevronDown
+  CheckCircle, BarChart3, Zap, PenTool, Eye,
+  FileText, Check, Upload, UploadCloud, AlertCircle, ShieldAlert, ArrowLeft,
+  Save, Plus, BrainCircuit, Trash2, Edit, ChevronUp, ChevronDown
 } from 'lucide-react';
 import {
   getAssignments, getQuizzes, getSubmissionsForAssignment, getMySubmission,

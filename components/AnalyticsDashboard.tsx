@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Database, BookOpen, Activity, LayoutGrid, ChevronDown, Check, 
+  Database, BookOpen, LayoutGrid, ChevronDown, Check, 
   Filter, TrendingUp, Presentation, BrainCircuit, AlignRight, FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';

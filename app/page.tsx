@@ -15,87 +15,22 @@ import { EducationalCalendar } from '@/components/EducationalCalendar';
 import { TeacherDashboard } from '@/components/TeacherDashboard';
 import { TakeAttendance } from '@/components/TakeAttendance';
 import { useAuth } from '@/contexts/AuthContext';
-import { ArrowRight, Clock, Globe, Laptop, BookOpen, Layers, BrainCircuit, Building, BarChart2, Calendar, AlertCircle, Compass, Zap, Sun, CalendarRange, Users, ChevronRight, ChevronLeft, Bell, Menu, X, CheckCircle2, CheckSquare, Filter } from 'lucide-react';
+import { Clock, Globe, BookOpen, BrainCircuit, Building, BarChart2, Calendar, AlertCircle, Compass, Zap, Sun, CalendarRange, ChevronRight, ChevronLeft, Menu, CheckCircle2, CheckSquare, Filter } from 'lucide-react';
 
 import taliaLogo from '@/assets/talia-learn-logo.png';
 
 const dict = {
   ar: {
-    teacherView: 'عرض المعلم',
-    studentView: 'عرض الطالب',
-    parentView: 'عرض ولي الأمر',
-    welcomeTeacher: 'مرحباً بكِ، سارة! 👋',
-    welcomeStudent: 'مرحباً بك، أليكس! 👋',
-    welcomeParent: 'مرحباً بك السيد ديفيد! 👋',
-    teacherSubtitle: 'لديكِ مهام لتقييمها في 3 فصول.',
-    studentSubtitle: 'مستعد لحصصك اليوم؟',
-    parentSubtitle: 'متابعة أداء أليكس.',
-    teacherName: 'سارة جنكينز',
-    studentName: 'أليكس جونسون',
-    parentName: 'ديفيد جونسون',
-    teacherRole: 'معلم أول • رياضيات',
-    studentRole: 'طالب • 10-A',
-    parentRole: 'ولي أمر',
-    allClasses: 'جميع الفصول',
-    yourCourses: 'دوراتك الدراسية',
-    syllabusProgress: 'تقدم المنهج',
-    studentsCount: '24 طالب',
     loginTitle: 'تسجيل الدخول',
     loginSubtitle: 'مرحباً بك في تاليا ليرن',
-    username: 'اسم المستخدم',
     password: 'كلمة المرور',
     signIn: 'دخول للمنصة',
-    demoLoginAs: 'أو الدخول التجريبي كـ',
-    teacherAccount: 'حساب المعلم',
-    studentAccount: 'حساب الطالب',
-    parentAccount: 'حساب ولي الأمر',
-    theFutureOfEducation: 'مستقبل التعليم',
   },
   en: {
-    teacherView: 'Teacher View',
-    studentView: 'Student View',
-    parentView: 'Parent View',
-    welcomeTeacher: 'Welcome back, Sarah! 👋',
-    welcomeStudent: 'Welcome back, Alex! 👋',
-    welcomeParent: 'Welcome back, Mr. Johnson! 👋',
-    teacherSubtitle: 'You have assignments to grade across 3 classes.',
-    studentSubtitle: 'Ready for your classes today?',
-    parentSubtitle: 'Viewing Alex\'s dashboard.',
-    teacherName: 'Sarah Jenkins',
-    studentName: 'Alex Johnson',
-    parentName: 'David Johnson',
-    teacherRole: 'Senior Teacher • Mathematics',
-    studentRole: 'Student • 10-A',
-    parentRole: 'Parent',
-    allClasses: 'All Classes',
-    yourCourses: 'Your Courses',
-    syllabusProgress: 'Syllabus Progress',
-    studentsCount: '24 Students',
     loginTitle: 'Login',
     loginSubtitle: 'Welcome to Talia Learn',
-    username: 'Username',
     password: 'Password',
     signIn: 'Sign In',
-    demoLoginAs: 'Or Demo Login as',
-    teacherAccount: 'Teacher Account',
-    studentAccount: 'Student Account',
-    parentAccount: 'Parent Account',
-    theFutureOfEducation: 'The Future of Education',
-  }
-};
-
-const translatedCourses = {
-  ar: {
-    'chem101': { title: 'الكيمياء', nextDue: 'مطلوب تقرير المختبر غداً' },
-    'eng201': { title: 'الأدب الإنجليزي', nextDue: 'مسودة المقال مطلوبة بعد يومين' },
-    'phys301': { title: 'فيزياء متقدمة', nextDue: 'امتحان منتصف الفصل الجمعة' },
-    'hist105': { title: 'تاريخ العالم', nextDue: 'مراجعة ورقة البحث' }
-  },
-  en: {
-    'chem101': { title: 'Chemistry', nextDue: 'Lab Report due tomorrow' },
-    'eng201': { title: 'English Literature', nextDue: 'Essay Draft due in 2 days' },
-    'phys301': { title: 'Advanced Physics', nextDue: 'Midterm Exam Friday' },
-    'hist105': { title: 'World History', nextDue: 'Research Paper review' }
   }
 };
 
@@ -104,7 +39,6 @@ export default function Dashboard() {
   const [isSidebarPinned, setIsSidebarPinned] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isTodoOpen, setIsTodoOpen] = useState(true);
-  const [activeFilter, setActiveFilter] = useState<string>('All Classes');
   
   // To Do State & Quick Focus Filter
   const todoFilterRef = useRef<HTMLDivElement>(null);
@@ -172,19 +106,6 @@ export default function Dashboard() {
       router.push('/question-bank');
     }
   };
-
-  const courses = [
-    { id: 'chem101', title: translatedCourses[language]['chem101'].title, code: 'CHEM 101', className: '10-A', image: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&q=80&w=600&h=400', progress: 65, nextDue: translatedCourses[language]['chem101'].nextDue, pendingGradingCount: 5, progressColor: 'bg-emerald-500' },
-    { id: 'eng201', title: translatedCourses[language]['eng201'].title, code: 'ENG 201', className: '10-B', image: 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?auto=format&fit=crop&q=80&w=600&h=400', progress: 42, nextDue: translatedCourses[language]['eng201'].nextDue, pendingGradingCount: 12, progressColor: 'bg-indigo-500' },
-    { id: 'phys301', title: translatedCourses[language]['phys301'].title, code: 'PHYS 301', className: '11-C', image: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&q=80&w=600&h=400', progress: 88, nextDue: translatedCourses[language]['phys301'].nextDue, pendingGradingCount: 0, progressColor: 'bg-cyan-500' },
-    { id: 'hist105', title: translatedCourses[language]['hist105'].title, code: 'HIST 105', className: '10-A', image: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=600&h=400', progress: 12, nextDue: translatedCourses[language]['hist105'].nextDue, pendingGradingCount: 3, progressColor: 'bg-amber-500' },
-  ];
-
-  const classes = ['All Classes', '10-A', '10-B', '11-C'];
-
-  const filteredCourses = activeFilter === 'All Classes' 
-    ? courses 
-    : courses.filter(c => c.className === activeFilter);
 
   return (
     <div className="flex h-screen w-full bg-white overflow-hidden" dir={language === 'ar' ? 'rtl' : 'ltr'} style={{ fontFamily: "'Cairo', sans-serif" }}>
@@ -347,6 +268,7 @@ export default function Dashboard() {
             canUseQuestionBank={authUser?.canUseQuestionBank}
             isMobileOpen={isMobileSidebarOpen}
             onMobileClose={() => setIsMobileSidebarOpen(false)}
+            authUser={authUser}
           />
           
           <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">

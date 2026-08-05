@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Target, Sparkles, ChevronDown, Check, RefreshCw, Pencil } from 'lucide-react';
+import { X, Target, Sparkles, RefreshCw, Pencil } from 'lucide-react';
 
 import { MultiSelectDropdown, Option } from './MultiSelectDropdown';
 import { SingleSelectDropdown } from './SingleSelectDropdown';

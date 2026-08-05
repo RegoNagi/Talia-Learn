@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { MessageCircle, Heart, Share2, MoreHorizontal, Pin } from 'lucide-react';
+import { MessageCircle, Heart, Share2, MoreHorizontal } from 'lucide-react';
 import { Post } from '@/types/course';
 import Image from 'next/image';
 

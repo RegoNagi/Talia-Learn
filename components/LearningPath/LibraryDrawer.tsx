@@ -1,10 +1,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  X, Search, FileText, PlayCircle, Volume2, Box, Link as LinkIcon, 
-  Plus, Check, Calendar, BookOpen, Folder, Sparkles
-} from 'lucide-react';
+import { X, Search, FileText, PlayCircle, Volume2, Box, Link as LinkIcon, Check, BookOpen, Folder, Sparkles } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { getOfficialCurriculumResources } from '@/services/academicData';

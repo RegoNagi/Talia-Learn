@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Home, Building, Database, LogOut, Globe, Users, ListVideo, MessageSquare, Activity, Calendar, BookOpen, X, ClipboardCheck } from 'lucide-react';
+import { Home, Building, Database, LogOut, Users, ListVideo, MessageSquare, Activity, Calendar, BookOpen, X, ClipboardCheck } from 'lucide-react';
 import taliaLogo from '@/assets/talia-learn-logo.png';
+import { getUnreadMessageCount } from '@/services/messagesData';
 
 const dict = {
   ar: {
@@ -47,7 +48,8 @@ export function GlobalSidebar({
   userRole = 'teacher',
   canUseQuestionBank = false,
   isMobileOpen = false,
-  onMobileClose
+  onMobileClose,
+  authUser
 }: { 
   onSpaceSelect?: (space: string | null) => void, 
   activeSpace?: string | null, 
@@ -59,13 +61,21 @@ export function GlobalSidebar({
   userRole?: 'student' | 'teacher' | 'parent' | 'qb_supervisor',
   canUseQuestionBank?: boolean,
   isMobileOpen?: boolean,
-  onMobileClose?: () => void
+  onMobileClose?: () => void,
+  authUser?: { teacherId?: string | null; studentId?: string | null; parentId?: string | null } | null
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const [internalLang, setInternalLang] = useState<'ar' | 'en'>('en');
   const [logoError, setLogoError] = useState(false);
   const currentLang = onLanguageChange ? language : internalLang;
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+
+  useEffect(() => {
+    const recipientId = authUser?.teacherId || authUser?.studentId || authUser?.parentId;
+    if (!recipientId || !userRole) return;
+    getUnreadMessageCount(recipientId, userRole).then(setUnreadMessageCount);
+  }, [authUser?.teacherId, authUser?.studentId, authUser?.parentId, userRole]);
 
   const handleLanguageToggle = () => {
     const newLang = currentLang === 'ar' ? 'en' : 'ar';
@@ -203,6 +213,7 @@ export function GlobalSidebar({
           label={t.messages} 
           active={activeSpace === 'messages'}
           onClick={() => handleNavClick(() => onSpaceSelect?.('messages'))} 
+          badge={unreadMessageCount}
         />
         )}
 
@@ -264,7 +275,7 @@ export function GlobalSidebar({
   );
 }
 
-function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode, label: string, active?: boolean, onClick?: () => void }) {
+function NavItem({ icon, label, active, onClick, badge }: { icon: React.ReactNode, label: string, active?: boolean, onClick?: () => void, badge?: number }) {
   return (
     <button 
       type="button"
@@ -278,7 +289,12 @@ function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode, labe
       <div className={`shrink-0 ${active ? 'text-orange-500' : 'text-gray-400'}`}>
         {icon}
       </div>
-      <span className="font-medium text-sm">{label}</span>
+      <span className="font-medium text-sm flex-1">{label}</span>
+      {!!badge && badge > 0 && (
+        <span className="bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
     </button>
   );
 }

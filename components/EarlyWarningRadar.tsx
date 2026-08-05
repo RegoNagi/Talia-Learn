@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import Image from 'next/image';
-import { AlertCircle, AlertTriangle, CheckCircle2, MessageSquare, Zap, ChevronDown, ChevronUp, UserX, TrendingDown, Activity, Sparkles, Bot, ShieldCheck, X, Info, Settings2, Save } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, MessageSquare, Zap, ChevronDown, ChevronUp, UserX, TrendingDown, Bot, ShieldCheck, X, Info, Settings2, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getRiskDataForTeacher } from '@/services/riskData';
 import { sendMessage, sendMessageToStudentParent } from '@/services/messagesData';

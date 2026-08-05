@@ -910,6 +910,7 @@ export default function QuestionBank() {
         userRole={authUser?.role as any}
         canUseQuestionBank={authUser?.canUseQuestionBank}
         onLogout={handleLogout}
+        authUser={authUser}
       />
       
       <main className="flex-1 overflow-y-auto bg-gray-50/30">

@@ -1,12 +1,44 @@
 import { supabase } from '@/lib/supabaseClient';
+import type { QuizQuestion } from '@/services/assignmentData';
 
 export type BankScope = 'central' | 'shared' | 'private';
 export type BankStatus = 'approved' | 'pending' | 'rejected';
 
+// شكل المحتوى المرن لأي سؤال في البنك، يغطي كل الحقول المستخدمة عبر الـ13 نوع سؤال المدعومين.
+// نفس فلسفة QuizQuestion في assignmentData.ts — حقول اختيارية بدل any، مفيش تغيير في أي سلوك قائم.
+export interface BankQuestionContent {
+  title: string;
+  options?: { id: string; text: string; isCorrect: boolean; imageUrl?: string }[];
+  correctOption?: number;
+  standard?: string;
+  // إجابة رقمية
+  numericAnswer?: number | null;
+  numericTolerance?: number;
+  numericUnit?: string;
+  // توصيل
+  pairs?: { id: string; left: string; right: string }[];
+  // ترتيب
+  orderItems?: string[];
+  // تصنيف
+  categories?: string[];
+  classifyItems?: { text: string; category: string }[];
+  // سحب وإفلات
+  zones?: string[];
+  dragItems?: { text: string; zone: string }[];
+  // منطقة تفاعلية
+  imageUrl?: string;
+  hotspots?: { xPercent: number; yPercent: number; label: string; isCorrect: boolean }[];
+  // مقطع صوتي
+  audioUrl?: string;
+  // قطعة
+  passageText?: string;
+  subQuestions?: { id: string; title: string; type: string; points: number; options?: { id: string; text: string; isCorrect: boolean }[] }[];
+}
+
 export interface BankQuestion {
   id: string;
   title: string; // نسخة مباشرة من question.title، عشان يسهل استخدامها في الفلاتر والعرض
-  options?: any[]; // نسخة مباشرة من question.options لو موجودة (لأسئلة الاختيار من متعدد)
+  options?: { id: string; text: string; isCorrect: boolean; imageUrl?: string }[]; // نسخة مباشرة من question.options لو موجودة (لأسئلة الاختيار من متعدد)
   createdBy: string | null;
   createdByRole: 'teacher' | 'supervisor';
   scope: BankScope;
@@ -17,7 +49,7 @@ export interface BankQuestion {
   bloomLevel: string;
   difficulty: string;
   type: string;
-  question: any; // شكل مرن حسب نوع السؤال: { title, options?: [{id,text,isCorrect}], correctAnswer? }
+  question: BankQuestionContent;
   status: BankStatus;
   rejectionNote: string | null;
   createdAt: string;
@@ -407,8 +439,8 @@ export async function getQuestionsForQuiz(quizId: string): Promise<BankQuestion[
 // تحويل سؤال حقيقي من بنك الأسئلة لصيغة السؤال اللي محرك تسليم الاختبار (AssessmentsTab) فاهمها فعليًا
 // بيصلّح 3 مشاكل حرجة كانت موجودة قبل كده: (1) الحقل type مكانش موجود خالص فيسقط أي تصحيح تلقائي،
 // (2) عنوان السؤال كان محفوظ باسم title بس المحرك بيقرا text، (3) مفيش نقاط لكل سؤال فيبقى المجموع صفر
-export function convertBankQuestionToQuizQuestion(bq: BankQuestion, pointsPerQuestion: number = 1): any {
-  const typeMap: Record<string, string> = {
+export function convertBankQuestionToQuizQuestion(bq: BankQuestion, pointsPerQuestion: number = 1): QuizQuestion {
+  const typeMap: Record<string, QuizQuestion['type']> = {
     'اختيار من متعدد': 'multiple_choice',
     'صح أم خطأ': 'true_false',
     'سؤال مقالي': 'short_answer',

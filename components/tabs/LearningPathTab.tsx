@@ -1,36 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Book, 
-  ChevronDown, 
-  MoreHorizontal, 
-  PlayCircle, 
-  FileText, 
-  BrainCircuit, 
-  ShieldCheck, 
-  Shuffle,
-  Plus,
-  User,
-  Sparkles,
-  Trash2,
-  Copy,
-  EyeOff,
-  Eye,
-  Share2,
-  Edit,
-  Layout,
-  Wand2,
-  Calendar,
-  Check,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  ClipboardCheck,
-  X,
-  MoreVertical,
-  Link as LinkIcon,
-  CloudUpload
-} from 'lucide-react';
+import { Book, ChevronDown, MoreHorizontal, PlayCircle, FileText, BrainCircuit, ShieldCheck, Shuffle, Plus, User, Sparkles, Trash2, EyeOff, Eye, Share2, Edit, Layout, Check, ClipboardCheck, X, MoreVertical, Link as LinkIcon } from 'lucide-react';
 
 import { LibraryDrawer } from '@/components/LearningPath/LibraryDrawer';
 import { AddLessonModal } from '@/components/LearningPath/AddLessonModal';
@@ -38,7 +8,7 @@ import { AddAssessmentModal } from '@/components/LearningPath/AddAssessmentModal
 import { StudentCompletionPopover } from '@/components/LearningPath/StudentCompletionPopover';
 import { UnitMasteryBuilder } from '@/components/UnitMasteryBuilder';
 import { BrowseLibraryTab } from '@/components/tabs/BrowseLibraryTab';
-import { getUnits, createUnit, deleteUnit, updateUnit, toggleUnitHidden, toggleUnitComplete, updateUnitSharing, getLessons, createLesson, updateLesson, deleteLesson, toggleLessonHidden, toggleLessonComplete } from '@/services/learningPathData';
+import { getUnits, createUnit, deleteUnit, updateUnit, toggleUnitHidden, toggleUnitComplete, updateUnitSharing, getLessons, createLesson, updateLesson, deleteLesson, toggleLessonHidden, toggleLessonComplete, getLessonFileUrl } from '@/services/learningPathData';
 import { getTeacherClassNames } from '@/services/libraryData';
 
 type ContentType = 'video' | 'pdf' | 'quiz' | 'assignment' | 'project' | 'link';
@@ -357,7 +327,9 @@ export function LearningPathTab({
           )}
           {/* Units List */}
           <div className="space-y-6 pb-20 w-full">
-        {units.map((unit) => (
+        {isLoadingUnits ? (
+          <p className="text-center text-sm text-slate-400 py-10">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
+        ) : units.map((unit) => (
           <div key={unit.id} className="bg-white rounded-3xl border border-slate-100 shadow-none overflow-visible relative z-0">
             {/* Unit Header */}
             <div className="p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors rounded-t-3xl border-b border-slate-50">
@@ -518,6 +490,11 @@ export function LearningPathTab({
                       <React.Fragment key={lesson.id}>
                         <div 
                           onClick={() => {
+                          if (lesson.type === 'link' && lesson.url) {
+                            window.open(lesson.url, '_blank');
+                          } else if (lesson.type === 'pdf' && lesson.storagePath) {
+                            window.open(getLessonFileUrl(lesson.storagePath), '_blank');
+                          }
                           if (isStudent) {
                             if ((lesson.id === 'math-quiz' || lesson.id === 'phys-lab')) {
                               onAssessmentClick(lesson.id);

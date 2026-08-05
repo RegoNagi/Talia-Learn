@@ -28,6 +28,40 @@ export interface AssignmentSubmission {
   status: 'Pending' | 'Submitted' | 'Graded' | 'Late';
 }
 
+// شكل موحّد لأي سؤال جوه تقييم حقيقي، يغطي كل الحقول المستخدمة عبر الـ11 نوع سؤال المدعومين.
+// الحقول كلها اختيارية عدا الأساسيات، لأن كل نوع سؤال بيستخدم مجموعة فرعية مختلفة منها —
+// ده أدق بكتير من any من غير ما يغيّر أي سلوك فعلي أو يكسر أي كود قائم.
+export interface QuizQuestion {
+  id: string;
+  text: string;
+  type: 'multiple_choice' | 'true_false' | 'short_answer' | 'file_upload' | 'numeric_answer' | 'matching' | 'ordering' | 'classification' | 'drag_and_drop' | 'hotspot' | 'passage';
+  points: number;
+  sectionId?: string | null;
+  imageUrl?: string;
+  audioUrl?: string;
+  // اختيار من متعدد / صح أم خطأ / مقطع صوتي
+  options?: { id: string; text: string; isCorrect: boolean; imageUrl?: string }[];
+  // إجابة رقمية
+  numericAnswer?: number | null;
+  numericTolerance?: number;
+  numericUnit?: string;
+  // توصيل
+  pairs?: { id: string; left: string; right: string }[];
+  // ترتيب
+  orderItems?: string[];
+  // تصنيف
+  categories?: string[];
+  classifyItems?: { text: string; category: string }[];
+  // سحب وإفلات
+  zones?: string[];
+  dragItems?: { text: string; zone: string }[];
+  // منطقة تفاعلية
+  hotspots?: { xPercent: number; yPercent: number; label: string; isCorrect: boolean }[];
+  // قطعة
+  passageText?: string;
+  subQuestions?: { id: string; title: string; type: string; points: number; options?: { id: string; text: string; isCorrect: boolean }[] }[];
+}
+
 export interface Quiz {
   id: string;
   title: string;
@@ -38,7 +72,7 @@ export interface Quiz {
   approvalRejectionNote: string | null;
   createdAt: string;
   settings: Record<string, any>;
-  questions: any[];
+  questions: QuizQuestion[];
   sections: any[];
   assignedClasses: string[];
   assignedStudents: string[];
@@ -158,7 +192,7 @@ export async function getQuizById(id: string): Promise<Quiz | null> {
   return mapQuiz(data);
 }
 
-export async function createQuiz(scope: AssignmentScope, input: { title: string; dueDate: string | null; releaseAt: string | null; status?: 'Active' | 'Draft'; approvalStatus?: 'pending' | 'approved'; unitId?: string | null; settings?: Record<string, any>; questions: any[]; sections: any[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ id: string | null; error: string | null }> {
+export async function createQuiz(scope: AssignmentScope, input: { title: string; dueDate: string | null; releaseAt: string | null; status?: 'Active' | 'Draft'; approvalStatus?: 'pending' | 'approved'; unitId?: string | null; settings?: Record<string, any>; questions: QuizQuestion[]; sections: any[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ id: string | null; error: string | null }> {
   const { data, error } = await supabase
     .from('assignments')
     .insert({
@@ -203,7 +237,7 @@ export async function updateAssignment(id: string, input: { title?: string; inst
   return { ok: !error, error: error?.message || null };
 }
 
-export async function updateQuiz(id: string, input: { title?: string; dueDate?: string | null; releaseAt?: string | null; status?: string; approvalStatus?: 'pending' | 'approved' | 'rejected'; approvalRejectionNote?: string | null; unitId?: string | null; settings?: Record<string, any>; questions?: any[]; sections?: any[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ ok: boolean; error: string | null }> {
+export async function updateQuiz(id: string, input: { title?: string; dueDate?: string | null; releaseAt?: string | null; status?: string; approvalStatus?: 'pending' | 'approved' | 'rejected'; approvalRejectionNote?: string | null; unitId?: string | null; settings?: Record<string, any>; questions?: QuizQuestion[]; sections?: any[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ ok: boolean; error: string | null }> {
   const patch: any = {};
   if (input.title !== undefined) patch.title = input.title;
   if (input.dueDate !== undefined) patch.due_date = input.dueDate;
@@ -517,12 +551,5 @@ export async function gradeQuizManualQuestion(attemptId: string, extraScore: num
   const { data: attempt } = await supabase.from('quiz_attempts').select('score').eq('id', attemptId).maybeSingle();
   const newScore = (attempt?.score || 0) + extraScore;
   const { error } = await supabase.from('quiz_attempts').update({ score: newScore, status: 'graded', needs_manual_review: false }).eq('id', attemptId);
-  return { ok: !error, error: error?.message || null };
-}
-
-// بنك الأسئلة الحقيقي بقى في services/questionBankData.ts (الجدول القديم البسيط اتستبدل بموديل أشمل)
-
-export async function deleteQuestionFromBank(id: string): Promise<{ ok: boolean; error: string | null }> {
-  const { error } = await supabase.from('question_bank').delete().eq('id', id);
   return { ok: !error, error: error?.message || null };
 }

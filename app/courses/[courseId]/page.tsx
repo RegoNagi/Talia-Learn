@@ -2,7 +2,6 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
-import { DailyCompass, ActionAlert } from '@/components/DailyCompass';
 import { ActionItem, MagicButton } from '@/components/MagicButton';
 import { SpacesView } from '@/components/SpacesView';
 import { LearningPathTab } from '@/components/tabs/LearningPathTab';
@@ -15,7 +14,7 @@ import { TaliaAIAssistant } from '@/components/TaliaAIAssistant';
 import { AssessmentLanding, QuizEngine, AssignmentEngine } from '@/components/AssessmentEngine';
 import { User, Task } from '@/types/course';
 import { motion } from 'motion/react';
-import { Plus, Wand2, FileText, PenTool, Video, Book, Layout, MessageSquare, ArrowLeft, Calendar, Sparkles, Globe, Clock, AlertCircle, BookOpen, Compass, Zap, Sun, CalendarRange, CheckCircle, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Wand2, FileText, PenTool, Video, Book, Layout, ArrowLeft, Calendar, Sparkles, Globe, Clock, AlertCircle, BookOpen, Compass, Zap, Sun, CalendarRange, ChevronRight, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams, useParams, useRouter } from 'next/navigation';
 
@@ -24,8 +23,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getClassSectionById } from '@/services/academicData';
 
 // ملحوظة: بيانات المستخدم بقت حقيقية (من AuthContext) بدل الاسم الثابت اللي كان هنا
-
-const mockAlerts: ActionAlert[] = [];
 
 const tabs = [
   { id: 'subject-space', label: 'Subject Space' },
@@ -183,6 +180,7 @@ function CourseWorkspaceContent() {
         onLanguageChange={setLanguage}
         userRole={viewRole.toLowerCase() as 'student' | 'teacher' | 'parent'}
         onLogout={handleLogoutAndRedirect}
+        authUser={authUser}
       />
 
       {/* 2. Main Course Area */}

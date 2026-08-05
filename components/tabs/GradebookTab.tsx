@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Download, Search, Filter, AlertTriangle, Sparkles, Send, Clock, PanelRightOpen, CheckCircle2, X } from 'lucide-react';
+import { Download, Search, AlertTriangle, Sparkles, Send, PanelRightOpen, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   getGradebookConfigFull, getRealAssessments, getRealGradeEntries, syncGradeEntry,

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Search, ChevronDown, Check, LayoutGrid, List as ListIcon, X, MessageSquare, AlertCircle, FileText, ImageIcon, Plus, Send } from 'lucide-react';
+import { Search, ChevronDown, Check, LayoutGrid, List as ListIcon, X, MessageSquare, AlertCircle, FileText, Plus, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getMyClassSections, getStudentsByIds, getAttendancePercentagesForStudents } from '@/services/attendanceData';
 import { getStudentNotes, getNoteCountsForStudents, addStudentNote, updateStudentNote, deleteStudentNote, getTodayAbsentStudentIds } from '@/services/rosterData';

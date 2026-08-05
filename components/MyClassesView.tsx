@@ -3,15 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { 
-  BookOpen, 
-  Users, 
-  Clock, 
-  Globe, 
-  Sparkles,
-  Layers,
-  GraduationCap
-} from 'lucide-react';
+import { BookOpen, Users, Globe } from 'lucide-react';
 import { ClassSpaceView } from '@/features/class-space/ClassSpaceView';
 import { AuthenticatedUser } from '@/services/auth';
 import { getMyClassSections, LearnClassSection } from '@/services/attendanceData';

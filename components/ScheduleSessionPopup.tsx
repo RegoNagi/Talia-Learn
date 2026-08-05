@@ -1,6 +1,6 @@
 'use client';
 import { motion } from 'motion/react';
-import { X, Calendar, Clock, Video, Users, Link as LinkIcon, Save } from 'lucide-react';
+import { X, Calendar, Clock, Video, Link as LinkIcon, Save } from 'lucide-react';
 import { useState } from 'react';
 
 interface ScheduleSessionPopupProps {

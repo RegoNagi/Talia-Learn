@@ -1,25 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  AlertCircle, 
-  BookOpen, 
-  Clock, 
-  FileText, 
-  Video, 
-  Users,
-  AlertTriangle,
-  FileCheck,
-  CheckCircle2,
-  Globe,
-  ChevronDown,
-  BrainCircuit,
-  ClipboardList,
-  Paperclip,
-  Plus,
-  Upload,
-  X
-} from 'lucide-react';
+import { BookOpen, Clock, Video, CheckCircle2, Globe, ChevronDown, BrainCircuit, ClipboardList, Paperclip, Plus, Upload, X } from 'lucide-react';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -199,6 +181,7 @@ export default function ActivityStreamPage() {
         setIsPinned={setIsSidebarPinned}
         language={language}
         onLanguageChange={setLanguage}
+        authUser={authUser}
       />
       
       <main className="flex-1 h-full overflow-y-auto bg-gray-50/50 custom-scrollbar relative">

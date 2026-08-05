@@ -2,7 +2,7 @@
 
 import { User, Task } from '@/types/course';
 import { motion } from 'motion/react';
-import { CheckCircle2, Clock, MoreHorizontal, Calendar, ArrowRight, AlertTriangle, AlertOctagon, Trophy, Star, FileText } from 'lucide-react';
+import { CheckCircle2, Clock, Calendar, AlertTriangle, AlertOctagon } from 'lucide-react';
 import Image from 'next/image';
 
 export interface ActionAlert {

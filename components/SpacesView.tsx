@@ -2,11 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Image as ImageIcon, Video, FileText, BarChart2, MessageSquare, 
-  Heart, CheckCircle, Lightbulb, MoreHorizontal, Send, Mic, 
-  Tag, Star, Trophy, PartyPopper, Brain, Link as LinkIcon, Play, Plus, X, Zap, Sparkles, ArrowRight, ChevronRight, Calendar
-} from 'lucide-react';
+import { Image as ImageIcon, Video, FileText, BarChart2, MessageSquare, Heart, CheckCircle, Lightbulb, MoreHorizontal, Send, Mic, Tag, Star, Trophy, PartyPopper, Brain, Link as LinkIcon, Play, Plus, X, Zap, ArrowRight, Calendar } from 'lucide-react';
 import Image from 'next/image';
 import { getRealPosts, createRealPost, getRealSchoolPosts, createRealSchoolPost, reactToRealPost, addRealComment, getActiveChallenge, createChallenge, submitToChallenge, getMyChallengeSubmission, getChallengeSubmissions, gradeChallengeSubmission, getTopChallengers, getUpcomingSchoolEvents, createSchoolEvent, getSchoolAnnouncements, createSchoolAnnouncement, RealChallenge, ChallengeSubmission, SchoolEvent, SchoolAnnouncement } from '@/services/classSpaceData';
 import { getAssignments, getSubmissionsForAssignment, getSubmissionFileUrl } from '@/services/assignmentData';
@@ -1175,7 +1171,9 @@ function SpacesSidebar({ space, language = 'en', classId, subject, teacherId, au
             <h4 className="text-sm font-bold text-slate-800">Pending Assessments</h4>
           </div>
           <div className="space-y-3">
-            {!isRealScope || pendingItems.length === 0 ? (
+            {isLoadingSidebarData ? (
+              <p className="text-xs text-slate-400">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
+            ) : !isRealScope || pendingItems.length === 0 ? (
               <p className="text-xs text-slate-400">{language === 'ar' ? 'مفيش حاجة محتاجة تصحيح دلوقتي.' : 'Nothing pending grading right now.'}</p>
             ) : pendingItems.map((item) => (
               <div key={item.id} className="flex items-center justify-between group cursor-pointer">
@@ -1199,7 +1197,9 @@ function SpacesSidebar({ space, language = 'en', classId, subject, teacherId, au
             <LinkIcon className="text-indigo-500" size={20} /> Important Resources
           </h3>
           <ul className="space-y-3">
-            {!isRealScope || resources.length === 0 ? (
+            {isLoadingSidebarData ? (
+              <p className="text-xs text-slate-400">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
+            ) : !isRealScope || resources.length === 0 ? (
               <p className="text-xs text-slate-400">{language === 'ar' ? 'مفيش مصادر مضافة لسه.' : 'No resources added yet.'}</p>
             ) : resources.map((r) => (
               <li key={r.id}>
