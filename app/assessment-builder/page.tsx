@@ -679,62 +679,63 @@ function AssessmentBuilderContent() {
       <>
       {/* Main Content Grid */}
       <div className="flex-1 flex overflow-hidden">
-        
-        {/* 1.5 Question Type Panel (quiz only, opposite side from Settings) */}
-        {activeTab === 'quiz' && (
-          <aside className="w-56 shrink-0 fixed top-16 left-0 bottom-0 border-r border-slate-200 bg-white p-4 space-y-5 overflow-y-auto z-40">
-            <div>
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Add Question</h4>
-              <div className="space-y-2">
-                {[
-                  { type: 'multiple_choice', icon: ListChecks, label: 'Multiple Choice' },
-                  { type: 'true_false', icon: CheckSquare, label: 'True/False' },
-                  { type: 'short_answer', icon: Type, label: 'Short Answer' },
-                  { type: 'file_upload', icon: UploadCloud, label: 'File Upload' }
-                ].map((item) => (
-                  <button 
-                    key={item.type}
-                    onClick={() => addQuestion(item.type as any)}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
-                  >
-                    <item.icon size={16} />
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-slate-100 space-y-2">
-              <button
-                onClick={() => addSection()}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-teal-300 hover:text-teal-600 hover:bg-teal-50 transition-all"
-              >
-                <Layout size={16} />
-                Add Section
-              </button>
-            </div>
-
-            <div className="pt-4 border-t border-slate-100 space-y-2">
-              <button 
-                onClick={() => setIsBankDrawerOpen(true)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 transition-all"
-              >
-                <Book size={16} />
-                From Question Bank
-              </button>
-              <button 
-                onClick={() => setIsAIDraftRoomOpen(true)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl text-xs font-bold shadow-sm hover:shadow-md transition-all relative overflow-hidden"
-              >
-                <Sparkles size={16} className="animate-pulse" />
-                Ask Faheem
-              </button>
-            </div>
-          </aside>
-        )}
 
         {/* 2. Left Canvas (Builder) */}
-        <main className={`flex-1 overflow-y-auto custom-scrollbar p-12 bg-[#FAFAFA] relative ${activeTab === 'quiz' ? 'ml-56' : ''}`}>
+        <main className="flex-1 overflow-y-auto custom-scrollbar bg-[#FAFAFA] relative">
+          <div className={activeTab === 'quiz' ? 'flex items-start' : ''}>
+            {/* 1.5 Question Type Panel (quiz only, opposite side from Settings) — sticky within main's own scroll */}
+            {activeTab === 'quiz' && (
+              <aside className="w-56 shrink-0 sticky top-0 border-r border-slate-200 bg-white p-4 space-y-5 self-start">
+                <div>
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Add Question</h4>
+                  <div className="space-y-2">
+                    {[
+                      { type: 'multiple_choice', icon: ListChecks, label: 'Multiple Choice' },
+                      { type: 'true_false', icon: CheckSquare, label: 'True/False' },
+                      { type: 'short_answer', icon: Type, label: 'Short Answer' },
+                      { type: 'file_upload', icon: UploadCloud, label: 'File Upload' }
+                    ].map((item) => (
+                      <button 
+                        key={item.type}
+                        onClick={() => addQuestion(item.type as any)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                      >
+                        <item.icon size={16} />
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 space-y-2">
+                  <button
+                    onClick={() => addSection()}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-teal-300 hover:text-teal-600 hover:bg-teal-50 transition-all"
+                  >
+                    <Layout size={16} />
+                    Add Section
+                  </button>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 space-y-2">
+                  <button 
+                    onClick={() => setIsBankDrawerOpen(true)}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 transition-all"
+                  >
+                    <Book size={16} />
+                    From Question Bank
+                  </button>
+                  <button 
+                    onClick={() => setIsAIDraftRoomOpen(true)}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl text-xs font-bold shadow-sm hover:shadow-md transition-all relative overflow-hidden"
+                  >
+                    <Sparkles size={16} className="animate-pulse" />
+                    Ask Faheem
+                  </button>
+                </div>
+              </aside>
+            )}
+          <div className="p-12 flex-1">
           <div className="max-w-4xl mx-auto">
             {activeTab === 'quiz' ? (
               <div className="space-y-8 pb-32">
@@ -1287,6 +1288,8 @@ function AssessmentBuilderContent() {
                 </section>
               </div>
             )}
+          </div>
+          </div>
           </div>
         </main>
 
