@@ -350,7 +350,7 @@ export async function getBankAnalytics(filters?: { grade?: string; subject?: str
   }
   const { data, error } = await query;
   if (error || !data) {
-    return { bloomData: [], difficultyData: [], typeData: [], recentQuestions: [], topSubjects: [], totalQuestions: 0 };
+    return { bloomData: [], difficultyData: [], typeData: [], recentQuestions: [], topSubjects: [], totalQuestions: 0, approvedCount: 0, activeSubjectsCount: 0 };
   }
 
   const bloomLevels = ['تذكر', 'فهم', 'تطبيق', 'تحليل', 'تقييم', 'ابتكار'];
