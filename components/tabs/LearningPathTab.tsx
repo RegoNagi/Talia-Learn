@@ -816,23 +816,6 @@ export function LearningPathTab({
                     <span className="block text-xs text-slate-500">Official curriculum content</span>
                   </div>
                 </button>
-                <button 
-                  onClick={() => {
-                    setActiveUnitForAdd(null);
-                    setIsBuildingUnit(true);
-                    setNewUnitMode('ai');
-                    setNewUnitTitle(units.find(u => u.id === activeUnitForAdd)?.title || '');
-                  }}
-                  className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 rounded-2xl text-center group transition-all shadow-none"
-                >
-                  <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Wand2 size={24} />
-                  </div>
-                  <div>
-                    <span className="block text-sm font-bold text-slate-700 mb-1">AI Generation</span>
-                    <span className="block text-xs text-slate-500">Generate content instantly</span>
-                  </div>
-                </button>
               </div>
             </motion.div>
           </div>
