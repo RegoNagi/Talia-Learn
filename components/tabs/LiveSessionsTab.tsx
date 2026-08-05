@@ -15,6 +15,9 @@ interface Session {
   time: string;
   attendance: string;
   hasSummary: boolean;
+  scheduledAt?: string;
+  agenda?: string | null;
+  joinUrl?: string;
 }
 
 interface UpcomingSession {
@@ -84,6 +87,9 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
     time: new Date(s.scheduledAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
     attendance: '—',
     hasSummary: false,
+    scheduledAt: s.scheduledAt,
+    agenda: s.agenda,
+    joinUrl: s.joinUrl,
   }));
 
   // ============ Schedule Form ============
@@ -353,11 +359,11 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
                                         if (item.id === 'edit') {
                                           setEditingSessionId(session.id);
                                           setNewTitle(session.title);
-                                          const [d, t] = session.scheduledAt.split('T');
+                                          const [d, t] = (session.scheduledAt || '').split('T');
                                           setNewDate(d);
                                           setNewTime(t?.slice(0, 5) || '10:00');
                                           setNewAgenda(session.agenda || '');
-                                          setNewJoinUrl(session.joinUrl);
+                                          setNewJoinUrl(session.joinUrl || '');
                                           setShowScheduleFormModal(true);
                                         } else if (confirm(`Delete "${session.title}"?`)) {
                                           await deleteLiveSession(session.id);
