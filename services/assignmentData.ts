@@ -26,6 +26,18 @@ export interface AssignmentSubmission {
   status: 'Pending' | 'Submitted' | 'Graded' | 'Late';
 }
 
+export interface Quiz {
+  id: string;
+  title: string;
+  dueDate: string | null;
+  releaseAt: string | null;
+  status: 'Active' | 'Closed' | 'Draft';
+  createdAt: string;
+  settings: Record<string, any>;
+  questions: any[];
+  sections: any[];
+}
+
 interface AssignmentScope {
   teacherId: string;
   classId: string;
@@ -90,6 +102,68 @@ export async function createAssignment(scope: AssignmentScope, input: { title: s
   if (error || !data) {
     console.error('Error creating assignment:', error);
     return { id: null, error: error?.message || 'Unknown error creating assignment' };
+  }
+  return { id: data.id, error: null };
+}
+
+const QUIZ_SELECT = 'id, title, due_date, release_at, status, created_at, settings, questions, sections';
+
+function mapQuiz(row: any): Quiz {
+  return {
+    id: row.id,
+    title: row.title,
+    dueDate: row.due_date,
+    releaseAt: row.release_at,
+    status: row.status,
+    createdAt: row.created_at,
+    settings: row.settings || {},
+    questions: row.questions || [],
+    sections: row.sections || [],
+  };
+}
+
+export async function getQuizzes(scope: AssignmentScope): Promise<Quiz[]> {
+  const { data, error } = await supabase
+    .from('assignments')
+    .select(QUIZ_SELECT)
+    .eq('class_id', scope.classId)
+    .eq('subject', scope.subject)
+    .eq('type', 'quiz')
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('Error fetching quizzes:', error);
+    return [];
+  }
+  return (data || []).map(mapQuiz);
+}
+
+export async function getQuizById(id: string): Promise<Quiz | null> {
+  const { data, error } = await supabase.from('assignments').select(QUIZ_SELECT).eq('id', id).maybeSingle();
+  if (error || !data) return null;
+  return mapQuiz(data);
+}
+
+export async function createQuiz(scope: AssignmentScope, input: { title: string; dueDate: string | null; releaseAt: string | null; settings?: Record<string, any>; questions: any[]; sections: any[] }): Promise<{ id: string | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from('assignments')
+    .insert({
+      teacher_id: scope.teacherId,
+      class_id: scope.classId,
+      subject: scope.subject,
+      title: input.title,
+      type: 'quiz',
+      due_date: input.dueDate,
+      release_at: input.releaseAt,
+      status: 'Active',
+      settings: input.settings || {},
+      questions: input.questions || [],
+      sections: input.sections || [],
+    })
+    .select('id')
+    .single();
+  if (error || !data) {
+    console.error('Error creating quiz:', error);
+    return { id: null, error: error?.message || 'Unknown error creating quiz' };
   }
   return { id: data.id, error: null };
 }

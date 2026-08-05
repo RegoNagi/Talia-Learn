@@ -18,7 +18,7 @@ import { createPortal } from 'react-dom';
 import { FloatingPortal } from '@floating-ui/react';
 import { AssessmentSidebar } from '@/components/AssessmentSidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { createAssignment, uploadAssignmentAttachment, getSubmissionFileUrl } from '@/services/assignmentData';
+import { createAssignment, createQuiz, uploadAssignmentAttachment, getSubmissionFileUrl } from '@/services/assignmentData';
 
 interface Question {
   id: string;
@@ -222,9 +222,43 @@ function AssessmentBuilderContent() {
       }
       return;
     }
-    // الكويز لسه مش متوصّل بالحفظ الحقيقي (خطوة قادمة منفصلة)
-    addToast('Assessment Saved & Published!');
-    setTimeout(() => goBack(), 1000);
+    // Quiz
+    if (!authUser?.teacherId || !scopeClassId || !scopeSubject) {
+      addToast('حصل خطأ: بيانات الفصل أو المادة مش متوفرة.');
+      return;
+    }
+    if (!title.trim()) {
+      addToast('اكتب عنوان الكويز الأول.');
+      return;
+    }
+    setIsSavingReal(true);
+    setSaveError('');
+    const quizDueDateTime = dueDate ? `${dueDate}T${dueTime || '23:59'}` : null;
+    const quizReleaseDateTime = hasReleaseCondition && releaseDate ? `${releaseDate}T${releaseTime || '00:00'}` : null;
+    const quizSettings = {
+      maxScore,
+      timeLimitHours,
+      timeLimitMinutes,
+      attemptLimit,
+      shuffleQuestions,
+      oneAtATime,
+      prohibitBacktracking,
+      feedbackTiming,
+      publishToTimeline,
+      passPercentage,
+    };
+    const { id: quizId, error: quizError } = await createQuiz(
+      { teacherId: authUser.teacherId, classId: scopeClassId, subject: scopeSubject },
+      { title: title.trim(), dueDate: quizDueDateTime, releaseAt: quizReleaseDateTime, settings: quizSettings, questions, sections }
+    );
+    setIsSavingReal(false);
+    if (quizId) {
+      addToast('Quiz Saved & Published!');
+      setTimeout(() => goBack(), 1000);
+    } else {
+      setSaveError(quizError || 'Unknown error');
+      addToast(`حصل خطأ أثناء الحفظ: ${quizError}`);
+    }
   };
 
   const handleGenerateRubric = () => {
@@ -408,6 +442,7 @@ function AssessmentBuilderContent() {
             <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2">
               <Eye size={14} /> معاينة كطالب — كده هيشوفها الطالب بالظبط
             </div>
+            {activeTab === 'assignment' ? (
             <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
               <h2 className="text-2xl font-bold text-slate-800 mb-2">{title || 'بدون عنوان'}</h2>
               {dueDate && (
@@ -452,6 +487,66 @@ function AssessmentBuilderContent() {
                 </button>
               </div>
             </div>
+            ) : (
+            <>
+              <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                <h2 className="text-2xl font-bold text-slate-800 mb-2">{title || 'بدون عنوان'}</h2>
+                <div className="flex items-center gap-4 text-sm text-slate-500 font-medium flex-wrap">
+                  {dueDate && <span className="flex items-center gap-1"><AlertCircle size={16}/> Due: {new Date(`${dueDate}T${dueTime || '23:59'}`).toLocaleString()}</span>}
+                  {(timeLimitHours !== '0' || timeLimitMinutes !== '0') && <span className="flex items-center gap-1"><Clock size={16}/> {timeLimitHours}h {timeLimitMinutes}m</span>}
+                  <span className="flex items-center gap-1">{maxScore} pts</span>
+                </div>
+              </div>
+              {questions.length === 0 && (
+                <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm text-center text-slate-400">مفيش أسئلة لسه.</div>
+              )}
+              {questions.map((q, idx) => {
+                const prevQ = questions[idx - 1];
+                const showHeader = q.sectionId && (!prevQ || prevQ.sectionId !== q.sectionId);
+                const section = q.sectionId ? sections.find(s => s.id === q.sectionId) : null;
+                return (
+                  <Fragment key={q.id}>
+                    {showHeader && section && (
+                      <div className="bg-slate-100 rounded-2xl p-4">
+                        <h3 className="font-bold text-slate-700">{section.title}</h3>
+                      </div>
+                    )}
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                      <div className="flex justify-between items-start mb-4">
+                        <p className="font-bold text-slate-800 flex-1">{idx + 1}. {q.text || 'بدون نص'}</p>
+                        <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full shrink-0">{q.points} pts</span>
+                      </div>
+                      {q.imageUrl && <img src={q.imageUrl} alt="" className="max-h-48 rounded-xl border border-slate-200 mb-4" />}
+                      {(q.type === 'multiple_choice' || q.type === 'true_false') && (
+                        <div className="space-y-2">
+                          {q.options?.map((opt: any) => (
+                            <label key={opt.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 cursor-not-allowed">
+                              <input type="radio" disabled />
+                              <span className="text-sm text-slate-600">{opt.text || 'Option'}</span>
+                              {opt.imageUrl && <img src={opt.imageUrl} alt="" className="max-h-12 rounded-lg" />}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                      {q.type === 'short_answer' && (
+                        <textarea disabled rows={2} className="w-full border border-slate-200 rounded-xl p-3 text-slate-400 bg-slate-50 resize-none" placeholder="Student's answer..." />
+                      )}
+                      {q.type === 'file_upload' && (
+                        <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex items-center gap-3 text-slate-400 bg-slate-50">
+                          <UploadCloud size={20} /> File upload
+                        </div>
+                      )}
+                    </div>
+                  </Fragment>
+                );
+              })}
+              {questions.length > 0 && (
+                <button disabled className="w-full py-4 bg-indigo-300 cursor-not-allowed text-white rounded-xl font-bold text-lg">
+                  Submit Quiz
+                </button>
+              )}
+            </>
+            )}
           </div>
         </div>
       )}

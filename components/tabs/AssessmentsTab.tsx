@@ -8,9 +8,9 @@ import {
   Save, Plus, X
 } from 'lucide-react';
 import {
-  getAssignments, getSubmissionsForAssignment, getMySubmission,
+  getAssignments, getQuizzes, getSubmissionsForAssignment, getMySubmission,
   submitAssignment, gradeSubmission, getSubmissionFileUrl,
-  Assignment, AssignmentSubmission,
+  Assignment, AssignmentSubmission, Quiz,
 } from '@/services/assignmentData';
 
 interface AssessmentsTabProps {
@@ -27,6 +27,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
   const studentScope = studentId && classId && subject ? { studentId, classId, subject } : null;
 
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [submissionCounts, setSubmissionCounts] = useState<Record<string, { submitted: number; graded: number; total: number }>>({});
   const [isLoading, setIsLoading] = useState(true);
 
@@ -40,8 +41,9 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
     if (!scope && !studentScope) return;
     setIsLoading(true);
     const fetchScope = scope || { teacherId: '', classId: classId!, subject: subject! };
-    getAssignments(fetchScope).then(async (items) => {
+    Promise.all([getAssignments(fetchScope), getQuizzes(fetchScope)]).then(async ([items, quizItems]) => {
       setAssignments(items);
+      setQuizzes(quizItems);
       if (scope) {
         const counts: Record<string, { submitted: number; graded: number; total: number }> = {};
         for (const a of items) {
@@ -297,8 +299,8 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
           </div>
           <div className="bg-white/40 backdrop-blur-2xl border border-white/60 rounded-[2rem] p-6 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Total Assignments</p>
-              <p className="text-3xl font-black text-slate-800">{assignments.length}</p>
+              <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Total Assessments</p>
+              <p className="text-3xl font-black text-slate-800">{assignments.length + quizzes.length}</p>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center shadow-sm">
               <BarChart3 className="text-emerald-500" size={24} />
@@ -312,6 +314,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
               <thead>
                 <tr className="bg-slate-50/50 border-b border-slate-100 text-slate-500 text-sm">
                   <th className="py-4 px-6 font-bold uppercase tracking-wider">Title</th>
+                  <th className="py-4 px-6 font-bold uppercase tracking-wider">Type</th>
                   <th className="py-4 px-6 font-bold uppercase tracking-wider">Status</th>
                   <th className="py-4 px-6 font-bold uppercase tracking-wider">Submissions</th>
                   <th className="py-4 px-6 font-bold uppercase tracking-wider">Graded</th>
@@ -319,31 +322,60 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
               </thead>
               <tbody className="divide-y divide-slate-100/50">
                 {isLoading ? (
-                  <tr><td colSpan={4} className="py-10 text-center text-slate-400">Loading...</td></tr>
-                ) : assignments.length === 0 ? (
-                  <tr><td colSpan={4} className="py-10 text-center text-slate-400">No assignments yet. Create your first one.</td></tr>
-                ) : assignments.map(item => {
-                  const counts = submissionCounts[item.id] || { submitted: 0, graded: 0, total: 0 };
-                  return (
-                    <tr key={item.id} className="hover:bg-slate-50 transition-all cursor-pointer" onClick={() => openGradingList(item)}>
-                      <td className="py-4 px-6">
-                        <p className="font-bold text-slate-800">{item.title}</p>
-                      </td>
-                      <td className="py-4 px-6">
-                        <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${
-                          item.status === 'Active' ? 'bg-emerald-100 text-emerald-700' :
-                          item.status === 'Closed' ? 'bg-slate-100 text-slate-600' : 'bg-orange-100 text-orange-700'
-                        }`}>{item.status}</span>
-                      </td>
-                      <td className="py-4 px-6">
-                        <span className="text-sm font-bold text-slate-700">{counts.submitted}/{counts.total}</span>
-                      </td>
-                      <td className="py-4 px-6">
-                        <span className="text-sm font-bold text-slate-700">{counts.graded}/{counts.submitted}</span>
-                      </td>
-                    </tr>
-                  );
-                })}
+                  <tr><td colSpan={5} className="py-10 text-center text-slate-400">Loading...</td></tr>
+                ) : assignments.length === 0 && quizzes.length === 0 ? (
+                  <tr><td colSpan={5} className="py-10 text-center text-slate-400">No assessments yet. Create your first one.</td></tr>
+                ) : (
+                  <>
+                    {quizzes.map(item => (
+                      <tr key={item.id} className="hover:bg-slate-50 transition-all">
+                        <td className="py-4 px-6">
+                          <p className="font-bold text-slate-800">{item.title}</p>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className="inline-flex px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700">Quiz</span>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${
+                            item.status === 'Active' ? 'bg-emerald-100 text-emerald-700' :
+                            item.status === 'Closed' ? 'bg-slate-100 text-slate-600' : 'bg-orange-100 text-orange-700'
+                          }`}>{item.status}</span>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className="text-sm font-bold text-slate-400">{item.questions?.length || 0} questions</span>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className="text-sm font-bold text-slate-400">-</span>
+                        </td>
+                      </tr>
+                    ))}
+                    {assignments.map(item => {
+                      const counts = submissionCounts[item.id] || { submitted: 0, graded: 0, total: 0 };
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50 transition-all cursor-pointer" onClick={() => openGradingList(item)}>
+                          <td className="py-4 px-6">
+                            <p className="font-bold text-slate-800">{item.title}</p>
+                          </td>
+                          <td className="py-4 px-6">
+                            <span className="inline-flex px-3 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">Assignment</span>
+                          </td>
+                          <td className="py-4 px-6">
+                            <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${
+                              item.status === 'Active' ? 'bg-emerald-100 text-emerald-700' :
+                              item.status === 'Closed' ? 'bg-slate-100 text-slate-600' : 'bg-orange-100 text-orange-700'
+                            }`}>{item.status}</span>
+                          </td>
+                          <td className="py-4 px-6">
+                            <span className="text-sm font-bold text-slate-700">{counts.submitted}/{counts.total}</span>
+                          </td>
+                          <td className="py-4 px-6">
+                            <span className="text-sm font-bold text-slate-700">{counts.graded}/{counts.submitted}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </>
+                )}
               </tbody>
             </table>
           </div>
