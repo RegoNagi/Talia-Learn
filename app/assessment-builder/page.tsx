@@ -917,8 +917,16 @@ function AssessmentBuilderContent() {
                         <p className="text-sm text-slate-500 truncate -mt-2 mb-2">{q.text || 'Untitled question'}</p>
                       )}
 
+                      <AnimatePresence initial={false}>
                       {!collapsedQuestionIds.includes(q.id) && (
-                      <>
+                      <motion.div
+                        key="body"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.25, ease: 'easeInOut' }}
+                        style={{ overflow: 'hidden' }}
+                      >
                       {/* Question Text */}
                       <div className="mb-8">
                         <textarea 
@@ -1067,8 +1075,9 @@ function AssessmentBuilderContent() {
                           </button>
                       </div>
                       )}
-                      </>
+                      </motion.div>
                       )}
+                      </AnimatePresence>
                     </motion.div>
                       )}
                     </Fragment>
