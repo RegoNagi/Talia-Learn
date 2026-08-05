@@ -28,6 +28,8 @@ interface Lesson {
   completed?: boolean;
   isHidden: boolean;
   isTopicComplete: boolean;
+  url?: string | null;
+  storagePath?: string | null;
 }
 
 interface Unit {
@@ -88,6 +90,8 @@ export function LearningPathTab({
           status: 'upcoming' as LessonStatus,
           isHidden: l.isHidden,
           isTopicComplete: l.isComplete,
+          url: l.url,
+          storagePath: l.storagePath,
         })),
       }));
       setUnits(mapped);
