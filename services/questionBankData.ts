@@ -414,12 +414,63 @@ export function convertBankQuestionToQuizQuestion(bq: BankQuestion, pointsPerQue
     'سؤال مقالي': 'short_answer',
     'أكمل الفراغ': 'short_answer',
     'إجابة قصيرة': 'short_answer',
+    'إجابة رقمية': 'numeric_answer',
+    'توصيل': 'matching',
+    'ترتيب': 'ordering',
+    'تصنيف': 'classification',
+    'سحب وإفلات': 'drag_and_drop',
+    'منطقة تفاعلية': 'hotspot',
+    'مقطع صوتي': 'multiple_choice', // سؤال استماع: نفس منطق تصحيح الاختيار من متعدد، بس مع مقطع صوتي كمقدمة للسؤال
+    'قطعة': 'passage',
   };
+  const computedPoints = bq.question?.subQuestions
+    ? bq.question.subQuestions.reduce((s: number, sq: any) => s + (sq.points || 0), 0)
+    : pointsPerQuestion;
   return {
     id: bq.id,
     text: bq.title,
     type: typeMap[bq.type] || 'short_answer',
     options: bq.options,
-    points: pointsPerQuestion,
+    points: computedPoints,
+    numericAnswer: bq.question?.numericAnswer ?? null,
+    numericTolerance: bq.question?.numericTolerance ?? 0,
+    numericUnit: bq.question?.numericUnit ?? undefined,
+    pairs: bq.question?.pairs ?? undefined,
+    orderItems: bq.question?.orderItems ?? undefined,
+    categories: bq.question?.categories ?? undefined,
+    classifyItems: bq.question?.classifyItems ?? undefined,
+    zones: bq.question?.zones ?? undefined,
+    dragItems: bq.question?.dragItems ?? undefined,
+    imageUrl: bq.question?.imageUrl ?? undefined,
+    hotspots: bq.question?.hotspots ?? undefined,
+    audioUrl: bq.question?.audioUrl ?? undefined,
+    passageText: bq.question?.passageText ?? undefined,
+    subQuestions: bq.question?.subQuestions ?? undefined,
   };
+}
+
+// رفع صورة لسؤال "منطقة تفاعلية" (Hotspot) — بيستخدم نفس bucket المستخدم في مرفقات التقييمات
+export async function uploadQuestionImage(file: File): Promise<{ url: string; storagePath: string } | null> {
+  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+  const storagePath = `question-bank-images/${Date.now()}_${safeName}`;
+  const { error } = await supabase.storage.from('library-files').upload(storagePath, file);
+  if (error) {
+    console.error('Error uploading question image:', error);
+    return null;
+  }
+  const { data } = supabase.storage.from('library-files').getPublicUrl(storagePath);
+  return { url: data.publicUrl, storagePath };
+}
+
+// رفع مقطع صوتي لسؤال "مقطع صوتي" — بيستخدم نفس bucket المستخدم في الصور والمرفقات
+export async function uploadQuestionAudio(file: File): Promise<{ url: string; storagePath: string } | null> {
+  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+  const storagePath = `question-bank-audio/${Date.now()}_${safeName}`;
+  const { error } = await supabase.storage.from('library-files').upload(storagePath, file);
+  if (error) {
+    console.error('Error uploading question audio:', error);
+    return null;
+  }
+  const { data } = supabase.storage.from('library-files').getPublicUrl(storagePath);
+  return { url: data.publicUrl, storagePath };
 }

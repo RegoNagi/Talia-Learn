@@ -24,7 +24,7 @@ import { getGradebookCategories } from '@/services/academicData';
 
 interface Question {
   id: string;
-  type: 'multiple_choice' | 'true_false' | 'short_answer' | 'file_upload';
+  type: 'multiple_choice' | 'true_false' | 'short_answer' | 'file_upload' | 'numeric_answer' | 'matching' | 'ordering' | 'classification' | 'drag_and_drop' | 'hotspot' | 'passage';
   text: string;
   points: number;
   imageUrl?: string;

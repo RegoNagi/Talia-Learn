@@ -47,6 +47,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
   const [activeSubmission, setActiveSubmission] = useState<AssignmentSubmission | null>(null);
   const [mySubmission, setMySubmission] = useState<AssignmentSubmission | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
+  const [shuffledMatchingOptions, setShuffledMatchingOptions] = useState<Record<string, string[]>>({});
   const [myQuizAttempt, setMyQuizAttempt] = useState<QuizAttempt | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, any>>({});
   const [quizQIndex, setQuizQIndex] = useState(0);
@@ -227,6 +228,16 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
       setMyQuizAttempt(attempt);
       setQuizAnswers(attempt.answers || {});
       setQuizQIndex(0);
+      const shuffled: Record<string, string[]> = {};
+      (activeQuiz.questions || []).forEach((q: any) => {
+        if (q.type === 'matching' && Array.isArray(q.pairs)) {
+          shuffled[q.id] = [...q.pairs.map((p: any) => p.right)].sort(() => Math.random() - 0.5);
+        }
+        if (q.type === 'ordering' && Array.isArray(q.orderItems)) {
+          shuffled[`order-${q.id}`] = [...q.orderItems].sort(() => Math.random() - 0.5);
+        }
+      });
+      setShuffledMatchingOptions(shuffled);
       setView('quiz-taking');
     }
   };
@@ -706,6 +717,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
                 <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full shrink-0">{q.points} pts</span>
               </div>
               {q.imageUrl && <img src={q.imageUrl} alt="" className="max-h-48 rounded-xl border border-slate-200 mb-4" />}
+              {q.audioUrl && <audio src={q.audioUrl} controls className="w-full mb-4" />}
               {(q.type === 'multiple_choice' || q.type === 'true_false') && (
                 <div className="space-y-2">
                   {(q.options || []).map((opt: any) => (
@@ -724,6 +736,185 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
                   <UploadCloud size={20} /> {quizAnswers[q.id]?.name || 'Click to upload a file'}
                   <input type="file" className="hidden" onChange={(e) => handleAnswerChange(q.id, e.target.files?.[0] ? { name: e.target.files[0].name } : null)} />
                 </label>
+              )}
+              {q.type === 'numeric_answer' && (
+                <div className="flex items-center gap-2">
+                  <input type="number" value={quizAnswers[q.id] || ''} onChange={(e) => handleAnswerChange(q.id, e.target.value)} className="w-40 border border-slate-200 rounded-xl p-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="0" />
+                  {q.numericUnit && <span className="text-sm font-bold text-slate-500">{q.numericUnit}</span>}
+                </div>
+              )}
+              {q.type === 'matching' && Array.isArray(q.pairs) && (
+                <div className="space-y-2">
+                  {q.pairs.map((pair: any) => {
+                    const shuffledRights = shuffledMatchingOptions[q.id] || q.pairs.map((p: any) => p.right);
+                    const currentAnswers = quizAnswers[q.id] || {};
+                    return (
+                      <div key={pair.id} className="flex items-center gap-3">
+                        <span className="flex-1 text-sm font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">{pair.left}</span>
+                        <select
+                          value={currentAnswers[pair.id] || ''}
+                          onChange={(e) => handleAnswerChange(q.id, { ...currentAnswers, [pair.id]: e.target.value })}
+                          className="flex-1 border border-slate-200 rounded-xl p-2.5 text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none"
+                        >
+                          <option value="">{'-- Select --'}</option>
+                          {shuffledRights.map((r: string, i: number) => (
+                            <option key={i} value={r}>{r}</option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {q.type === 'ordering' && Array.isArray(q.orderItems) && (
+                <div className="space-y-2">
+                  {(quizAnswers[q.id] || shuffledMatchingOptions[`order-${q.id}`] || q.orderItems).map((item: string, idx: number) => {
+                    const currentOrder: string[] = quizAnswers[q.id] || shuffledMatchingOptions[`order-${q.id}`] || q.orderItems;
+                    return (
+                      <div key={item} className="flex items-center gap-3">
+                        <span className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center justify-center text-sm font-bold shrink-0">{idx + 1}</span>
+                        <span className="flex-1 text-sm font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">{item}</span>
+                        <button
+                          onClick={() => { if (idx > 0) { const next = [...currentOrder]; [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]; handleAnswerChange(q.id, next); } }}
+                          disabled={idx === 0}
+                          className="w-9 h-9 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 flex items-center justify-center transition-colors disabled:opacity-30"
+                        >
+                          <ChevronUp size={14} />
+                        </button>
+                        <button
+                          onClick={() => { if (idx < currentOrder.length - 1) { const next = [...currentOrder]; [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]; handleAnswerChange(q.id, next); } }}
+                          disabled={idx === currentOrder.length - 1}
+                          className="w-9 h-9 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 flex items-center justify-center transition-colors disabled:opacity-30"
+                        >
+                          <ChevronDown size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {q.type === 'classification' && Array.isArray(q.classifyItems) && (
+                <div className="space-y-2">
+                  {q.classifyItems.map((item: any, idx: number) => {
+                    const currentAnswers = quizAnswers[q.id] || {};
+                    return (
+                      <div key={idx} className="flex items-center gap-3">
+                        <span className="flex-1 text-sm font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">{item.text}</span>
+                        <select
+                          value={currentAnswers[idx] || ''}
+                          onChange={(e) => handleAnswerChange(q.id, { ...currentAnswers, [idx]: e.target.value })}
+                          className="w-48 border border-slate-200 rounded-xl p-2.5 text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none"
+                        >
+                          <option value="">{'-- Select --'}</option>
+                          {(q.categories || []).map((cat: string, i: number) => (
+                            <option key={i} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {q.type === 'drag_and_drop' && Array.isArray(q.dragItems) && Array.isArray(q.zones) && (() => {
+                const currentAssignments: Record<string, string> = quizAnswers[q.id] || {};
+                const unassigned = q.dragItems.filter((it: any) => !currentAssignments[it.text]);
+                const assignItem = (itemText: string, zone: string) => {
+                  handleAnswerChange(q.id, { ...currentAssignments, [itemText]: zone });
+                };
+                const unassignItem = (itemText: string) => {
+                  const next = { ...currentAssignments };
+                  delete next[itemText];
+                  handleAnswerChange(q.id, next);
+                };
+                return (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl min-h-[52px]">
+                      {unassigned.length === 0 && <span className="text-xs text-slate-400 self-center">{'All items placed'}</span>}
+                      {unassigned.map((item: any) => (
+                        <div
+                          key={item.text}
+                          draggable
+                          onDragStart={(e) => e.dataTransfer.setData('text/plain', item.text)}
+                          className="px-4 py-2 bg-white border border-indigo-200 rounded-lg text-sm font-bold text-indigo-700 cursor-grab shadow-sm"
+                        >
+                          {item.text}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {q.zones.map((zone: string) => (
+                        <div
+                          key={zone}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => { e.preventDefault(); const text = e.dataTransfer.getData('text/plain'); if (text) assignItem(text, zone); }}
+                          className="border-2 border-dashed border-indigo-200 rounded-xl p-3 min-h-[100px] bg-indigo-50/30"
+                        >
+                          <div className="text-xs font-bold text-indigo-600 mb-2">{zone}</div>
+                          <div className="flex flex-wrap gap-2">
+                            {q.dragItems.filter((it: any) => currentAssignments[it.text] === zone).map((it: any) => (
+                              <div
+                                key={it.text}
+                                onClick={() => unassignItem(it.text)}
+                                className="px-3 py-1.5 bg-white border border-indigo-300 rounded-lg text-xs font-bold text-slate-700 cursor-pointer"
+                                title="Click to remove"
+                              >
+                                {it.text}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+              {q.type === 'hotspot' && q.imageUrl && Array.isArray(q.hotspots) && (
+                <div className="relative inline-block border border-slate-200 rounded-xl overflow-hidden">
+                  <img src={q.imageUrl} alt="" className="max-w-full max-h-96 block" />
+                  {q.hotspots.map((hs: any, idx: number) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleAnswerChange(q.id, idx)}
+                      style={{ left: `${hs.xPercent}%`, top: `${hs.yPercent}%` }}
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-colors ${quizAnswers[q.id] === idx ? 'bg-indigo-600 border-white text-white' : 'bg-white/90 border-indigo-300 text-indigo-700 hover:bg-indigo-50'}`}
+                    >
+                      {hs.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {q.type === 'passage' && (
+                <div className="space-y-5">
+                  {q.passageText && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
+                      {q.passageText}
+                    </div>
+                  )}
+                  {Array.isArray(q.subQuestions) && q.subQuestions.map((sq: any, sqIdx: number) => {
+                    const subAnswers = quizAnswers[q.id] || {};
+                    return (
+                      <div key={sq.id} className="border-t border-slate-100 pt-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="font-bold text-slate-800 text-sm">{sqIdx + 1}. {sq.title}</p>
+                          <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full shrink-0">{sq.points} pts</span>
+                        </div>
+                        {(sq.type === 'اختيار من متعدد' || sq.type === 'صح أم خطأ') && Array.isArray(sq.options) && (
+                          <div className="space-y-2">
+                            {sq.options.map((opt: any) => (
+                              <label key={opt.id} className={`flex items-center gap-3 p-2.5 rounded-xl border cursor-pointer transition-all ${subAnswers[sq.id] === opt.id ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                                <input type="radio" checked={subAnswers[sq.id] === opt.id} onChange={() => handleAnswerChange(q.id, { ...subAnswers, [sq.id]: opt.id })} />
+                                <span className="text-sm text-slate-700">{opt.text}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                        {sq.type === 'إجابة قصيرة' && (
+                          <textarea rows={2} value={subAnswers[sq.id] || ''} onChange={(e) => handleAnswerChange(q.id, { ...subAnswers, [sq.id]: e.target.value })} className="w-full border border-slate-200 rounded-xl p-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none resize-none" placeholder="Type your answer..." />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           ))}

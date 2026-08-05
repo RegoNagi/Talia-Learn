@@ -4,11 +4,11 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
 import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
-import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCircuit, LayoutTemplate, Edit2, Trash2, BookOpen, ListChecks, CheckCircle2, AlignRight, Type, Mic, Copy, Eye, Search, ChevronDown, ChevronUp, MessageSquare, Layers, BarChart, FileText, LayoutGrid, Signal, Award, Play, X, Paperclip, Globe, Monitor, Flag, Check, Loader2, MousePointerClick, Settings2, RefreshCw, ShieldCheck, Calendar, Clock, Sigma } from 'lucide-react';
+import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCircuit, LayoutTemplate, Edit2, Trash2, BookOpen, ListChecks, CheckCircle2, AlignRight, Type, Mic, Copy, Eye, Search, ChevronDown, ChevronUp, MessageSquare, Layers, BarChart, FileText, LayoutGrid, Signal, Award, Play, X, Paperclip, Globe, Monitor, Flag, Check, Loader2, MousePointerClick, Settings2, RefreshCw, ShieldCheck, Calendar, Clock, Sigma, Calculator, GitMerge, ListOrdered, Move, Map } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ApprovalHub } from '@/components/ApprovalHub';
 import { useAuth } from '@/contexts/AuthContext';
-import { getVisibleQuestions, createQuestion, deleteQuestion, linkQuestionsToQuiz, unlinkAllQuestionsFromQuiz, generateBlueprintQuestions, getBlueprintAssessments, getQuestionsForQuiz, convertBankQuestionToQuizQuestion, BankQuestion } from '@/services/questionBankData';
+import { getVisibleQuestions, createQuestion, deleteQuestion, linkQuestionsToQuiz, unlinkAllQuestionsFromQuiz, generateBlueprintQuestions, getBlueprintAssessments, getQuestionsForQuiz, convertBankQuestionToQuizQuestion, uploadQuestionImage, uploadQuestionAudio, BankQuestion } from '@/services/questionBankData';
 import { getQuizById, updateQuiz, createQuiz, getClassRoster } from '@/services/assignmentData';
 import { getSubjectGradeCombos, getAllClassSections } from '@/services/academicData';
 import { getMyClassSections } from '@/services/attendanceData';
@@ -347,6 +347,7 @@ export default function QuestionBank() {
     'مقطع صوتي': 'Audio Clip',
     'إجابة رقمية': 'Numeric Answer',
     'استبيان': 'Survey',
+    'قطعة': 'Passage',
   };
   const typeLabel = (type: string) => language === 'ar' ? type : (typeDisplayNames[type] || type);
   
@@ -461,6 +462,47 @@ export default function QuestionBank() {
   const [newQBloom, setNewQBloom] = useState('تذكر');
   const [newQDiff, setNewQDiff] = useState('سهل');
   const [newQType, setNewQType] = useState('اختيار من متعدد');
+  const [newQNumericAnswer, setNewQNumericAnswer] = useState('');
+  const [newQNumericTolerance, setNewQNumericTolerance] = useState('0');
+  const [newQNumericUnit, setNewQNumericUnit] = useState('');
+  const [newQPairs, setNewQPairs] = useState<{ id: string; left: string; right: string }[]>([
+    { id: '1', left: '', right: '' },
+    { id: '2', left: '', right: '' },
+  ]);
+  const [newQOrderItems, setNewQOrderItems] = useState<{ id: string; text: string }[]>([
+    { id: '1', text: '' },
+    { id: '2', text: '' },
+    { id: '3', text: '' },
+  ]);
+  const [newQCategories, setNewQCategories] = useState<{ id: string; name: string }[]>([
+    { id: 'c1', name: '' },
+    { id: 'c2', name: '' },
+  ]);
+  const [newQClassifyItems, setNewQClassifyItems] = useState<{ id: string; text: string; categoryId: string }[]>([
+    { id: '1', text: '', categoryId: 'c1' },
+    { id: '2', text: '', categoryId: 'c1' },
+  ]);
+  const [newQZones, setNewQZones] = useState<{ id: string; name: string }[]>([
+    { id: 'z1', name: '' },
+    { id: 'z2', name: '' },
+  ]);
+  const [newQDragItems, setNewQDragItems] = useState<{ id: string; text: string; zoneId: string }[]>([
+    { id: '1', text: '', zoneId: 'z1' },
+    { id: '2', text: '', zoneId: 'z1' },
+  ]);
+  const [newQImageUrl, setNewQImageUrl] = useState('');
+  const [isUploadingQImage, setIsUploadingQImage] = useState(false);
+  const [newQHotspots, setNewQHotspots] = useState<{ id: string; xPercent: number; yPercent: number; label: string; isCorrect: boolean }[]>([]);
+  const [newQAudioUrl, setNewQAudioUrl] = useState('');
+  const [isUploadingQAudio, setIsUploadingQAudio] = useState(false);
+  const [newQPassageText, setNewQPassageText] = useState('');
+  const [newQSubQuestions, setNewQSubQuestions] = useState<{
+    id: string;
+    title: string;
+    type: 'اختيار من متعدد' | 'صح أم خطأ' | 'إجابة قصيرة';
+    points: number;
+    options: { id: string; text: string; isCorrect: boolean }[];
+  }[]>([]);
   const [targetBank, setTargetBank] = useState('بنك مركزي (الوزارة)');
   const [qStandard, setQStandard] = useState('');
   const [qTime, setQTime] = useState('5');
@@ -523,7 +565,54 @@ export default function QuestionBank() {
       bloomLevel: newQBloom,
       difficulty: newQDiff,
       type: newQType,
-      question: { title: newQTitle, options: newQOptions, correctOption: newQCorrectOption, standard: qStandard || undefined },
+      question: { 
+        title: newQTitle, 
+        options: newQOptions, 
+        correctOption: newQCorrectOption, 
+        standard: qStandard || undefined,
+        ...(newQType === 'إجابة رقمية' ? {
+          numericAnswer: newQNumericAnswer ? Number(newQNumericAnswer) : null,
+          numericTolerance: newQNumericTolerance ? Number(newQNumericTolerance) : 0,
+          numericUnit: newQNumericUnit || undefined,
+        } : {}),
+        ...(newQType === 'توصيل' ? {
+          pairs: newQPairs.filter((p) => p.left.trim() && p.right.trim()),
+        } : {}),
+        ...(newQType === 'ترتيب' ? {
+          orderItems: newQOrderItems.filter((it) => it.text.trim()).map((it) => it.text),
+        } : {}),
+        ...(newQType === 'تصنيف' ? {
+          categories: newQCategories.filter((c) => c.name.trim()).map((c) => c.name),
+          classifyItems: newQClassifyItems.filter((it) => it.text.trim()).map((it) => ({
+            text: it.text,
+            category: newQCategories.find((c) => c.id === it.categoryId)?.name || '',
+          })),
+        } : {}),
+        ...(newQType === 'سحب وإفلات' ? {
+          zones: newQZones.filter((z) => z.name.trim()).map((z) => z.name),
+          dragItems: newQDragItems.filter((it) => it.text.trim()).map((it) => ({
+            text: it.text,
+            zone: newQZones.find((z) => z.id === it.zoneId)?.name || '',
+          })),
+        } : {}),
+        ...(newQType === 'منطقة تفاعلية' ? {
+          imageUrl: newQImageUrl || undefined,
+          hotspots: newQHotspots.map((hs) => ({ xPercent: hs.xPercent, yPercent: hs.yPercent, label: hs.label, isCorrect: hs.isCorrect })),
+        } : {}),
+        ...(newQType === 'مقطع صوتي' ? {
+          audioUrl: newQAudioUrl || undefined,
+        } : {}),
+        ...(newQType === 'قطعة' ? {
+          passageText: newQPassageText || undefined,
+          subQuestions: newQSubQuestions.filter((sq) => sq.title.trim()).map((sq) => ({
+            id: sq.id,
+            title: sq.title,
+            type: sq.type,
+            points: sq.points || 1,
+            options: (sq.type === 'اختيار من متعدد' || sq.type === 'صح أم خطأ') ? sq.options.filter((o) => o.text.trim()) : undefined,
+          })),
+        } : {}),
+      },
     });
     setIsSavingQuestion(false);
     if (!id) {
@@ -541,6 +630,11 @@ export default function QuestionBank() {
       { id: '4', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null }
     ]);
     setNewQCorrectOption(0);
+    setNewQImageUrl('');
+    setNewQHotspots([]);
+    setNewQAudioUrl('');
+    setNewQPassageText('');
+    setNewQSubQuestions([]);
     // CRITICAL: We explicitly do NOT clear newQType, newQUnit, newQBloom, or newQDiff.
     
     if (!stayInEditor) {
@@ -1290,7 +1384,15 @@ export default function QuestionBank() {
                                   { label: 'صح أم خطأ', icon: CheckCircle2 },
                                   { label: 'إجابة قصيرة', icon: AlignRight },
                                   { label: 'أكمل الفراغ', icon: Type },
-                                  { label: 'سؤال مقالي', icon: FileText }
+                                  { label: 'سؤال مقالي', icon: FileText },
+                                  { label: 'إجابة رقمية', icon: Calculator },
+                                  { label: 'توصيل', icon: GitMerge },
+                                  { label: 'ترتيب', icon: ListOrdered },
+                                  { label: 'تصنيف', icon: Layers },
+                                  { label: 'سحب وإفلات', icon: Move },
+                                  { label: 'منطقة تفاعلية', icon: Map },
+                                  { label: 'مقطع صوتي', icon: Mic },
+                                  { label: 'قطعة', icon: BookOpen }
                                ].map((type) => {
                                   const Icon = type.icon;
                                   const isActive = newQType === type.label;
@@ -1423,9 +1525,42 @@ export default function QuestionBank() {
                               />
                            </div>
 
+                           {/* Audio Prompt (for Audio Clip questions) */}
+                           {newQType === 'مقطع صوتي' && (
+                             <div className="mb-6">
+                               {!newQAudioUrl ? (
+                                 <label className="border-2 border-dashed border-slate-200 rounded-2xl p-6 flex flex-col items-center gap-2 text-slate-400 hover:bg-slate-50 cursor-pointer transition-colors">
+                                   <Mic size={24} />
+                                   <span className="text-sm font-bold">{isUploadingQAudio ? (language === 'ar' ? 'جاري الرفع...' : 'Uploading...') : (language === 'ar' ? 'ارفع المقطع الصوتي' : 'Upload audio clip')}</span>
+                                   <input 
+                                     type="file" 
+                                     accept="audio/*" 
+                                     className="hidden" 
+                                     onChange={async (e) => {
+                                       const file = e.target.files?.[0];
+                                       if (!file) return;
+                                       setIsUploadingQAudio(true);
+                                       const result = await uploadQuestionAudio(file);
+                                       setIsUploadingQAudio(false);
+                                       if (result) setNewQAudioUrl(result.url);
+                                     }} 
+                                   />
+                                 </label>
+                               ) : (
+                                 <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                                   <audio src={newQAudioUrl} controls className="flex-1" />
+                                   <button onClick={() => setNewQAudioUrl('')} className="text-xs font-bold text-red-500 hover:text-red-600 shrink-0">
+                                     {language === 'ar' ? 'إزالة' : 'Remove'}
+                                   </button>
+                                 </div>
+                               )}
+                               <p className="text-xs font-semibold text-slate-400 px-1 mt-2">{language === 'ar' ? 'الطالب هيسمع المقطع ده ويختار الإجابة الصحيحة من الاختيارات تحت.' : 'The student will listen to this clip and pick the correct answer from the options below.'}</p>
+                             </div>
+                           )}
+
                            {/* Options / Inputs based on Type */}
                            <AnimatePresence mode="wait">
-                              {newQType === 'اختيار من متعدد' && (
+                              {(newQType === 'اختيار من متعدد' || newQType === 'مقطع صوتي') && (
                                  <motion.div key="mcq" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4 mb-4">
                                     {newQOptions.map((opt, idx) => {
                                       const isSelected = opt.isCorrect;
@@ -1583,11 +1718,453 @@ export default function QuestionBank() {
                                     <p className="text-xs font-semibold text-slate-400 px-2 mt-2">{language === 'ar' ? <>ملاحظة: استخدم الرمز <span className="font-mono text-slate-600 bg-slate-100 px-1 py-0.5 rounded">___</span> في نص السؤال للإشارة إلى الفراغ.</> : <>Note: use the <span className="font-mono text-slate-600 bg-slate-100 px-1 py-0.5 rounded">___</span> symbol in the question text to mark the blank.</>}</p>
                                  </motion.div>
                               )}
+                              {newQType === 'إجابة رقمية' && (
+                                 <motion.div key="numeric" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4 mb-4">
+                                    <div className="grid grid-cols-3 gap-4">
+                                      <div>
+                                        <label className="text-xs font-bold text-slate-500 px-1 block mb-1.5">{language === 'ar' ? 'الإجابة الصحيحة' : 'Correct Answer'}</label>
+                                        <input 
+                                          type="number" 
+                                          value={newQNumericAnswer} 
+                                          onChange={(e) => setNewQNumericAnswer(e.target.value)} 
+                                          placeholder={language === 'ar' ? 'مثال: 42' : 'e.g. 42'}
+                                          className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-colors"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-xs font-bold text-slate-500 px-1 block mb-1.5">{language === 'ar' ? 'هامش الخطأ المسموح (±)' : 'Allowed Tolerance (±)'}</label>
+                                        <input 
+                                          type="number" 
+                                          min="0"
+                                          value={newQNumericTolerance} 
+                                          onChange={(e) => setNewQNumericTolerance(e.target.value)} 
+                                          placeholder="0"
+                                          className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-colors"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-xs font-bold text-slate-500 px-1 block mb-1.5">{language === 'ar' ? 'الوحدة (اختياري)' : 'Unit (optional)'}</label>
+                                        <input 
+                                          type="text" 
+                                          value={newQNumericUnit} 
+                                          onChange={(e) => setNewQNumericUnit(e.target.value)} 
+                                          placeholder={language === 'ar' ? 'مثال: سم' : 'e.g. cm'}
+                                          className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-colors"
+                                        />
+                                      </div>
+                                    </div>
+                                    <p className="text-xs font-semibold text-slate-400 px-2">{language === 'ar' ? 'هيتصحّح تلقائيًا: أي إجابة جوه هامش الخطأ ده هتتحسب صح.' : 'Auto-graded: any answer within the tolerance range counts as correct.'}</p>
+                                 </motion.div>
+                              )}
+                              {newQType === 'توصيل' && (
+                                 <motion.div key="matching" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3 mb-4">
+                                    <div className="grid grid-cols-2 gap-3 px-1">
+                                      <label className="text-xs font-bold text-slate-500">{language === 'ar' ? 'العمود الأول' : 'Left Column'}</label>
+                                      <label className="text-xs font-bold text-slate-500">{language === 'ar' ? 'العمود المطابق' : 'Matching Column'}</label>
+                                    </div>
+                                    {newQPairs.map((pair, idx) => (
+                                      <div key={pair.id} className="grid grid-cols-[1fr_1fr_auto] gap-3 items-center">
+                                        <input 
+                                          type="text" 
+                                          value={pair.left} 
+                                          onChange={(e) => setNewQPairs(prev => prev.map(p => p.id === pair.id ? { ...p, left: e.target.value } : p))} 
+                                          placeholder={language === 'ar' ? `عنصر ${idx + 1}` : `Item ${idx + 1}`}
+                                          className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-colors"
+                                        />
+                                        <input 
+                                          type="text" 
+                                          value={pair.right} 
+                                          onChange={(e) => setNewQPairs(prev => prev.map(p => p.id === pair.id ? { ...p, right: e.target.value } : p))} 
+                                          placeholder={language === 'ar' ? `المطابق لعنصر ${idx + 1}` : `Match for item ${idx + 1}`}
+                                          className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-colors"
+                                        />
+                                        <button 
+                                          onClick={() => setNewQPairs(prev => prev.filter(p => p.id !== pair.id))}
+                                          disabled={newQPairs.length <= 2}
+                                          className="w-9 h-9 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 flex items-center justify-center transition-colors disabled:opacity-30"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                    ))}
+                                    <button 
+                                      onClick={() => setNewQPairs(prev => [...prev, { id: Date.now().toString(), left: '', right: '' }])}
+                                      disabled={newQPairs.length >= 8}
+                                      className="flex items-center gap-2 text-sm font-bold text-violet-600 hover:text-violet-700 disabled:opacity-40 px-1"
+                                    >
+                                      <Plus size={16} /> {language === 'ar' ? 'إضافة زوج' : 'Add Pair'}
+                                    </button>
+                                 </motion.div>
+                              )}
+                              {newQType === 'ترتيب' && (
+                                 <motion.div key="ordering" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3 mb-4">
+                                    <p className="text-xs font-semibold text-slate-400 px-1">{language === 'ar' ? 'اكتب العناصر بالترتيب الصحيح من الأول للآخر' : 'Write the items in the correct order, first to last'}</p>
+                                    {newQOrderItems.map((item, idx) => (
+                                      <div key={item.id} className="flex items-center gap-3">
+                                        <span className="w-8 h-8 rounded-full bg-violet-50 text-violet-700 border border-violet-200 flex items-center justify-center text-sm font-bold shrink-0">{idx + 1}</span>
+                                        <input 
+                                          type="text" 
+                                          value={item.text} 
+                                          onChange={(e) => setNewQOrderItems(prev => prev.map(it => it.id === item.id ? { ...it, text: e.target.value } : it))} 
+                                          placeholder={language === 'ar' ? `الخطوة ${idx + 1}` : `Step ${idx + 1}`}
+                                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-colors"
+                                        />
+                                        <button 
+                                          onClick={() => { if (idx > 0) setNewQOrderItems(prev => { const next = [...prev]; [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]; return next; }); }}
+                                          disabled={idx === 0}
+                                          className="w-9 h-9 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-violet-600 hover:border-violet-200 flex items-center justify-center transition-colors disabled:opacity-30"
+                                        >
+                                          <ChevronUp size={14} />
+                                        </button>
+                                        <button 
+                                          onClick={() => { if (idx < newQOrderItems.length - 1) setNewQOrderItems(prev => { const next = [...prev]; [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]; return next; }); }}
+                                          disabled={idx === newQOrderItems.length - 1}
+                                          className="w-9 h-9 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-violet-600 hover:border-violet-200 flex items-center justify-center transition-colors disabled:opacity-30"
+                                        >
+                                          <ChevronDown size={14} />
+                                        </button>
+                                        <button 
+                                          onClick={() => setNewQOrderItems(prev => prev.filter(it => it.id !== item.id))}
+                                          disabled={newQOrderItems.length <= 3}
+                                          className="w-9 h-9 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 flex items-center justify-center transition-colors disabled:opacity-30"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                    ))}
+                                    <button 
+                                      onClick={() => setNewQOrderItems(prev => [...prev, { id: Date.now().toString(), text: '' }])}
+                                      disabled={newQOrderItems.length >= 8}
+                                      className="flex items-center gap-2 text-sm font-bold text-violet-600 hover:text-violet-700 disabled:opacity-40 px-1"
+                                    >
+                                      <Plus size={16} /> {language === 'ar' ? 'إضافة عنصر' : 'Add Item'}
+                                    </button>
+                                 </motion.div>
+                              )}
+                              {newQType === 'تصنيف' && (
+                                 <motion.div key="classify" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5 mb-4">
+                                    <div>
+                                      <label className="text-xs font-bold text-slate-500 px-1 block mb-2">{language === 'ar' ? 'الفئات' : 'Categories'}</label>
+                                      <div className="space-y-2">
+                                        {newQCategories.map((cat, idx) => (
+                                          <div key={cat.id} className="flex items-center gap-3">
+                                            <input 
+                                              type="text" 
+                                              value={cat.name} 
+                                              onChange={(e) => setNewQCategories(prev => prev.map(c => c.id === cat.id ? { ...c, name: e.target.value } : c))} 
+                                              placeholder={language === 'ar' ? `الفئة ${idx + 1}` : `Category ${idx + 1}`}
+                                              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-colors"
+                                            />
+                                            <button 
+                                              onClick={() => {
+                                                setNewQCategories(prev => prev.filter(c => c.id !== cat.id));
+                                                setNewQClassifyItems(prev => prev.map(it => it.categoryId === cat.id ? { ...it, categoryId: newQCategories[0]?.id === cat.id ? (newQCategories[1]?.id || '') : newQCategories[0]?.id || '' } : it));
+                                              }}
+                                              disabled={newQCategories.length <= 2}
+                                              className="w-9 h-9 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 flex items-center justify-center transition-colors disabled:opacity-30"
+                                            >
+                                              <Trash2 size={14} />
+                                            </button>
+                                          </div>
+                                        ))}
+                                        <button 
+                                          onClick={() => setNewQCategories(prev => [...prev, { id: `c${Date.now()}`, name: '' }])}
+                                          disabled={newQCategories.length >= 5}
+                                          className="flex items-center gap-2 text-sm font-bold text-violet-600 hover:text-violet-700 disabled:opacity-40 px-1"
+                                        >
+                                          <Plus size={16} /> {language === 'ar' ? 'إضافة فئة' : 'Add Category'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <label className="text-xs font-bold text-slate-500 px-1 block mb-2">{language === 'ar' ? 'العناصر وتصنيفها' : 'Items & Their Category'}</label>
+                                      <div className="space-y-2">
+                                        {newQClassifyItems.map((item, idx) => (
+                                          <div key={item.id} className="flex items-center gap-3">
+                                            <input 
+                                              type="text" 
+                                              value={item.text} 
+                                              onChange={(e) => setNewQClassifyItems(prev => prev.map(it => it.id === item.id ? { ...it, text: e.target.value } : it))} 
+                                              placeholder={language === 'ar' ? `عنصر ${idx + 1}` : `Item ${idx + 1}`}
+                                              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-colors"
+                                            />
+                                            <select
+                                              value={item.categoryId}
+                                              onChange={(e) => setNewQClassifyItems(prev => prev.map(it => it.id === item.id ? { ...it, categoryId: e.target.value } : it))}
+                                              className="w-40 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:border-violet-400 transition-colors"
+                                            >
+                                              {newQCategories.map((cat, i) => (
+                                                <option key={cat.id} value={cat.id}>{cat.name || (language === 'ar' ? `الفئة ${i + 1}` : `Category ${i + 1}`)}</option>
+                                              ))}
+                                            </select>
+                                            <button 
+                                              onClick={() => setNewQClassifyItems(prev => prev.filter(it => it.id !== item.id))}
+                                              disabled={newQClassifyItems.length <= 2}
+                                              className="w-9 h-9 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 flex items-center justify-center transition-colors disabled:opacity-30"
+                                            >
+                                              <Trash2 size={14} />
+                                            </button>
+                                          </div>
+                                        ))}
+                                        <button 
+                                          onClick={() => setNewQClassifyItems(prev => [...prev, { id: Date.now().toString(), text: '', categoryId: newQCategories[0]?.id || '' }])}
+                                          disabled={newQClassifyItems.length >= 10}
+                                          className="flex items-center gap-2 text-sm font-bold text-violet-600 hover:text-violet-700 disabled:opacity-40 px-1"
+                                        >
+                                          <Plus size={16} /> {language === 'ar' ? 'إضافة عنصر' : 'Add Item'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                 </motion.div>
+                              )}
+                              {newQType === 'سحب وإفلات' && (
+                                 <motion.div key="dragdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5 mb-4">
+                                    <div>
+                                      <label className="text-xs font-bold text-slate-500 px-1 block mb-2">{language === 'ar' ? 'مناطق الإفلات' : 'Drop Zones'}</label>
+                                      <div className="space-y-2">
+                                        {newQZones.map((zone, idx) => (
+                                          <div key={zone.id} className="flex items-center gap-3">
+                                            <input 
+                                              type="text" 
+                                              value={zone.name} 
+                                              onChange={(e) => setNewQZones(prev => prev.map(z => z.id === zone.id ? { ...z, name: e.target.value } : z))} 
+                                              placeholder={language === 'ar' ? `منطقة ${idx + 1}` : `Zone ${idx + 1}`}
+                                              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-colors"
+                                            />
+                                            <button 
+                                              onClick={() => {
+                                                setNewQZones(prev => prev.filter(z => z.id !== zone.id));
+                                                setNewQDragItems(prev => prev.map(it => it.zoneId === zone.id ? { ...it, zoneId: newQZones[0]?.id === zone.id ? (newQZones[1]?.id || '') : newQZones[0]?.id || '' } : it));
+                                              }}
+                                              disabled={newQZones.length <= 2}
+                                              className="w-9 h-9 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 flex items-center justify-center transition-colors disabled:opacity-30"
+                                            >
+                                              <Trash2 size={14} />
+                                            </button>
+                                          </div>
+                                        ))}
+                                        <button 
+                                          onClick={() => setNewQZones(prev => [...prev, { id: `z${Date.now()}`, name: '' }])}
+                                          disabled={newQZones.length >= 5}
+                                          className="flex items-center gap-2 text-sm font-bold text-violet-600 hover:text-violet-700 disabled:opacity-40 px-1"
+                                        >
+                                          <Plus size={16} /> {language === 'ar' ? 'إضافة منطقة' : 'Add Zone'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <label className="text-xs font-bold text-slate-500 px-1 block mb-2">{language === 'ar' ? 'العناصر ومنطقتها الصحيحة' : 'Items & Their Correct Zone'}</label>
+                                      <div className="space-y-2">
+                                        {newQDragItems.map((item, idx) => (
+                                          <div key={item.id} className="flex items-center gap-3">
+                                            <input 
+                                              type="text" 
+                                              value={item.text} 
+                                              onChange={(e) => setNewQDragItems(prev => prev.map(it => it.id === item.id ? { ...it, text: e.target.value } : it))} 
+                                              placeholder={language === 'ar' ? `عنصر ${idx + 1}` : `Item ${idx + 1}`}
+                                              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-colors"
+                                            />
+                                            <select
+                                              value={item.zoneId}
+                                              onChange={(e) => setNewQDragItems(prev => prev.map(it => it.id === item.id ? { ...it, zoneId: e.target.value } : it))}
+                                              className="w-40 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:border-violet-400 transition-colors"
+                                            >
+                                              {newQZones.map((zone, i) => (
+                                                <option key={zone.id} value={zone.id}>{zone.name || (language === 'ar' ? `منطقة ${i + 1}` : `Zone ${i + 1}`)}</option>
+                                              ))}
+                                            </select>
+                                            <button 
+                                              onClick={() => setNewQDragItems(prev => prev.filter(it => it.id !== item.id))}
+                                              disabled={newQDragItems.length <= 2}
+                                              className="w-9 h-9 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 flex items-center justify-center transition-colors disabled:opacity-30"
+                                            >
+                                              <Trash2 size={14} />
+                                            </button>
+                                          </div>
+                                        ))}
+                                        <button 
+                                          onClick={() => setNewQDragItems(prev => [...prev, { id: Date.now().toString(), text: '', zoneId: newQZones[0]?.id || '' }])}
+                                          disabled={newQDragItems.length >= 10}
+                                          className="flex items-center gap-2 text-sm font-bold text-violet-600 hover:text-violet-700 disabled:opacity-40 px-1"
+                                        >
+                                          <Plus size={16} /> {language === 'ar' ? 'إضافة عنصر' : 'Add Item'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <p className="text-xs font-semibold text-slate-400 px-1">{language === 'ar' ? 'الطالب هيسحب العناصر فعليًا لمناطقها (مش قايمة اختيار).' : 'The student will physically drag items onto their zones (not a dropdown).'}</p>
+                                 </motion.div>
+                              )}
+                              {newQType === 'منطقة تفاعلية' && (
+                                 <motion.div key="hotspot" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4 mb-4">
+                                    {!newQImageUrl ? (
+                                      <label className="border-2 border-dashed border-slate-200 rounded-2xl p-10 flex flex-col items-center gap-3 text-slate-400 hover:bg-slate-50 cursor-pointer transition-colors">
+                                        <UploadCloud size={28} />
+                                        <span className="text-sm font-bold">{isUploadingQImage ? (language === 'ar' ? 'جاري الرفع...' : 'Uploading...') : (language === 'ar' ? 'ارفع صورة السؤال' : 'Upload question image')}</span>
+                                        <input 
+                                          type="file" 
+                                          accept="image/*" 
+                                          className="hidden" 
+                                          onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            setIsUploadingQImage(true);
+                                            const result = await uploadQuestionImage(file);
+                                            setIsUploadingQImage(false);
+                                            if (result) setNewQImageUrl(result.url);
+                                          }} 
+                                        />
+                                      </label>
+                                    ) : (
+                                      <div>
+                                        <p className="text-xs font-semibold text-slate-400 px-1 mb-2">{language === 'ar' ? 'دوس على الصورة عشان تحط علامة منطقة جديدة' : 'Click on the image to place a new hotspot marker'}</p>
+                                        <div 
+                                          className="relative inline-block border border-slate-200 rounded-xl overflow-hidden cursor-crosshair"
+                                          onClick={(e) => {
+                                            const rect = e.currentTarget.getBoundingClientRect();
+                                            const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
+                                            const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
+                                            setNewQHotspots(prev => [...prev, { id: Date.now().toString(), xPercent, yPercent, label: `${prev.length + 1}`, isCorrect: prev.length === 0 }]);
+                                          }}
+                                        >
+                                          <img src={newQImageUrl} alt="" className="max-w-full max-h-96 block" />
+                                          {newQHotspots.map((hs) => (
+                                            <div 
+                                              key={hs.id} 
+                                              style={{ left: `${hs.xPercent}%`, top: `${hs.yPercent}%` }}
+                                              className={`absolute -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold ${hs.isCorrect ? 'bg-emerald-500 border-white text-white' : 'bg-white border-slate-400 text-slate-600'}`}
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              {hs.label}
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <button onClick={() => { setNewQImageUrl(''); setNewQHotspots([]); }} className="text-xs font-bold text-red-500 hover:text-red-600 mt-2 block">
+                                          {language === 'ar' ? 'إزالة الصورة والبدء من جديد' : 'Remove image and start over'}
+                                        </button>
+                                      </div>
+                                    )}
+                                    {newQHotspots.length > 0 && (
+                                      <div className="space-y-2">
+                                        {newQHotspots.map((hs) => (
+                                          <div key={hs.id} className="flex items-center gap-3">
+                                            <span className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-xs font-bold shrink-0">{hs.label}</span>
+                                            <button
+                                              onClick={() => setNewQHotspots(prev => prev.map(h => ({ ...h, isCorrect: h.id === hs.id })))}
+                                              className={`flex-1 text-right px-4 py-2 rounded-xl text-sm font-bold transition-colors ${hs.isCorrect ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-50 text-slate-500 border border-slate-200 hover:bg-slate-100'}`}
+                                            >
+                                              {hs.isCorrect ? (language === 'ar' ? 'الإجابة الصحيحة' : 'Correct Answer') : (language === 'ar' ? 'دوس عشان تخليها الصح' : 'Click to mark correct')}
+                                            </button>
+                                            <button 
+                                              onClick={() => setNewQHotspots(prev => prev.filter(h => h.id !== hs.id))}
+                                              className="w-9 h-9 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 flex items-center justify-center transition-colors"
+                                            >
+                                              <Trash2 size={14} />
+                                            </button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                 </motion.div>
+                              )}
+                              {newQType === 'قطعة' && (
+                                 <motion.div key="passage" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5 mb-4">
+                                    <div>
+                                      <label className="text-xs font-bold text-slate-500 px-1 block mb-2">{language === 'ar' ? 'نص القطعة' : 'Passage Text'}</label>
+                                      <textarea
+                                        value={newQPassageText}
+                                        onChange={(e) => setNewQPassageText(e.target.value)}
+                                        rows={6}
+                                        placeholder={language === 'ar' ? 'اكتب نص القطعة هنا...' : 'Write the passage text here...'}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 font-bold text-sm text-slate-800 focus:outline-none focus:border-violet-400 resize-y transition-colors placeholder:font-normal placeholder:text-slate-400"
+                                      />
+                                    </div>
+                                    <div className="space-y-4">
+                                      <label className="text-xs font-bold text-slate-500 px-1 block">{language === 'ar' ? 'الأسئلة الفرعية' : 'Sub-Questions'}</label>
+                                      {newQSubQuestions.map((sq, sqIdx) => (
+                                        <div key={sq.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                                          <div className="flex items-center gap-3">
+                                            <span className="w-7 h-7 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-bold shrink-0">{sqIdx + 1}</span>
+                                            <input
+                                              type="text"
+                                              value={sq.title}
+                                              onChange={(e) => setNewQSubQuestions(prev => prev.map(q => q.id === sq.id ? { ...q, title: e.target.value } : q))}
+                                              placeholder={language === 'ar' ? `نص السؤال الفرعي ${sqIdx + 1}` : `Sub-question ${sqIdx + 1} text`}
+                                              className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-colors"
+                                            />
+                                            <select
+                                              value={sq.type}
+                                              onChange={(e) => setNewQSubQuestions(prev => prev.map(q => q.id === sq.id ? { ...q, type: e.target.value as any } : q))}
+                                              className="w-40 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-violet-400"
+                                            >
+                                              <option value="اختيار من متعدد">{language === 'ar' ? 'اختيار من متعدد' : 'Multiple Choice'}</option>
+                                              <option value="صح أم خطأ">{language === 'ar' ? 'صح أم خطأ' : 'True/False'}</option>
+                                              <option value="إجابة قصيرة">{language === 'ar' ? 'إجابة قصيرة' : 'Short Answer'}</option>
+                                            </select>
+                                            <input
+                                              type="number"
+                                              min="1"
+                                              value={sq.points}
+                                              onChange={(e) => setNewQSubQuestions(prev => prev.map(q => q.id === sq.id ? { ...q, points: Number(e.target.value) } : q))}
+                                              className="w-16 bg-white border border-slate-200 rounded-xl px-2 py-2.5 text-xs font-bold text-slate-700 text-center focus:outline-none focus:border-violet-400"
+                                              title={language === 'ar' ? 'الدرجة' : 'Points'}
+                                            />
+                                            <button
+                                              onClick={() => setNewQSubQuestions(prev => prev.filter(q => q.id !== sq.id))}
+                                              className="w-9 h-9 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 flex items-center justify-center transition-colors shrink-0"
+                                            >
+                                              <Trash2 size={14} />
+                                            </button>
+                                          </div>
+                                          {(sq.type === 'اختيار من متعدد' || sq.type === 'صح أم خطأ') && (
+                                            <div className="space-y-2 pr-10">
+                                              {sq.options.map((opt) => (
+                                                <div key={opt.id} className="flex items-center gap-2">
+                                                  <button
+                                                    onClick={() => setNewQSubQuestions(prev => prev.map(q => q.id === sq.id ? { ...q, options: q.options.map(o => ({ ...o, isCorrect: o.id === opt.id })) } : q))}
+                                                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${opt.isCorrect ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-white'}`}
+                                                  >
+                                                    {opt.isCorrect && <Check size={12} className="text-white" />}
+                                                  </button>
+                                                  <input
+                                                    type="text"
+                                                    value={opt.text}
+                                                    onChange={(e) => setNewQSubQuestions(prev => prev.map(q => q.id === sq.id ? { ...q, options: q.options.map(o => o.id === opt.id ? { ...o, text: e.target.value } : o) } : q))}
+                                                    placeholder={language === 'ar' ? 'نص الاختيار' : 'Option text'}
+                                                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-violet-400"
+                                                  />
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                      <button
+                                        onClick={() => setNewQSubQuestions(prev => [...prev, {
+                                          id: Date.now().toString(),
+                                          title: '',
+                                          type: 'اختيار من متعدد',
+                                          points: 1,
+                                          options: [
+                                            { id: 'o1', text: '', isCorrect: true },
+                                            { id: 'o2', text: '', isCorrect: false },
+                                            { id: 'o3', text: '', isCorrect: false },
+                                            { id: 'o4', text: '', isCorrect: false },
+                                          ],
+                                        }])}
+                                        disabled={newQSubQuestions.length >= 10}
+                                        className="flex items-center gap-2 text-sm font-bold text-violet-600 hover:text-violet-700 disabled:opacity-40 px-1"
+                                      >
+                                        <Plus size={16} /> {language === 'ar' ? 'إضافة سؤال فرعي' : 'Add Sub-Question'}
+                                      </button>
+                                    </div>
+                                    <p className="text-xs font-semibold text-slate-400 px-1">{language === 'ar' ? `إجمالي درجة القطعة: ${newQSubQuestions.reduce((s, q) => s + (q.points || 0), 0)} نقطة` : `Total passage points: ${newQSubQuestions.reduce((s, q) => s + (q.points || 0), 0)}`}</p>
+                                 </motion.div>
+                              )}
                            </AnimatePresence>
 
                            {/* Media Actions */}
                            <div className="pt-6 mt-6 border-t border-slate-100 flex items-center gap-4 text-[13px] font-bold text-slate-400">
-                               {newQType === 'اختيار من متعدد' && (
+                               {(newQType === 'اختيار من متعدد' || newQType === 'مقطع صوتي') && (
                                   <>
                                     <button 
                                       onClick={() => {
