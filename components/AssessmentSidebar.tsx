@@ -41,6 +41,12 @@ interface AssessmentSidebarProps {
   setDueDate: (val: string) => void;
   dueTime: string;
   setDueTime: (val: string) => void;
+  hasReleaseCondition?: boolean;
+  setHasReleaseCondition?: (val: boolean) => void;
+  releaseDate?: string;
+  setReleaseDate?: (val: string) => void;
+  releaseTime?: string;
+  setReleaseTime?: (val: string) => void;
   prohibitLateSubmissions: boolean;
   setProhibitLateSubmissions: (val: boolean) => void;
   allowLateSubmission?: boolean;
@@ -104,6 +110,12 @@ export function AssessmentSidebar({
   setDueDate,
   dueTime,
   setDueTime,
+  hasReleaseCondition = false,
+  setHasReleaseCondition = () => {},
+  releaseDate = '',
+  setReleaseDate = () => {},
+  releaseTime = '00:00',
+  setReleaseTime = () => {},
   noDueDate = false,
   setNoDueDate = () => {},
   prohibitLateSubmissions,
@@ -349,21 +361,12 @@ export function AssessmentSidebar({
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <label className="text-xs font-bold text-slate-600">{t.maxScore}</label>
-                    {activeTab === 'quiz' && (
-                      <button 
-                        onClick={() => setIsAutoCalc(!isAutoCalc)}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-colors ${isAutoCalc ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'}`}
-                      >
-                        {isAutoCalc ? t.autoCalcOn : t.manual}
-                      </button>
-                    )}
                   </div>
                   <input 
                     type="number" 
                     value={maxScore}
-                    disabled={activeTab === 'quiz' && isAutoCalc}
                     onChange={(e) => setMaxScore(e.target.value === '' ? 0 : (parseInt(e.target.value) || 0))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold text-slate-700 disabled:opacity-50 focus:ring-2 focus:ring-orange-100 outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-orange-100 outline-none"
                   />
                 </div>
                 )}
@@ -684,10 +687,39 @@ export function AssessmentSidebar({
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
                 <Lock size={12} /> {t.accessConditions}
               </h4>
-              <button className="w-full border-dashed border-2 border-slate-300 text-slate-600 hover:border-orange-500 hover:text-orange-500 bg-transparent rounded-lg py-3 flex items-center justify-center gap-2 transition-colors text-sm font-bold">
-                <Filter size={16} />
-                {t.addReleaseCondition}
-              </button>
+              {!hasReleaseCondition ? (
+                <button
+                  type="button"
+                  onClick={() => setHasReleaseCondition(true)}
+                  className="w-full border-dashed border-2 border-slate-300 text-slate-600 hover:border-orange-500 hover:text-orange-500 bg-transparent rounded-lg py-3 flex items-center justify-center gap-2 transition-colors text-sm font-bold"
+                >
+                  <Filter size={16} />
+                  {t.addReleaseCondition}
+                </button>
+              ) : (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-600">{isRtl ? 'يظهر للطلاب بداية من' : 'Available to students from'}</span>
+                    <button type="button" onClick={() => setHasReleaseCondition(false)} className="text-slate-400 hover:text-rose-500">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={releaseDate}
+                      onChange={(e) => setReleaseDate(e.target.value)}
+                      className="flex-1 bg-white border border-slate-200 rounded-xl py-2 px-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-orange-100"
+                    />
+                    <input
+                      type="time"
+                      value={releaseTime}
+                      onChange={(e) => setReleaseTime(e.target.value)}
+                      className="w-28 bg-white border border-slate-200 rounded-xl py-2 px-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-orange-100"
+                    />
+                  </div>
+                </div>
+              )}
             </section>
           </>
         ) : (

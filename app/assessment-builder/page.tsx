@@ -25,7 +25,8 @@ interface Question {
   type: 'multiple_choice' | 'true_false' | 'short_answer' | 'file_upload';
   text: string;
   points: number;
-  options?: { id: string; text: string; isCorrect: boolean }[];
+  imageUrl?: string;
+  options?: { id: string; text: string; isCorrect: boolean; imageUrl?: string }[];
 }
 
 interface RubricLevel {
@@ -73,6 +74,9 @@ function AssessmentBuilderContent() {
   const [timeLimitHours, setTimeLimitHours] = useState('1');
   const [timeLimitMinutes, setTimeLimitMinutes] = useState('0');
   const [dueDate, setDueDate] = useState('');
+  const [hasReleaseCondition, setHasReleaseCondition] = useState(false);
+  const [releaseDate, setReleaseDate] = useState('');
+  const [releaseTime, setReleaseTime] = useState('00:00');
   const [dueTime, setDueTime] = useState('23:59');
   
   // Security & Display
@@ -125,6 +129,8 @@ function AssessmentBuilderContent() {
   const [instructionsText, setInstructionsText] = useState('');
   const [attachments, setAttachments] = useState<{ name: string; storagePath: string }[]>([]);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [isUploadingQImage, setIsUploadingQImage] = useState<string | null>(null);
+  const [isUploadingOptImage, setIsUploadingOptImage] = useState<string | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [allowFileUpload, setAllowFileUpload] = useState(true);
   const [allowTextEntry, setAllowTextEntry] = useState(true);
@@ -491,6 +497,27 @@ function AssessmentBuilderContent() {
                           className="w-full text-xl text-slate-800 font-bold bg-transparent border-none p-0 focus:ring-0 placeholder:text-slate-300 resize-none"
                           placeholder="What is the question?"
                         />
+                        {q.imageUrl ? (
+                          <div className="relative mt-3 inline-block">
+                            <img src={q.imageUrl} alt="" className="max-h-48 rounded-xl border border-slate-200" />
+                            <button onClick={() => updateQuestion(q.id, { imageUrl: undefined })} className="absolute -top-2 -right-2 bg-white border border-slate-200 rounded-full p-1 text-slate-500 hover:text-rose-600 shadow-sm">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 cursor-pointer">
+                            <ImageIcon size={14} /> {isUploadingQImage === q.id ? 'Uploading...' : 'Insert Image'}
+                            <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              e.target.value = '';
+                              if (!file) return;
+                              setIsUploadingQImage(q.id);
+                              const uploaded = await uploadAssignmentAttachment(file);
+                              setIsUploadingQImage(null);
+                              if (uploaded) updateQuestion(q.id, { imageUrl: getSubmissionFileUrl(uploaded.storagePath) });
+                            }} />
+                          </label>
+                        )}
                       </div>
 
                       {/* Options (for MC / TF) */}
@@ -520,18 +547,48 @@ function AssessmentBuilderContent() {
                                 >
                                   {letter}
                                 </button>
-                                <input 
-                                  type="text" 
-                                  value={opt.text}
-                                  onChange={(e) => {
-                                    const newOpts = q.options?.map(o => o.id === opt.id ? { ...o, text: e.target.value } : o);
-                                    updateQuestion(q.id, { options: newOpts });
-                                  }}
-                                  className={`flex-1 bg-transparent border-none p-0 focus:ring-0 text-base font-medium outline-none ${
-                                    opt.isCorrect ? 'text-emerald-900' : 'text-slate-800'
-                                  }`}
-                                  placeholder={`Option ${letter}`}
-                                />
+                                <div className="flex-1 flex flex-col gap-2">
+                                  <input 
+                                    type="text" 
+                                    value={opt.text}
+                                    onChange={(e) => {
+                                      const newOpts = q.options?.map(o => o.id === opt.id ? { ...o, text: e.target.value } : o);
+                                      updateQuestion(q.id, { options: newOpts });
+                                    }}
+                                    className={`w-full bg-transparent border-none p-0 focus:ring-0 text-base font-medium outline-none ${
+                                      opt.isCorrect ? 'text-emerald-900' : 'text-slate-800'
+                                    }`}
+                                    placeholder={`Option ${letter}`}
+                                  />
+                                  {opt.imageUrl && (
+                                    <div className="relative inline-block w-fit">
+                                      <img src={opt.imageUrl} alt="" className="max-h-20 rounded-lg border border-slate-200" />
+                                      <button onClick={() => {
+                                        const newOpts = q.options?.map(o => o.id === opt.id ? { ...o, imageUrl: undefined } : o);
+                                        updateQuestion(q.id, { options: newOpts });
+                                      }} className="absolute -top-1.5 -right-1.5 bg-white border border-slate-200 rounded-full p-0.5 text-slate-500 hover:text-rose-600 shadow-sm">
+                                        <X size={10} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                                {!opt.imageUrl && (
+                                  <label className="text-slate-300 hover:text-slate-500 cursor-pointer shrink-0" title="Insert Image">
+                                    {isUploadingOptImage === opt.id ? <span className="text-[10px]">...</span> : <ImageIcon size={16} />}
+                                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      e.target.value = '';
+                                      if (!file) return;
+                                      setIsUploadingOptImage(opt.id);
+                                      const uploaded = await uploadAssignmentAttachment(file);
+                                      setIsUploadingOptImage(null);
+                                      if (uploaded) {
+                                        const newOpts = q.options?.map(o => o.id === opt.id ? { ...o, imageUrl: getSubmissionFileUrl(uploaded.storagePath) } : o);
+                                        updateQuestion(q.id, { options: newOpts });
+                                      }
+                                    }} />
+                                  </label>
+                                )}
                                 {opt.isCorrect && (
                                   <CheckCircle2 size={24} className="text-emerald-500 shrink-0" />
                                 )}
@@ -566,8 +623,8 @@ function AssessmentBuilderContent() {
                       )}
 
                       {/* Footer */}
+                      {q.type === 'multiple_choice' && (
                       <div className="flex items-center gap-4 pt-6 border-t border-slate-100">
-                        {q.type === 'multiple_choice' && (
                           <button 
                             onClick={() => {
                               const newOpts = [...(q.options || []), { id: `opt-${Date.now()}`, text: '', isCorrect: false }];
@@ -577,14 +634,8 @@ function AssessmentBuilderContent() {
                           >
                             <Plus size={18} /> Add Option
                           </button>
-                        )}
-                        {q.type === 'multiple_choice' && (
-                          <div className="w-px h-4 bg-slate-200"></div>
-                        )}
-                        <button className="flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-slate-600 transition-colors">
-                          <MessageSquare size={18} /> Feedback Logic
-                        </button>
                       </div>
+                      )}
                     </motion.div>
                   ))}
                 </AnimatePresence>
@@ -888,6 +939,12 @@ function AssessmentBuilderContent() {
           setDueDate={setDueDate}
           dueTime={dueTime}
           setDueTime={setDueTime}
+          hasReleaseCondition={hasReleaseCondition}
+          setHasReleaseCondition={setHasReleaseCondition}
+          releaseDate={releaseDate}
+          setReleaseDate={setReleaseDate}
+          releaseTime={releaseTime}
+          setReleaseTime={setReleaseTime}
           prohibitLateSubmissions={prohibitLateSubmissions}
           setProhibitLateSubmissions={setProhibitLateSubmissions}
           shuffleQuestions={shuffleQuestions}
