@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, Fragment } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, BrainCircuit, CheckCircle2, ChevronDown, Plus, 
@@ -547,7 +547,7 @@ function AssessmentBuilderContent() {
                     const showSectionHeader = q.sectionId && (!prevQ || prevQ.sectionId !== q.sectionId);
                     const section = q.sectionId ? sections.find(s => s.id === q.sectionId) : null;
                     return (
-                    <React.Fragment key={q.id}>
+                    <Fragment key={q.id}>
                       {showSectionHeader && section && (
                         <div
                           onClick={() => setActiveSectionId(section.id)}
@@ -771,7 +771,7 @@ function AssessmentBuilderContent() {
                       </div>
                       )}
                     </motion.div>
-                    </React.Fragment>
+                    </Fragment>
                     );
                   })}
                 </AnimatePresence>
