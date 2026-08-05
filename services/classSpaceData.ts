@@ -153,7 +153,7 @@ export async function addRealComment(postId: string, authorId: string, authorRol
 
 // ============ محول البيانات الحقيقية لويدجت الواجب/الكويز/المصادر في مساحة المادة ============
 
-import { getAssignments, getQuizzes, createAssignment, createQuiz, getSubmissionFileUrl, getSubmissionsForAssignment } from './assignmentData';
+import { getAssignments, getQuizzes, createAssignment, createQuiz, getSubmissionFileUrl, getSubmissionsForAssignment, getClassRoster } from './assignmentData';
 import { getMaterialFiles } from './libraryData';
 import { HomeworkItem, QuizItem, ResourceItem } from '@/types/classSpace';
 
