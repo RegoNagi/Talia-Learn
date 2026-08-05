@@ -4,11 +4,11 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
 import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
-import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCircuit, LayoutTemplate, Edit2, Trash2, BookOpen, ListChecks, CheckCircle2, AlignRight, Type, Mic, Copy, Eye, Search, ChevronDown, ChevronUp, MessageSquare, GitMerge, ListOrdered, Map, Layers, LineChart, Move, Calculator, BarChart, FileText, LayoutGrid, Headphones, Signal, Award, Play, X, Paperclip, Globe, Monitor, Flag, Check, Loader2, MousePointerClick, Settings2, RefreshCw, ShieldCheck, Calendar, Clock, Sigma } from 'lucide-react';
+import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCircuit, LayoutTemplate, Edit2, Trash2, BookOpen, ListChecks, CheckCircle2, AlignRight, Type, Mic, Copy, Eye, Search, ChevronDown, ChevronUp, MessageSquare, Layers, BarChart, FileText, LayoutGrid, Signal, Award, Play, X, Paperclip, Globe, Monitor, Flag, Check, Loader2, MousePointerClick, Settings2, RefreshCw, ShieldCheck, Calendar, Clock, Sigma } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ApprovalHub } from '@/components/ApprovalHub';
 import { useAuth } from '@/contexts/AuthContext';
-import { getVisibleQuestions, createQuestion, deleteQuestion, linkQuestionsToQuiz, unlinkAllQuestionsFromQuiz, generateBlueprintQuestions, getBlueprintAssessments, getQuestionsForQuiz, BankQuestion } from '@/services/questionBankData';
+import { getVisibleQuestions, createQuestion, deleteQuestion, linkQuestionsToQuiz, unlinkAllQuestionsFromQuiz, generateBlueprintQuestions, getBlueprintAssessments, getQuestionsForQuiz, convertBankQuestionToQuizQuestion, BankQuestion } from '@/services/questionBankData';
 import { getQuizById, updateQuiz, createQuiz, getClassRoster } from '@/services/assignmentData';
 import { getSubjectGradeCombos, getAllClassSections } from '@/services/academicData';
 import { getMyClassSections } from '@/services/attendanceData';
@@ -674,7 +674,8 @@ export default function QuestionBank() {
     }
     setIsPublishing(true);
     setPublishError('');
-    const quizQuestions = blueprintQuestions.map((q) => ({ ...q.question, id: q.id, sectionId: 'default' }));
+    const pointsPerQuestion = blueprintQuestions.length > 0 ? (gradebookMaxValue / blueprintQuestions.length) : 1;
+    const quizQuestions = blueprintQuestions.map((q) => ({ ...convertBankQuestionToQuizQuestion(q, pointsPerQuestion), sectionId: 'default' }));
     const settingsBlob = {
       availabilityMode,
       shuffleQuestions,
@@ -1288,17 +1289,8 @@ export default function QuestionBank() {
                                   { label: 'اختيار من متعدد', icon: ListChecks },
                                   { label: 'صح أم خطأ', icon: CheckCircle2 },
                                   { label: 'إجابة قصيرة', icon: AlignRight },
-                                  { label: 'توصيل', icon: GitMerge },
-                                  { label: 'ترتيب', icon: ListOrdered },
                                   { label: 'أكمل الفراغ', icon: Type },
-                                  { label: 'سؤال مقالي', icon: FileText },
-                                  { label: 'منطقة تفاعلية', icon: Map },
-                                  { label: 'تصنيف', icon: Layers },
-                                  { label: 'رسم بياني', icon: LineChart },
-                                  { label: 'سحب وإفلات', icon: Move },
-                                  { label: 'مقطع صوتي', icon: Headphones },
-                                  { label: 'إجابة رقمية', icon: Calculator },
-                                  { label: 'استبيان', icon: BarChart }
+                                  { label: 'سؤال مقالي', icon: FileText }
                                ].map((type) => {
                                   const Icon = type.icon;
                                   const isActive = newQType === type.label;

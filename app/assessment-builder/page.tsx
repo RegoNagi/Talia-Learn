@@ -19,7 +19,7 @@ import { FloatingPortal } from '@floating-ui/react';
 import { AssessmentSidebar } from '@/components/AssessmentSidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { createAssignment, createQuiz, uploadAssignmentAttachment, getSubmissionFileUrl, getUnitsForAssignment, getAssignmentById, getQuizById, updateAssignment, updateQuiz, getTeacherOtherClasses, getClassRoster } from '@/services/assignmentData';
-import { getVisibleQuestions, BankQuestion } from '@/services/questionBankData';
+import { getVisibleQuestions, convertBankQuestionToQuizQuestion, BankQuestion } from '@/services/questionBankData';
 import { getGradebookCategories } from '@/services/academicData';
 
 interface Question {
@@ -164,7 +164,7 @@ function AssessmentBuilderContent() {
   const handleAddSelectedBankQuestions = () => {
     const toAdd = bankQuestions
       .filter((bq) => selectedBankIds.includes(bq.id))
-      .map((bq) => ({ ...bq.question, id: `q-${window.crypto.randomUUID()}`, sectionId: activeSectionId }));
+      .map((bq) => ({ ...convertBankQuestionToQuizQuestion(bq, 1), id: `q-${window.crypto.randomUUID()}`, sectionId: activeSectionId }));
     setQuestions((prev) => [...prev, ...toAdd]);
     setIsBankDrawerOpen(false);
     addToast(`${toAdd.length} Question(s) Added`);

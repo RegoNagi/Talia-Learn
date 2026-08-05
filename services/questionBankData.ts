@@ -403,3 +403,23 @@ export async function getQuestionsForQuiz(quizId: string): Promise<BankQuestion[
   if (linksError || !links) return [];
   return getQuestionsByIds(links.map((l: any) => l.question_bank_id));
 }
+
+// تحويل سؤال حقيقي من بنك الأسئلة لصيغة السؤال اللي محرك تسليم الاختبار (AssessmentsTab) فاهمها فعليًا
+// بيصلّح 3 مشاكل حرجة كانت موجودة قبل كده: (1) الحقل type مكانش موجود خالص فيسقط أي تصحيح تلقائي،
+// (2) عنوان السؤال كان محفوظ باسم title بس المحرك بيقرا text، (3) مفيش نقاط لكل سؤال فيبقى المجموع صفر
+export function convertBankQuestionToQuizQuestion(bq: BankQuestion, pointsPerQuestion: number = 1): any {
+  const typeMap: Record<string, string> = {
+    'اختيار من متعدد': 'multiple_choice',
+    'صح أم خطأ': 'true_false',
+    'سؤال مقالي': 'short_answer',
+    'أكمل الفراغ': 'short_answer',
+    'إجابة قصيرة': 'short_answer',
+  };
+  return {
+    id: bq.id,
+    text: bq.title,
+    type: typeMap[bq.type] || 'short_answer',
+    options: bq.options,
+    points: pointsPerQuestion,
+  };
+}
