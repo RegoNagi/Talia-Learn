@@ -446,7 +446,7 @@ export default function QuestionBank() {
 
 
 
-  const [assessmentsList, setAssessmentsList] = useState<{ id: string; title: string; subject: string; questionCount: number; totalPoints: number; className: string; status: string; createdAt: string }[]>([]);
+  const [assessmentsList, setAssessmentsList] = useState<{ id: string; title: string; subject: string; questionCount: number; totalPoints: number; className: string; classId: string; status: string; createdAt: string }[]>([]);
   const [isLoadingAssessments, setIsLoadingAssessments] = useState(true);
 
   const refreshAssessments = () => {
