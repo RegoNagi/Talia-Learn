@@ -14,7 +14,7 @@ import {
 
 import { getRealPosts, createRealPost, reactToRealPost, addRealComment, getRealHomeworkItems, createRealHomeworkItem, getRealQuizItems, getRealResourceItems } from '@/services/classSpaceData';
 
-export function useClassSpace(scope?: { authUser?: any; userRole?: 'teacher' | 'student' | 'parent'; classId?: string; subject?: string; grade?: string; className?: string }) {
+export function useClassSpace(scope?: { authUser?: any; userRole?: 'teacher' | 'student' | 'parent' | 'qb_supervisor'; classId?: string; subject?: string; grade?: string; className?: string }) {
   const [filters, setFilters] = useState<ClassSpaceFilterState>({
     grade: 'Grade 10',
     className: 'All Classes',

@@ -16,7 +16,7 @@ import {
 import { syncGradeToGradebook } from '@/services/gradebookSync';
 
 interface AssessmentsTabProps {
-  role?: 'teacher' | 'parent' | 'student';
+  role?: 'teacher' | 'parent' | 'student' | 'qb_supervisor';
   teacherId?: string;
   studentId?: string;
   classId?: string;
