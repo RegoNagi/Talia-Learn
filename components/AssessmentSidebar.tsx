@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   Settings, Clock, Shuffle, Eye, Calendar,
   UploadCloud, Scale, Layout, 
-  Info, ShieldCheck, Lock, Type, ChevronLeft, ChevronRight, Shield, Filter, AlertCircle
+  Info, ShieldCheck, Lock, Type, ChevronLeft, ChevronRight, Shield, Filter, AlertCircle, X
 } from 'lucide-react';
 
 interface RubricCriterion {
