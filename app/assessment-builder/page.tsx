@@ -353,6 +353,12 @@ function AssessmentBuilderContent() {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [draggedQId, setDraggedQId] = useState<string | null>(null);
   const [collapsedSectionIds, setCollapsedSectionIds] = useState<string[]>([]);
+  const [collapsedQuestionIds, setCollapsedQuestionIds] = useState<string[]>([]);
+  const toggleQuestionCollapse = (id: string) => {
+    setCollapsedQuestionIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+  const expandAllQuestions = () => setCollapsedQuestionIds([]);
+  const collapseAllQuestions = () => setCollapsedQuestionIds(questions.map(q => q.id));
 
   const toggleSectionCollapse = (id: string) => {
     setCollapsedSectionIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -478,6 +484,21 @@ function AssessmentBuilderContent() {
   const deleteQuestion = (id: string) => {
     setQuestions(prev => prev.filter(q => q.id !== id));
     addToast('Question Deleted');
+  };
+
+  const duplicateQuestion = (id: string) => {
+    setQuestions(prev => {
+      const idx = prev.findIndex(q => q.id === id);
+      if (idx === -1) return prev;
+      const original = prev[idx];
+      const copy: Question = {
+        ...original,
+        id: `q-${window.crypto.randomUUID()}`,
+        options: original.options?.map(o => ({ ...o, id: `opt-${window.crypto.randomUUID()}` })),
+      };
+      return [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)];
+    });
+    addToast('Question Duplicated');
   };
 
   const updateQuestion = (id: string, updates: Partial<Question>) => {
@@ -680,65 +701,75 @@ function AssessmentBuilderContent() {
       {/* Main Content Grid */}
       <div className="flex-1 flex overflow-hidden">
 
-        {/* 2. Left Canvas (Builder) */}
+        {/* 1.5 Question Type Panel (quiz only) — independent scroll, doesn't intersect with main or settings */}
+        {activeTab === 'quiz' && (
+          <aside className="w-56 shrink-0 h-full overflow-y-auto border-r border-slate-200 bg-white p-4 space-y-5">
+            <div>
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Add Question</h4>
+              <div className="space-y-2">
+                {[
+                  { type: 'multiple_choice', icon: ListChecks, label: 'Multiple Choice' },
+                  { type: 'true_false', icon: CheckSquare, label: 'True/False' },
+                  { type: 'short_answer', icon: Type, label: 'Short Answer' },
+                  { type: 'file_upload', icon: UploadCloud, label: 'File Upload' }
+                ].map((item) => (
+                  <button 
+                    key={item.type}
+                    onClick={() => addQuestion(item.type as any)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                  >
+                    <item.icon size={16} />
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 space-y-2">
+              <button
+                onClick={() => addSection()}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-teal-300 hover:text-teal-600 hover:bg-teal-50 transition-all"
+              >
+                <Layout size={16} />
+                Add Section
+              </button>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 space-y-2">
+              <button 
+                onClick={() => setIsBankDrawerOpen(true)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 transition-all"
+              >
+                <Book size={16} />
+                From Question Bank
+              </button>
+              <button 
+                onClick={() => setIsAIDraftRoomOpen(true)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl text-xs font-bold shadow-sm hover:shadow-md transition-all relative overflow-hidden"
+              >
+                <Sparkles size={16} className="animate-pulse" />
+                Ask Faheem
+              </button>
+            </div>
+          </aside>
+        )}
+
+        {/* 2. Left Canvas (Builder) — independent scroll */}
         <main className="flex-1 overflow-y-auto custom-scrollbar bg-[#FAFAFA] relative">
-          <div className={activeTab === 'quiz' ? 'flex items-start' : ''}>
-            {/* 1.5 Question Type Panel (quiz only, opposite side from Settings) — sticky within main's own scroll */}
-            {activeTab === 'quiz' && (
-              <aside className="w-56 shrink-0 sticky top-0 border-r border-slate-200 bg-white p-4 space-y-5 self-start">
-                <div>
-                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Add Question</h4>
-                  <div className="space-y-2">
-                    {[
-                      { type: 'multiple_choice', icon: ListChecks, label: 'Multiple Choice' },
-                      { type: 'true_false', icon: CheckSquare, label: 'True/False' },
-                      { type: 'short_answer', icon: Type, label: 'Short Answer' },
-                      { type: 'file_upload', icon: UploadCloud, label: 'File Upload' }
-                    ].map((item) => (
-                      <button 
-                        key={item.type}
-                        onClick={() => addQuestion(item.type as any)}
-                        className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
-                      >
-                        <item.icon size={16} />
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-slate-100 space-y-2">
-                  <button
-                    onClick={() => addSection()}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-teal-300 hover:text-teal-600 hover:bg-teal-50 transition-all"
-                  >
-                    <Layout size={16} />
-                    Add Section
-                  </button>
-                </div>
-
-                <div className="pt-4 border-t border-slate-100 space-y-2">
-                  <button 
-                    onClick={() => setIsBankDrawerOpen(true)}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 transition-all"
-                  >
-                    <Book size={16} />
-                    From Question Bank
-                  </button>
-                  <button 
-                    onClick={() => setIsAIDraftRoomOpen(true)}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl text-xs font-bold shadow-sm hover:shadow-md transition-all relative overflow-hidden"
-                  >
-                    <Sparkles size={16} className="animate-pulse" />
-                    Ask Faheem
-                  </button>
-                </div>
-              </aside>
-            )}
-          <div className="p-12 flex-1">
+          <div className="p-12">
           <div className="max-w-4xl mx-auto">
             {activeTab === 'quiz' ? (
               <div className="space-y-8 pb-32">
+                {questions.length > 0 && (
+                  <div className="flex justify-end gap-2">
+                    <button onClick={expandAllQuestions} className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                      Expand All Questions
+                    </button>
+                    <button onClick={collapseAllQuestions} className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                      Collapse All Questions
+                    </button>
+                  </div>
+                )}
                 {sections.length > 0 && (
                   <div className="flex justify-end gap-2">
                     <button onClick={expandAllSections} className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
@@ -866,7 +897,10 @@ function AssessmentBuilderContent() {
                             <span className="text-[10px] font-bold text-blue-600 uppercase">PTS</span>
                           </div>
                           <div className="flex items-center gap-4 text-slate-400">
-                            <button className="hover:text-slate-600 transition-colors">
+                            <button onClick={() => toggleQuestionCollapse(q.id)} className="hover:text-slate-600 transition-colors" title={collapsedQuestionIds.includes(q.id) ? 'Expand' : 'Collapse'}>
+                              <ChevronDown size={20} className={`transition-transform ${collapsedQuestionIds.includes(q.id) ? '-rotate-90' : ''}`} />
+                            </button>
+                            <button onClick={() => duplicateQuestion(q.id)} className="hover:text-slate-600 transition-colors" title="Duplicate">
                               <Copy size={20} />
                             </button>
                             <button 
@@ -879,6 +913,12 @@ function AssessmentBuilderContent() {
                         </div>
                       </div>
 
+                      {collapsedQuestionIds.includes(q.id) && (
+                        <p className="text-sm text-slate-500 truncate -mt-2 mb-2">{q.text || 'Untitled question'}</p>
+                      )}
+
+                      {!collapsedQuestionIds.includes(q.id) && (
+                      <>
                       {/* Question Text */}
                       <div className="mb-8">
                         <textarea 
@@ -1026,6 +1066,8 @@ function AssessmentBuilderContent() {
                             <Plus size={18} /> Add Option
                           </button>
                       </div>
+                      )}
+                      </>
                       )}
                     </motion.div>
                       )}
@@ -1288,7 +1330,6 @@ function AssessmentBuilderContent() {
                 </section>
               </div>
             )}
-          </div>
           </div>
           </div>
         </main>
