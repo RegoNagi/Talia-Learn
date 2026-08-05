@@ -6,6 +6,7 @@ import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
 import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCircuit, PenTool, LayoutTemplate, MoreVertical, Edit2, Trash2, BookOpen, ListChecks, CheckCircle2, AlignRight, Type, Image as ImageIcon, Video, Mic, Copy, Eye, Search, ChevronDown, ChevronUp, MessageSquare, GitMerge, ListOrdered, MinusSquare, Map, Layers, LineChart, Move, Calculator, BarChart, MoreHorizontal, FileText, LayoutGrid, MoveHorizontal, Headphones, Signal, Award, Play, X, Paperclip, Binary, Atom, FlaskConical, Microscope, Languages, Text, Landmark, Globe, Monitor, Flag, Check, Sparkles, Loader2, Bot, MousePointerClick, Settings2, RefreshCw, ShieldCheck, Calendar, Clock, Sigma } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ApprovalHub } from '@/components/ApprovalHub';
+import { useAuth } from '@/contexts/AuthContext';
 
 // --- CUSTOM DROPDOWN COMPONENT FOR THE SWAP MENU ---
 const DropdownMenu = ({ options, onSelect }: { options: {label: string, icon: any}[], onSelect: (opt: string) => void }) => {
@@ -239,9 +240,10 @@ function FormSelect({
 }
 
 export default function QuestionBank() {
+  const { authUser, isLoggedIn, isAuthLoading } = useAuth();
   const [language, setLanguage] = useState<'ar' | 'en'>('en');
   const [isSidebarPinned, setIsSidebarPinned] = useState(false);
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'MANAGEMENT' | 'ASSESSMENTS' | 'APPROVAL_HUB'>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'MANAGEMENT' | 'ASSESSMENTS' | 'APPROVAL_HUB'>(authUser?.role === 'teacher' ? 'MANAGEMENT' : 'DASHBOARD');
   
   // Bank Scope State
   const [bankScope, setBankScope] = useState<'central' | 'shared' | 'private'>('central');
@@ -509,6 +511,31 @@ export default function QuestionBank() {
     }
   };
 
+  // بوابة الصلاحية الحقيقية — إما مشرف بنك الأسئلة (وصول كامل) أو معلم عنده صلاحية "إضافة أسئلة" بس
+  const isSupervisor = authUser?.role === 'qb_supervisor';
+  const canContribute = isSupervisor || (authUser?.role === 'teacher' && !!authUser?.canUseQuestionBank);
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-white">
+        <span className="text-sm text-slate-400">Loading...</span>
+      </div>
+    );
+  }
+  if (!isLoggedIn || !canContribute) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-white" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+        <div className="text-center max-w-sm px-6">
+          <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-4">
+            <ShieldCheck size={26} />
+          </div>
+          <h1 className="text-lg font-bold text-slate-800 mb-2">{language === 'ar' ? 'الوصول مقصور على المصرّح لهم' : 'Access restricted'}</h1>
+          <p className="text-sm text-slate-500">{language === 'ar' ? 'بنك الأسئلة متاح بس لمشرف بنك الأسئلة أو معلم معاه صلاحية إضافة أسئلة. تواصل مع إدارة المدرسة لو محتاج صلاحية.' : 'The Question Bank is only available to Question Bank Supervisors or teachers granted contribution access. Contact your school admin if you need access.'}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen w-full bg-white overflow-hidden" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <GlobalSidebar 
@@ -542,6 +569,7 @@ export default function QuestionBank() {
 
             {/* Main 2 Tabs */}
             <div className="flex bg-slate-100/80 p-1.5 rounded-xl border border-slate-200/50 w-max">
+              {isSupervisor && (
               <button
                 onClick={() => { setActiveTab('DASHBOARD'); setMgtStep('HUB'); setActiveSubject(null); }}
                 className={`px-6 py-2.5 text-sm font-bold rounded-lg transition-all shadow-none flex items-center gap-2 ${
@@ -553,6 +581,7 @@ export default function QuestionBank() {
                 <LayoutTemplate size={18} />
                 لوحة البيانات
               </button>
+              )}
               <button
                 onClick={() => setActiveTab('MANAGEMENT')}
                 className={`px-6 py-2.5 text-sm font-bold rounded-lg transition-all shadow-none flex items-center gap-2 ${
@@ -564,6 +593,7 @@ export default function QuestionBank() {
                 <Database size={18} />
                 إدارة البنك
               </button>
+              {isSupervisor && (
               <button
                 onClick={() => { setActiveTab('ASSESSMENTS'); setAssessmentView('LIBRARY'); }}
                 className={`px-6 py-2.5 text-sm font-bold rounded-lg transition-all shadow-none flex items-center gap-2 ${
@@ -575,6 +605,8 @@ export default function QuestionBank() {
                 <ListChecks size={18} />
                 التقييمات
               </button>
+              )}
+              {isSupervisor && (
               <button
                 onClick={() => setActiveTab('APPROVAL_HUB')}
                 className={`px-6 py-2.5 text-sm font-bold rounded-lg transition-all shadow-none flex items-center gap-2 ${
@@ -586,6 +618,7 @@ export default function QuestionBank() {
                 <ShieldCheck size={18} />
                 الاعتمادات
               </button>
+              )}
             </div>
           </header>
 

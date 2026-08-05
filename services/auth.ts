@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 
-export type LearnRole = 'teacher' | 'student' | 'parent';
+export type LearnRole = 'teacher' | 'student' | 'parent' | 'qb_supervisor';
 
 export interface AuthenticatedUser {
   userId: string;
@@ -11,6 +11,7 @@ export interface AuthenticatedUser {
   teacherId?: string;
   subjects?: string[];       // للمعلم: المواد اللي بيدرّسها
   grades?: string[];         // للمعلم: الصفوف اللي بيدرّسها
+  canUseQuestionBank?: boolean; // للمعلم: يقدر يضيف أسئلة لبنك الأسئلة (إضافة بس)
   studentId?: string;
   studentGrade?: string;     // للطالب: صفّه هو
   parentId?: string;
@@ -35,7 +36,7 @@ export async function loginToTaliaLearn(email: string, password: string): Promis
   if (roleUpper === 'TEACHER') {
     const { data: teacherRow } = await supabase
       .from('teachers')
-      .select('id')
+      .select('id, can_add_to_question_bank')
       .eq('user_id', userRow.id)
       .maybeSingle();
 
@@ -54,6 +55,7 @@ export async function loginToTaliaLearn(email: string, password: string): Promis
       teacherId: teacherRow.id,
       subjects: (subjectRows || []).map((r: any) => r.subject),
       grades: (gradeRows || []).map((r: any) => r.grade),
+      canUseQuestionBank: teacherRow.can_add_to_question_bank || false,
     };
   }
 
@@ -100,6 +102,32 @@ export async function loginToTaliaLearn(email: string, password: string): Promis
     };
   }
 
-  // أي دور تاني (أدمن مثلًا) مش من أدوار Talia Learn
+  if (roleUpper === 'ADMIN') {
+    const { data: adminRow } = await supabase
+      .from('admins')
+      .select('id')
+      .eq('user_id', userRow.id)
+      .maybeSingle();
+
+    if (!adminRow) return null;
+
+    const { data: permRows } = await supabase
+      .from('admin_permissions')
+      .select('permission')
+      .eq('admin_id', adminRow.id);
+
+    const permissions = (permRows || []).map((r: any) => r.permission);
+    // بنك الأسئلة في Talia Learn مقصور على أدمن معاه صلاحية "qb_manage" فعليًا — أي أدمن تاني مالوش دخول هنا
+    if (!permissions.includes('qb_manage')) return null;
+
+    return {
+      userId: userRow.id,
+      name: userRow.name,
+      role: 'qb_supervisor',
+      email: userRow.email,
+    };
+  }
+
+  // أي دور تاني (أدمن من غير صلاحية بنك الأسئلة، إلخ) مش من أدوار Talia Learn
   return null;
 }

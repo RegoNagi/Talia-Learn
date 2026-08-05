@@ -220,7 +220,7 @@ export function GlobalSidebar({
           />
         )}
 
-        {isTeacher && (
+        {userRole === 'qb_supervisor' && (
           <NavItem 
             icon={<Database size={20} />} 
             label={t.questionBank} 

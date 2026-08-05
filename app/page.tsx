@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
@@ -133,6 +134,14 @@ export default function Dashboard() {
   // Auth & Global State
   const [language, setLanguage] = useState<'ar' | 'en'>('en');
   const { authUser, isLoggedIn, isAuthLoading, login, logout } = useAuth();
+  const router = useRouter();
+
+  // مشرف بنك الأسئلة معندوش أي حاجة تانية يشوفها هنا، فبنوديه على طول لصفحته
+  useEffect(() => {
+    if (!isAuthLoading && isLoggedIn && authUser?.role === 'qb_supervisor') {
+      router.push('/question-bank');
+    }
+  }, [isAuthLoading, isLoggedIn, authUser?.role]);
   const userRole = authUser?.role || null;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -158,6 +167,9 @@ export default function Dashboard() {
     if (!user) {
       setLoginError(language === 'ar' ? 'الإيميل أو كلمة المرور غلط.' : 'Incorrect email or password.');
       return;
+    }
+    if (user.role === 'qb_supervisor') {
+      router.push('/question-bank');
     }
   };
 
