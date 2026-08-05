@@ -126,6 +126,10 @@ function AssessmentBuilderContent() {
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [oneAtATime, setOneAtATime] = useState(false);
   const [prohibitLateSubmissions, setProhibitLateSubmissions] = useState(false);
+  const [noDueDate, setNoDueDate] = useState(false);
+  const [prohibitNewAttemptsAfterDueDate, setProhibitNewAttemptsAfterDueDate] = useState(false);
+  const [randomizeAnswers, setRandomizeAnswers] = useState(false);
+  const [randomizePages, setRandomizePages] = useState(false);
   const [prohibitBacktracking, setProhibitBacktracking] = useState(false);
   const [feedbackTiming, setFeedbackTiming] = useState('instantly');
   const [showFeedback, setShowFeedback] = useState(true);
@@ -1300,6 +1304,14 @@ function AssessmentBuilderContent() {
           setReleaseTime={setReleaseTime}
           prohibitLateSubmissions={prohibitLateSubmissions}
           setProhibitLateSubmissions={setProhibitLateSubmissions}
+          noDueDate={noDueDate}
+          setNoDueDate={setNoDueDate}
+          prohibitNewAttemptsAfterDueDate={prohibitNewAttemptsAfterDueDate}
+          setProhibitNewAttemptsAfterDueDate={setProhibitNewAttemptsAfterDueDate}
+          randomizeAnswers={randomizeAnswers}
+          setRandomizeAnswers={setRandomizeAnswers}
+          randomizePages={randomizePages}
+          setRandomizePages={setRandomizePages}
           shuffleQuestions={shuffleQuestions}
           setShuffleQuestions={setShuffleQuestions}
           oneAtATime={oneAtATime}
