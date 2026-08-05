@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import {
   getAssignments, getQuizzes, getSubmissionsForAssignment, getMySubmission,
-  submitAssignment, gradeSubmission, getSubmissionFileUrl, deleteAssignment,
+  submitAssignment, gradeSubmission, getSubmissionFileUrl, deleteAssignment, getClassRoster,
   Assignment, AssignmentSubmission, Quiz,
 } from '@/services/assignmentData';
 
@@ -30,6 +30,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [submissionCounts, setSubmissionCounts] = useState<Record<string, { submitted: number; graded: number; total: number }>>({});
+  const [classRosterCount, setClassRosterCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   const [view, setView] = useState<'list' | 'grading-list' | 'grading-student' | 'intro' | 'submit' | 'success'>('list');
@@ -56,6 +57,8 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
           };
         }
         setSubmissionCounts(counts);
+        const classRoster = await getClassRoster(scope.classId);
+        setClassRosterCount(classRoster.length);
       }
       setIsLoading(false);
     });
@@ -247,28 +250,34 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
             <p className="text-sm font-medium text-slate-500 mt-1">{gradingSubmissions.length} students</p>
           </div>
           <div className="bg-white rounded-2xl border border-slate-100 divide-y divide-slate-100">
-            {gradingSubmissions.map((s) => (
-              <button key={s.studentId} onClick={() => s.status !== 'Pending' && openGradeStudent(s)} disabled={s.status === 'Pending'} className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors text-left disabled:cursor-not-allowed disabled:hover:bg-transparent">
+            {gradingSubmissions.map((s) => {
+              const isOverdueNotSubmitted = s.status === 'Pending' && activeAssignment.dueDate && new Date(activeAssignment.dueDate) < new Date();
+              return (
+              <button key={s.studentId} onClick={() => s.status !== 'Pending' && openGradeStudent(s)} disabled={s.status === 'Pending'} className={`w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors text-left disabled:cursor-not-allowed disabled:hover:bg-transparent ${isOverdueNotSubmitted ? 'bg-rose-50/50' : ''}`}>
                 <div>
                   <p className="font-bold text-slate-800 text-sm">{s.studentName}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{s.status === 'Pending' ? 'Not submitted yet' : s.submittedAt ? new Date(s.submittedAt).toLocaleString() : ''}</p>
+                  <p className={`text-xs mt-0.5 ${isOverdueNotSubmitted ? 'text-rose-500 font-bold' : 'text-slate-400'}`}>
+                    {s.status === 'Pending' ? (isOverdueNotSubmitted ? 'Overdue — did not submit' : 'Not submitted yet') : s.submittedAt ? new Date(s.submittedAt).toLocaleString() : ''}
+                  </p>
                 </div>
                 <div className="flex items-center gap-3">
                   {s.grade !== null && <span className="text-sm font-bold text-emerald-600">{s.grade}/100</span>}
                   <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
                     s.status === 'Graded' ? 'bg-emerald-100 text-emerald-700' :
+                    isOverdueNotSubmitted ? 'bg-rose-100 text-rose-600' :
                     s.status === 'Pending' ? 'bg-slate-100 text-slate-400' : 'bg-blue-100 text-blue-700'
-                  }`}>{s.status}</span>
+                  }`}>{isOverdueNotSubmitted ? 'Overdue' : s.status}</span>
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       );
     }
 
     // List view
-    const totalPending = Object.values(submissionCounts).reduce((sum, c) => sum + (c.total - c.graded), 0);
+    const totalPending = Object.values(submissionCounts).reduce((sum, c) => sum + (c.submitted - c.graded), 0);
 
     return (
       <div className="p-8 max-w-6xl mx-auto flex flex-col gap-8 w-full">
@@ -339,6 +348,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
                 <tr className="bg-slate-50/50 border-b border-slate-100 text-slate-500 text-sm">
                   <th className="py-4 px-6 font-bold uppercase tracking-wider">Title</th>
                   <th className="py-4 px-6 font-bold uppercase tracking-wider">Type</th>
+                  <th className="py-4 px-6 font-bold uppercase tracking-wider">Due Date</th>
                   <th className="py-4 px-6 font-bold uppercase tracking-wider">Status</th>
                   <th className="py-4 px-6 font-bold uppercase tracking-wider">Submissions</th>
                   <th className="py-4 px-6 font-bold uppercase tracking-wider">Graded</th>
@@ -347,9 +357,9 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
               </thead>
               <tbody className="divide-y divide-slate-100/50">
                 {isLoading ? (
-                  <tr><td colSpan={6} className="py-10 text-center text-slate-400">Loading...</td></tr>
+                  <tr><td colSpan={7} className="py-10 text-center text-slate-400">Loading...</td></tr>
                 ) : assignments.length === 0 && quizzes.length === 0 ? (
-                  <tr><td colSpan={6} className="py-10 text-center text-slate-400">No assessments yet. Create your first one.</td></tr>
+                  <tr><td colSpan={7} className="py-10 text-center text-slate-400">No assessments yet. Create your first one.</td></tr>
                 ) : (
                   <>
                     {quizzes.map(item => (
@@ -361,13 +371,16 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
                           <span className="inline-flex px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700">Quiz</span>
                         </td>
                         <td className="py-4 px-6">
+                          <span className="text-sm font-medium text-slate-500">{item.dueDate ? new Date(item.dueDate).toLocaleString() : '-'}</span>
+                        </td>
+                        <td className="py-4 px-6">
                           <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${
                             item.status === 'Active' ? 'bg-emerald-100 text-emerald-700' :
                             item.status === 'Closed' ? 'bg-slate-100 text-slate-600' : 'bg-orange-100 text-orange-700'
                           }`}>{item.status}</span>
                         </td>
                         <td className="py-4 px-6">
-                          <span className="text-sm font-bold text-slate-400">{item.questions?.length || 0} questions</span>
+                          <span className="text-sm font-bold text-slate-700">0/{classRosterCount}</span>
                         </td>
                         <td className="py-4 px-6">
                           <span className="text-sm font-bold text-slate-400">-</span>
@@ -393,6 +406,9 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
                           </td>
                           <td className="py-4 px-6">
                             <span className="inline-flex px-3 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">Assignment</span>
+                          </td>
+                          <td className="py-4 px-6">
+                            <span className="text-sm font-medium text-slate-500">{item.dueDate ? new Date(item.dueDate).toLocaleString() : '-'}</span>
                           </td>
                           <td className="py-4 px-6">
                             <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${
