@@ -503,6 +503,9 @@ export default function QuestionBank() {
     points: number;
     options: { id: string; text: string; isCorrect: boolean }[];
   }[]>([]);
+  const [newQGraphRange, setNewQGraphRange] = useState({ xMin: -10, xMax: 10, yMin: -10, yMax: 10 });
+  const [newQGraphPoint, setNewQGraphPoint] = useState<{ x: number; y: number } | null>(null);
+  const [newQGraphTolerance, setNewQGraphTolerance] = useState('0.5');
   const [targetBank, setTargetBank] = useState('بنك مركزي (الوزارة)');
   const [qStandard, setQStandard] = useState('');
   const [qTime, setQTime] = useState('5');
