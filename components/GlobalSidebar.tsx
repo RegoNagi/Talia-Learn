@@ -83,6 +83,7 @@ export function GlobalSidebar({
   const t = dict[currentLang];
   const isRtl = currentLang === 'ar';
   const isTeacher = userRole === 'teacher';
+  const isQbSupervisor = userRole === 'qb_supervisor';
 
   const handleNavClick = (action: () => void) => {
     action();
@@ -145,6 +146,7 @@ export function GlobalSidebar({
 
       {/* Navigation Links */}
       <nav className="flex-1 flex flex-col gap-2 w-full overflow-y-auto">
+        {!isQbSupervisor && (
         <NavItem 
           icon={<Home size={20} />} 
           label={t.home} 
@@ -154,6 +156,8 @@ export function GlobalSidebar({
             onSpaceSelect?.('home');
           })} 
         />
+        )}
+        {!isQbSupervisor && (
         <NavItem 
           icon={<BookOpen size={20} />} 
           label={t.myClasses} 
@@ -163,14 +167,17 @@ export function GlobalSidebar({
             onSpaceSelect?.('myClasses');
           })} 
         />
+        )}
+        {!isQbSupervisor && (
         <NavItem 
           icon={<Building size={20} />} 
           label={t.schoolSpace} 
           active={activeSpace === 'school'}
           onClick={() => handleNavClick(() => onSpaceSelect?.('school'))} 
         />
+        )}
         
-        {isTeacher && (
+        {isTeacher && !isQbSupervisor && (
           <NavItem 
             icon={<Users size={20} />} 
             label={t.roster} 
@@ -179,7 +186,7 @@ export function GlobalSidebar({
           />
         )}
 
-        {isTeacher && (
+        {isTeacher && !isQbSupervisor && (
           <NavItem 
             icon={<ClipboardCheck size={20} />} 
             label={t.attendance} 
@@ -188,14 +195,16 @@ export function GlobalSidebar({
           />
         )}
         
+        {!isQbSupervisor && (
         <NavItem 
           icon={<MessageSquare size={20} />} 
           label={t.messages} 
           active={activeSpace === 'messages'}
           onClick={() => handleNavClick(() => onSpaceSelect?.('messages'))} 
         />
+        )}
 
-        {isTeacher && (
+        {isTeacher && !isQbSupervisor && (
           <NavItem 
             icon={<Activity size={20} />} 
             label={t.radar} 
@@ -204,14 +213,16 @@ export function GlobalSidebar({
           />
         )}
 
+        {!isQbSupervisor && (
         <NavItem 
           icon={<Calendar size={20} />} 
           label={t.calendar} 
           active={activeSpace === 'calendar'}
           onClick={() => handleNavClick(() => onSpaceSelect?.('calendar'))} 
         />
+        )}
 
-        {isTeacher && (
+        {isTeacher && !isQbSupervisor && (
           <NavItem 
             icon={<ListVideo size={20} />} 
             label={t.activityStream} 
