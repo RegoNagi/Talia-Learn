@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Users, CheckCircle, BarChart3, ArrowUpRight, Settings, Zap, PenTool, Eye,
-  PlayCircle, FileText, Check, Upload, Clock, AlertCircle, ShieldAlert, ArrowLeft,
+  PlayCircle, FileText, Check, Upload, UploadCloud, Clock, AlertCircle, ShieldAlert, ArrowLeft,
   Save, Plus, X, BrainCircuit, Trash2, Edit
 } from 'lucide-react';
 import {
