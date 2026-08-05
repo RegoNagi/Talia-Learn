@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense, Fragment } from 'react';
+import { useState, useEffect, Suspense, Fragment, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, BrainCircuit, CheckCircle2, ChevronDown, Plus, 
@@ -178,6 +178,16 @@ function AssessmentBuilderContent() {
   const [isUploadingQImage, setIsUploadingQImage] = useState<string | null>(null);
   const [isUploadingOptImage, setIsUploadingOptImage] = useState<string | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [previewQuestionIndex, setPreviewQuestionIndex] = useState(0);
+  const previewQuestionsShuffled = useMemo(() => {
+    if (!shuffleQuestions) return questions;
+    const arr = [...questions];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }, [isPreviewMode, shuffleQuestions]);
   const [allowFileUpload, setAllowFileUpload] = useState(true);
   const [allowTextEntry, setAllowTextEntry] = useState(true);
   const [passPercentage, setPassPercentage] = useState(65);
@@ -565,7 +575,7 @@ function AssessmentBuilderContent() {
         <div className="flex items-center gap-3 flex-1 justify-end">
           {saveError && <span className="text-xs text-rose-600 font-bold">{saveError}</span>}
           <button 
-            onClick={() => setIsPreviewMode((p) => !p)}
+            onClick={() => { setIsPreviewMode((p) => !p); setPreviewQuestionIndex(0); }}
             className={`font-bold text-sm px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${isPreviewMode ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
           >
             <Eye size={16} /> {isPreviewMode ? 'Exit Preview' : 'Preview'}
@@ -637,19 +647,27 @@ function AssessmentBuilderContent() {
               <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
                 <h2 className="text-2xl font-bold text-slate-800 mb-2">{title || 'Untitled'}</h2>
                 <div className="flex items-center gap-4 text-sm text-slate-500 font-medium flex-wrap">
-                  {dueDate && <span className="flex items-center gap-1"><AlertCircle size={16}/> Due: {new Date(`${dueDate}T${dueTime || '23:59'}`).toLocaleString()}</span>}
+                  {!noDueDate && dueDate && <span className="flex items-center gap-1"><AlertCircle size={16}/> Due: {new Date(`${dueDate}T${dueTime || '23:59'}`).toLocaleString()}</span>}
                   {(timeLimitHours !== '0' || timeLimitMinutes !== '0') && <span className="flex items-center gap-1"><Clock size={16}/> {timeLimitHours}h {timeLimitMinutes}m</span>}
                   <span className="flex items-center gap-1">{maxScore} pts</span>
+                  {attemptLimit && <span className="flex items-center gap-1">Attempts: {attemptLimit === 'unlimited' ? 'Unlimited' : attemptLimit}</span>}
+                  <span className="flex items-center gap-1">Pass: {passPercentage}%</span>
+                  {oneAtATime && questions.length > 0 && <span className="flex items-center gap-1 font-bold text-indigo-600">Question {previewQuestionIndex + 1} of {questions.length}</span>}
                 </div>
               </div>
               {questions.length === 0 && (
                 <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm text-center text-slate-400">No questions yet.</div>
               )}
-              {questions.map((q, idx) => {
-                const prevQ = questions[idx - 1];
-                const showHeader = q.sectionId && (!prevQ || prevQ.sectionId !== q.sectionId);
-                const section = q.sectionId ? sections.find(s => s.id === q.sectionId) : null;
-                return (
+              {(() => {
+                const questionsToShow = oneAtATime
+                  ? (previewQuestionsShuffled[previewQuestionIndex] ? [previewQuestionsShuffled[previewQuestionIndex]] : [])
+                  : previewQuestionsShuffled;
+                return questionsToShow.map((q, i) => {
+                  const idx = oneAtATime ? previewQuestionIndex : i;
+                  const prevQ = oneAtATime ? null : questionsToShow[i - 1];
+                  const showHeader = q.sectionId && (!prevQ || prevQ.sectionId !== q.sectionId);
+                  const section = q.sectionId ? sections.find(s => s.id === q.sectionId) : null;
+                  return (
                   <Fragment key={q.id}>
                     {showHeader && section && (
                       <div className="bg-slate-100 rounded-2xl p-4">
@@ -664,7 +682,7 @@ function AssessmentBuilderContent() {
                       {q.imageUrl && <img src={q.imageUrl} alt="" className="max-h-48 rounded-xl border border-slate-200 mb-4" />}
                       {(q.type === 'multiple_choice' || q.type === 'true_false') && (
                         <div className="space-y-2">
-                          {q.options?.map((opt: any) => (
+                          {(randomizeAnswers ? [...(q.options || [])].reverse() : (q.options || [])).map((opt: any) => (
                             <label key={opt.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 cursor-not-allowed">
                               <input type="radio" disabled />
                               <span className="text-sm text-slate-600">{opt.text || 'Option'}</span>
@@ -683,9 +701,33 @@ function AssessmentBuilderContent() {
                       )}
                     </div>
                   </Fragment>
-                );
-              })}
-              {questions.length > 0 && (
+                  );
+                });
+              })()}
+              {oneAtATime && questions.length > 0 && (
+                <div className="flex justify-between items-center gap-3">
+                  <button
+                    disabled={previewQuestionIndex === 0 || prohibitBacktracking}
+                    onClick={() => setPreviewQuestionIndex((i) => Math.max(0, i - 1))}
+                    className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-all"
+                  >
+                    Previous
+                  </button>
+                  {previewQuestionIndex < questions.length - 1 ? (
+                    <button
+                      onClick={() => setPreviewQuestionIndex((i) => Math.min(questions.length - 1, i + 1))}
+                      className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all"
+                    >
+                      Next
+                    </button>
+                  ) : (
+                    <button disabled className="px-6 py-3 bg-indigo-300 cursor-not-allowed text-white rounded-xl font-bold">
+                      Submit Quiz
+                    </button>
+                  )}
+                </div>
+              )}
+              {!oneAtATime && questions.length > 0 && (
                 <button disabled className="w-full py-4 bg-indigo-300 cursor-not-allowed text-white rounded-xl font-bold text-lg">
                   Submit Quiz
                 </button>
