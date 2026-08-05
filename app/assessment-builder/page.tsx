@@ -514,6 +514,13 @@ function AssessmentBuilderContent() {
       <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 sticky top-0 z-[60]">
         <div className="flex items-center gap-4 flex-1">
           <button 
+            onClick={goBack}
+            className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
+            title="Back"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <button 
             onClick={() => router.push('/')}
             className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
           >
@@ -671,11 +678,11 @@ function AssessmentBuilderContent() {
       {!isPreviewMode && (
       <>
       {/* Main Content Grid */}
-      <div className="flex-1 flex">
+      <div className="flex-1 flex overflow-hidden">
         
         {/* 1.5 Question Type Panel (quiz only, opposite side from Settings) */}
         {activeTab === 'quiz' && (
-          <aside className="w-56 shrink-0 border-r border-slate-200 bg-white p-4 space-y-5 sticky top-0 self-start max-h-screen overflow-y-auto">
+          <aside className="w-56 shrink-0 fixed top-16 left-0 bottom-0 border-r border-slate-200 bg-white p-4 space-y-5 overflow-y-auto z-40">
             <div>
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Add Question</h4>
               <div className="space-y-2">
@@ -727,7 +734,7 @@ function AssessmentBuilderContent() {
         )}
 
         {/* 2. Left Canvas (Builder) */}
-        <main className="flex-1 p-12 bg-[#FAFAFA] relative">
+        <main className={`flex-1 overflow-y-auto custom-scrollbar p-12 bg-[#FAFAFA] relative ${activeTab === 'quiz' ? 'ml-56' : ''}`}>
           <div className="max-w-4xl mx-auto">
             {activeTab === 'quiz' ? (
               <div className="space-y-8 pb-32">
