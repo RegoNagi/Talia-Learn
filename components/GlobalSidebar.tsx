@@ -55,7 +55,7 @@ export function GlobalSidebar({
   language?: 'ar' | 'en',
   onLanguageChange?: (lang: 'ar' | 'en') => void,
   onLogout?: () => void,
-  userRole?: 'student' | 'teacher' | 'parent',
+  userRole?: 'student' | 'teacher' | 'parent' | 'qb_supervisor',
   isMobileOpen?: boolean,
   onMobileClose?: () => void
 }) {

@@ -27,7 +27,7 @@ import { GradingWidget } from './GradingWidget';
 
 interface ClassSpaceViewProps {
   authUser?: any;
-  userRole?: 'teacher' | 'student' | 'parent';
+  userRole?: 'teacher' | 'student' | 'parent' | 'qb_supervisor';
   classId?: string;
   subject?: string;
   grade?: string;

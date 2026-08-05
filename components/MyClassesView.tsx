@@ -20,7 +20,7 @@ import { getStudentClassSection, getGradeSubjects, LearnClassInfo } from '@/serv
 interface MyClassesViewProps {
   language: 'ar' | 'en';
   onLanguageChange?: (lang: 'ar' | 'en') => void;
-  userRole: 'teacher' | 'student' | 'parent';
+  userRole: 'teacher' | 'student' | 'parent' | 'qb_supervisor';
   defaultSubTab?: 'subjects' | 'space';
   authUser: AuthenticatedUser;
 }
