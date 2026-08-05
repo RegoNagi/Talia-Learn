@@ -283,6 +283,11 @@ function AssessmentBuilderContent() {
       feedbackTiming,
       publishToTimeline,
       passPercentage,
+      noDueDate,
+      prohibitLateSubmissions,
+      prohibitNewAttemptsAfterDueDate,
+      randomizeAnswers,
+      randomizePages,
     };
     const quizPayload = { title: title.trim(), dueDate: quizDueDateTime, releaseAt: quizReleaseDateTime, status: status === 'draft' ? 'Draft' as const : 'Active' as const, unitId: selectedUnitId || null, settings: quizSettings, questions, sections, assignedClasses, assignedStudents };
     const { id: quizId, error: quizError } = editId
@@ -343,6 +348,13 @@ function AssessmentBuilderContent() {
   const [sections, setSections] = useState<QuizSection[]>([]);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [draggedQId, setDraggedQId] = useState<string | null>(null);
+  const [collapsedSectionIds, setCollapsedSectionIds] = useState<string[]>([]);
+
+  const toggleSectionCollapse = (id: string) => {
+    setCollapsedSectionIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+  const expandAllSections = () => setCollapsedSectionIds([]);
+  const collapseAllSections = () => setCollapsedSectionIds(sections.map(s => s.id));
 
   useEffect(() => {
     if (!editId) return;
@@ -367,6 +379,11 @@ function AssessmentBuilderContent() {
           if (s.feedbackTiming !== undefined) setFeedbackTiming(s.feedbackTiming);
           if (s.publishToTimeline !== undefined) setPublishToTimeline(s.publishToTimeline);
           if (s.passPercentage !== undefined) setPassPercentage(s.passPercentage);
+          if (s.noDueDate !== undefined) setNoDueDate(s.noDueDate);
+          if (s.prohibitLateSubmissions !== undefined) setProhibitLateSubmissions(s.prohibitLateSubmissions);
+          if (s.prohibitNewAttemptsAfterDueDate !== undefined) setProhibitNewAttemptsAfterDueDate(s.prohibitNewAttemptsAfterDueDate);
+          if (s.randomizeAnswers !== undefined) setRandomizeAnswers(s.randomizeAnswers);
+          if (s.randomizePages !== undefined) setRandomizePages(s.randomizePages);
         }
         setIsEditLoading(false);
       });
@@ -417,8 +434,9 @@ function AssessmentBuilderContent() {
   };
 
   const addQuestion = (type: Question['type']) => {
+    const newQuestionId = `q-${window.crypto.randomUUID()}`;
     const newQuestion: Question = {
-      id: `q-${window.crypto.randomUUID()}`,
+      id: newQuestionId,
       type,
       text: '',
       points: 10,
@@ -448,6 +466,9 @@ function AssessmentBuilderContent() {
       return [...prev.slice(0, lastInSectionIdx + 1), newQuestion, ...prev.slice(lastInSectionIdx + 1)];
     });
     addToast('Question Added');
+    setTimeout(() => {
+      document.getElementById(`question-${newQuestionId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
   };
 
   const deleteQuestion = (id: string) => {
@@ -650,7 +671,7 @@ function AssessmentBuilderContent() {
         
         {/* 1.5 Question Type Panel (quiz only, opposite side from Settings) */}
         {activeTab === 'quiz' && (
-          <aside className="w-56 shrink-0 border-r border-slate-200 bg-white overflow-y-auto p-4 space-y-5">
+          <aside className="w-56 shrink-0 border-r border-slate-200 bg-white overflow-y-auto p-4 space-y-5 sticky top-0 h-screen">
             <div>
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Add Question</h4>
               <div className="space-y-2">
@@ -706,6 +727,16 @@ function AssessmentBuilderContent() {
           <div className="max-w-4xl mx-auto">
             {activeTab === 'quiz' ? (
               <div className="space-y-8 pb-32">
+                {sections.length > 0 && (
+                  <div className="flex justify-end gap-2">
+                    <button onClick={expandAllSections} className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                      Expand All
+                    </button>
+                    <button onClick={collapseAllSections} className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                      Collapse All
+                    </button>
+                  </div>
+                )}
                 {/* Total Points Summary */}
                 {questions.length > 0 && (() => {
                   const questionsSum = questions.reduce((sum, q) => sum + (q.points || 0), 0);
@@ -740,19 +771,26 @@ function AssessmentBuilderContent() {
                           onClick={() => setActiveSectionId(section.id)}
                           className={`flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-all ${activeSectionId === section.id ? 'border-teal-500 bg-teal-50' : 'border-slate-200 bg-white hover:border-teal-300'}`}
                         >
-                          <input
-                            type="text"
-                            value={section.title}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => updateSection(section.id, { title: e.target.value })}
-                            className="text-lg font-bold text-slate-800 bg-transparent border-none p-0 focus:ring-0 flex-1"
-                          />
+                          <div className="flex items-center gap-3 flex-1">
+                            <button onClick={(e) => { e.stopPropagation(); toggleSectionCollapse(section.id); }} className="text-slate-400 hover:text-slate-600 shrink-0">
+                              <ChevronDown size={18} className={`transition-transform ${collapsedSectionIds.includes(section.id) ? '-rotate-90' : ''}`} />
+                            </button>
+                            <input
+                              type="text"
+                              value={section.title}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => updateSection(section.id, { title: e.target.value })}
+                              className="text-lg font-bold text-slate-800 bg-transparent border-none p-0 focus:ring-0 flex-1"
+                            />
+                          </div>
                           <button onClick={(e) => { e.stopPropagation(); deleteSection(section.id); }} className="text-slate-300 hover:text-rose-500 transition-colors shrink-0">
                             <Trash2 size={18} />
                           </button>
                         </div>
                       )}
+                      {(!q.sectionId || !collapsedSectionIds.includes(q.sectionId)) && (
                     <motion.div 
+                      id={`question-${q.id}`}
                       layout
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -782,8 +820,28 @@ function AssessmentBuilderContent() {
 
                       {/* Question Header */}
                       <div className="flex justify-between items-center mb-6">
-                        <div className="text-blue-600 font-bold text-xs tracking-widest uppercase">
-                          QUESTION {idx + 1} • {q.type.replace('_', ' ')}
+                        <div className="flex items-center gap-2 text-blue-600 font-bold text-xs tracking-widest uppercase">
+                          <span>QUESTION {idx + 1} •</span>
+                          <select
+                            value={q.type}
+                            onChange={(e) => {
+                              const newType = e.target.value as Question['type'];
+                              const newOptions = newType === 'multiple_choice' ? [
+                                { id: `opt-${window.crypto.randomUUID()}`, text: 'Option 1', isCorrect: false },
+                                { id: `opt-${window.crypto.randomUUID()}`, text: 'Option 2', isCorrect: false }
+                              ] : newType === 'true_false' ? [
+                                { id: `opt-${window.crypto.randomUUID()}`, text: 'True', isCorrect: false },
+                                { id: `opt-${window.crypto.randomUUID()}`, text: 'False', isCorrect: false }
+                              ] : undefined;
+                              updateQuestion(q.id, { type: newType, options: newOptions });
+                            }}
+                            className="bg-blue-50 border-none rounded-lg text-xs font-bold uppercase text-blue-600 py-0.5 px-2 outline-none focus:ring-2 focus:ring-blue-200 cursor-pointer"
+                          >
+                            <option value="multiple_choice">Multiple Choice</option>
+                            <option value="true_false">True/False</option>
+                            <option value="short_answer">Short Answer</option>
+                            <option value="file_upload">File Upload</option>
+                          </select>
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="flex items-center gap-1.5 bg-blue-50 rounded-full px-3 py-1">
@@ -958,6 +1016,7 @@ function AssessmentBuilderContent() {
                       </div>
                       )}
                     </motion.div>
+                      )}
                     </Fragment>
                     );
                   })}
