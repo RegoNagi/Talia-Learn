@@ -236,9 +236,11 @@ export function LearningPathTab({
     setActiveUnitForAdd(null);
   };
 
-  const openAddAssessment = (unitId: string, unitTitle: string) => {
+  const [newAssessmentType, setNewAssessmentType] = useState<'quiz' | 'assignment'>('assignment');
+  const openAddAssessment = (unitId: string, unitTitle: string, type: 'quiz' | 'assignment') => {
     setTargetUnitId(unitId);
     setTargetUnitTitle(unitTitle);
+    setNewAssessmentType(type);
     setIsAddAssessmentOpen(true);
     setActiveUnitForAdd(null);
   };
@@ -944,15 +946,27 @@ export function LearningPathTab({
                   </div>
                 </button>
                 <button 
-                  onClick={() => openAddAssessment(activeUnitForAdd, units.find(u => u.id === activeUnitForAdd)?.title || '')}
+                  onClick={() => openAddAssessment(activeUnitForAdd, units.find(u => u.id === activeUnitForAdd)?.title || '', 'quiz')}
                   className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-purple-300 hover:bg-purple-50 rounded-2xl text-center group transition-all shadow-none"
                 >
                   <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform">
                     <BrainCircuit size={24} />
                   </div>
                   <div>
-                    <span className="block text-sm font-bold text-slate-700 mb-1">Add Assessment</span>
-                    <span className="block text-xs text-slate-500">Quiz or Assignment</span>
+                    <span className="block text-sm font-bold text-slate-700 mb-1">Add Quiz</span>
+                    <span className="block text-xs text-slate-500">Questions, auto-graded</span>
+                  </div>
+                </button>
+                <button 
+                  onClick={() => openAddAssessment(activeUnitForAdd, units.find(u => u.id === activeUnitForAdd)?.title || '', 'assignment')}
+                  className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-orange-300 hover:bg-orange-50 rounded-2xl text-center group transition-all shadow-none"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <ClipboardCheck size={24} />
+                  </div>
+                  <div>
+                    <span className="block text-sm font-bold text-slate-700 mb-1">Add Assignment</span>
+                    <span className="block text-xs text-slate-500">Upload/submit, manual grading</span>
                   </div>
                 </button>
                 <button 
@@ -1031,6 +1045,7 @@ export function LearningPathTab({
         classId={classId}
         subject={subject}
         unitId={targetUnitId}
+        assessmentType={newAssessmentType}
       />
 
       <StudentCompletionPopover 

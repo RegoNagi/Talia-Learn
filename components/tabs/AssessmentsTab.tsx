@@ -260,12 +260,20 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
             <h2 className="text-2xl font-bold text-slate-800">Assessments Management</h2>
             <p className="text-sm font-medium text-slate-500 mt-1">Monitor student submissions and grading progress.</p>
           </div>
-          <button onClick={() => {
-            const from = typeof window !== 'undefined' ? encodeURIComponent(window.location.pathname + window.location.search) : '';
-            router.push(`/assessment-builder?classId=${classId || ''}&subject=${encodeURIComponent(subject || '')}&from=${from}`);
-          }} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm">
-            <Plus size={16} /> New Assignment
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => {
+              const from = typeof window !== 'undefined' ? encodeURIComponent(window.location.pathname + window.location.search) : '';
+              router.push(`/assessment-builder?type=quiz&classId=${classId || ''}&subject=${encodeURIComponent(subject || '')}&from=${from}`);
+            }} className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm">
+              <Plus size={16} /> Add Quiz
+            </button>
+            <button onClick={() => {
+              const from = typeof window !== 'undefined' ? encodeURIComponent(window.location.pathname + window.location.search) : '';
+              router.push(`/assessment-builder?type=assignment&classId=${classId || ''}&subject=${encodeURIComponent(subject || '')}&from=${from}`);
+            }} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm">
+              <Plus size={16} /> New Assignment
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

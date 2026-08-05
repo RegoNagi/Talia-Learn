@@ -60,7 +60,8 @@ function AssessmentBuilderContent() {
   };
   const [isSavingReal, setIsSavingReal] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [activeTab, setActiveTab] = useState<'quiz' | 'assignment'>('assignment');
+  const initialType = (searchParams.get('type') === 'quiz' ? 'quiz' : 'assignment') as 'quiz' | 'assignment';
+  const [activeTab] = useState<'quiz' | 'assignment'>(initialType);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('quiz');
   const [maxScore, setMaxScore] = useState(100);
@@ -323,29 +324,13 @@ function AssessmentBuilderContent() {
               <span className="text-slate-300">/</span>
               <span>Unit 1</span>
               <span className="text-slate-300">/</span>
-              <span className="text-slate-600">Assessment Builder</span>
+              <span className="text-slate-600">{activeTab === 'quiz' ? 'Quiz Builder' : 'Assignment Builder'}</span>
             </div>
             <h1 className="text-sm font-bold text-slate-800 flex items-center gap-2">
               <BrainCircuit size={16} className="text-indigo-600" />
               {title || 'Untitled Assessment'}
             </h1>
           </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex bg-slate-100 p-1 rounded-xl mx-4">
-          <button
-            onClick={() => setActiveTab('quiz')}
-            className={`px-6 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'quiz' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Quiz
-          </button>
-          <button
-            onClick={() => setActiveTab('assignment')}
-            className={`px-6 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'assignment' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Assignment
-          </button>
         </div>
 
         <div className="flex items-center gap-3 flex-1 justify-end">
@@ -431,6 +416,27 @@ function AssessmentBuilderContent() {
           <div className="max-w-4xl mx-auto">
             {activeTab === 'quiz' ? (
               <div className="space-y-8 pb-32">
+                {/* Total Points Summary */}
+                {questions.length > 0 && (() => {
+                  const questionsSum = questions.reduce((sum, q) => sum + (q.points || 0), 0);
+                  const hasMismatch = questionsSum !== maxScore;
+                  return (
+                    <div className="space-y-2">
+                      <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex justify-between items-center">
+                        <span className="text-sm font-bold text-blue-800">مجموع درجات الأسئلة</span>
+                        <span className="text-xl font-black text-blue-600">{questionsSum}</span>
+                      </div>
+                      {hasMismatch && (
+                        <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-xl p-3">
+                          <AlertCircle size={16} className="text-rose-500 shrink-0 mt-0.5" />
+                          <p className="text-xs font-bold text-rose-600 leading-snug">
+                            {`مجموع درجات الأسئلة (${questionsSum}) مش متطابق مع درجة الكويز الكلية (${maxScore}).`}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {/* Question List */}
                 <AnimatePresence mode="popLayout">
                   {questions.map((q, idx) => (
@@ -452,16 +458,27 @@ function AssessmentBuilderContent() {
                         <div className="text-blue-600 font-bold text-xs tracking-widest uppercase">
                           QUESTION {idx + 1} • {q.type.replace('_', ' ')}
                         </div>
-                        <div className="flex items-center gap-4 text-slate-400">
-                          <button className="hover:text-slate-600 transition-colors">
-                            <Copy size={20} />
-                          </button>
-                          <button 
-                            onClick={() => deleteQuestion(q.id)}
-                            className="hover:text-rose-500 transition-colors"
-                          >
-                            <Trash2 size={20} />
-                          </button>
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-1.5 bg-blue-50 rounded-full px-3 py-1">
+                            <input
+                              type="number"
+                              value={q.points}
+                              onChange={(e) => updateQuestion(q.id, { points: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) })}
+                              className="w-10 bg-transparent border-none p-0 text-center text-xs font-bold text-blue-600 focus:ring-0"
+                            />
+                            <span className="text-[10px] font-bold text-blue-600 uppercase">PTS</span>
+                          </div>
+                          <div className="flex items-center gap-4 text-slate-400">
+                            <button className="hover:text-slate-600 transition-colors">
+                              <Copy size={20} />
+                            </button>
+                            <button 
+                              onClick={() => deleteQuestion(q.id)}
+                              className="hover:text-rose-500 transition-colors"
+                            >
+                              <Trash2 size={20} />
+                            </button>
+                          </div>
                         </div>
                       </div>
 
