@@ -4,12 +4,12 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
 import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
-import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCircuit, PenTool, LayoutTemplate, MoreVertical, Edit2, Trash2, BookOpen, ListChecks, CheckCircle2, AlignRight, Type, Image as ImageIcon, Video, Mic, Copy, Eye, Search, ChevronDown, ChevronUp, MessageSquare, GitMerge, ListOrdered, MinusSquare, Map, Layers, LineChart, Move, Calculator, BarChart, MoreHorizontal, FileText, LayoutGrid, MoveHorizontal, Headphones, Signal, Award, Play, X, Paperclip, Binary, Atom, FlaskConical, Microscope, Languages, Text, Landmark, Globe, Monitor, Flag, Check, Sparkles, Loader2, Bot, MousePointerClick, Settings2, RefreshCw, ShieldCheck, Calendar, Clock, Sigma } from 'lucide-react';
+import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCircuit, LayoutTemplate, Edit2, Trash2, BookOpen, ListChecks, CheckCircle2, AlignRight, Type, Mic, Copy, Eye, Search, ChevronDown, ChevronUp, MessageSquare, GitMerge, ListOrdered, Map, Layers, LineChart, Move, Calculator, BarChart, FileText, LayoutGrid, Headphones, Signal, Award, Play, X, Paperclip, Globe, Monitor, Flag, Check, Loader2, MousePointerClick, Settings2, RefreshCw, ShieldCheck, Calendar, Clock, Sigma } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ApprovalHub } from '@/components/ApprovalHub';
 import { useAuth } from '@/contexts/AuthContext';
 import { getVisibleQuestions, createQuestion, deleteQuestion, linkQuestionsToQuiz, unlinkAllQuestionsFromQuiz, generateBlueprintQuestions, getBlueprintAssessments, getQuestionsForQuiz, BankQuestion } from '@/services/questionBankData';
-import { getQuizById, updateQuiz, createQuiz } from '@/services/assignmentData';
+import { getQuizById, updateQuiz, createQuiz, getClassRoster } from '@/services/assignmentData';
 import { getSubjectGradeCombos, getAllClassSections } from '@/services/academicData';
 import { getMyClassSections } from '@/services/attendanceData';
 
@@ -286,8 +286,6 @@ export default function QuestionBank() {
   const [blueprintUnit, setBlueprintUnit] = useState('كل الوحدات');
   const [teacherClasses, setTeacherClasses] = useState<{ id: string; name: string; gradeLevel: string }[]>([]);
 
-  const [objVsEssay, setObjVsEssay] = useState(80);
-
   // Question Types States
   const [selectedTypes, setSelectedTypes] = useState<string[]>(['اختيار من متعدد', 'صح أم خطأ']);
   
@@ -301,6 +299,27 @@ export default function QuestionBank() {
   const [addToGradebook, setAddToGradebook] = useState(true);
   const [gradebookCalculationMode, setGradebookCalculationMode] = useState<'POINTS' | 'PERCENTAGE'>('PERCENTAGE');
   const [availabilityMode, setAvailabilityMode] = useState<'ALWAYS' | 'TIMEFRAME'>('TIMEFRAME');
+  const [releaseDate, setReleaseDate] = useState('');
+  const [releaseTime, setReleaseTime] = useState('08:00');
+  const [dueDateValue, setDueDateValue] = useState('');
+  const [dueTimeValue, setDueTimeValue] = useState('23:59');
+  const [expiryBehavior, setExpiryBehavior] = useState<'auto_submit' | 'grace_5min'>('auto_submit');
+  const [multiAttemptGradeMethod, setMultiAttemptGradeMethod] = useState('highest');
+  const [duplicateCheckResult, setDuplicateCheckResult] = useState<{ checked: boolean; matches: BankQuestion[] }>({ checked: false, matches: [] });
+
+  const normalizeForCompare = (s: string) => s.trim().toLowerCase().replace(/[\u064B-\u0652\s]+/g, ' ').trim();
+
+  const handleCheckDuplicates = () => {
+    if (!newQTitle.trim()) return;
+    const normalizedNew = normalizeForCompare(newQTitle);
+    const matches = questions.filter((q) => {
+      const normalizedExisting = normalizeForCompare(q.title || '');
+      if (!normalizedExisting) return false;
+      // مطابقة تامة أو تشابه قوي (احتواء أحد النصين للتاني بعد التطبيع)
+      return normalizedExisting === normalizedNew || normalizedExisting.includes(normalizedNew) || normalizedNew.includes(normalizedExisting);
+    });
+    setDuplicateCheckResult({ checked: true, matches });
+  };
   const [targetingType, setTargetingType] = useState<'ALL' | 'CLASSES' | 'STUDENTS'>('ALL');
   const [isTargetDropdownOpen, setIsTargetDropdownOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
@@ -312,15 +331,33 @@ export default function QuestionBank() {
   const [typePercentages, setTypePercentages] = useState<Record<string, number>>({'اختيار من متعدد': 50, 'صح أم خطأ': 50});
 
   const questionTypesList = ['اختيار من متعدد', 'صح أم خطأ', 'سؤال مقالي', 'أكمل الفراغ', 'توصيل'];
+  const typeDisplayNames: Record<string, string> = {
+    'اختيار من متعدد': 'Multiple Choice',
+    'صح أم خطأ': 'True/False',
+    'سؤال مقالي': 'Essay',
+    'أكمل الفراغ': 'Fill in the Blank',
+    'توصيل': 'Matching',
+    'ترتيب': 'Ordering',
+    'إجابة قصيرة': 'Short Answer',
+    'الكل': 'All',
+    'منطقة تفاعلية': 'Hotspot',
+    'تصنيف': 'Classification',
+    'رسم بياني': 'Graphing',
+    'سحب وإفلات': 'Drag and Drop',
+    'مقطع صوتي': 'Audio Clip',
+    'إجابة رقمية': 'Numeric Answer',
+    'استبيان': 'Survey',
+  };
+  const typeLabel = (type: string) => language === 'ar' ? type : (typeDisplayNames[type] || type);
   
-  const mockClasses = ["الصف العاشر أ", "الصف العاشر ب", "الصف الحادي عشر"];
-  const mockStudents = ["أحمد خليل", "سارة الماجد", "عمر فاروق", "يوسف الحربي"];
+  const [realClassStudents, setRealClassStudents] = useState<{ id: string; name: string }[]>([]);
 
-  const [savedQuestions, setSavedQuestions] = useState([
-    { id: 'g1', title: 'اشرح تأثير الجاذبية على الأجسام في الفراغ.', type: 'مقال', bloom: 'تحليل', diff: 'صعب', options: ['يقلل الوزن', 'يزيد الكتلة', 'لا يغير شيء', 'ينعدم الوزن'], correctIdx: 3 },
-    { id: 'g2', title: 'ما هو وحدة قياس القوة في النظام الدولي للمتجهات؟', type: 'اختيار من متعدد', bloom: 'تذكر', diff: 'سهل', options: ['جول', 'نيوتن', 'وات', 'باسكال'], correctIdx: 1 },
-    { id: 'g3', title: 'احسب تسارع جسم كتلته 5 كجم وقوته 20 نيوتن.', type: 'أكمل الفراغ', bloom: 'تطبيق', diff: 'متوسط', options: ['10 م/ث2', '4 م/ث2', '8 م/ث2', '2 م/ث2'], correctIdx: 1 },
-  ]);
+  useEffect(() => {
+    if (targetingType === 'STUDENTS' && blueprintClassId) {
+      getClassRoster(blueprintClassId).then((roster) => setRealClassStudents(roster));
+    }
+  }, [targetingType, blueprintClassId]);
+
 
   const [expandedQuestions, setExpandedQuestions] = useState<string[]>([]);
   const [swappingIds, setSwappingIds] = useState<string[]>([]);
@@ -387,6 +424,7 @@ export default function QuestionBank() {
   const [hubCombos, setHubCombos] = useState<{ subject: string; grade: string; count: number }[]>([]);
   const [isLoadingHub, setIsLoadingHub] = useState(true);
   const [hubSubjectFilter, setHubSubjectFilter] = useState('كل المواد');
+  const [hubGradeFilter, setHubGradeFilter] = useState(language === 'ar' ? 'كل الصفوف' : 'All Grades');
   const [questions, setQuestions] = useState<BankQuestion[]>([]);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
 
@@ -419,11 +457,12 @@ export default function QuestionBank() {
   // Factory States
   const [newQTitle, setNewQTitle] = useState('');
   const [newQUnit, setNewQUnit] = useState('');
+  const [newQLesson, setNewQLesson] = useState('');
   const [newQBloom, setNewQBloom] = useState('تذكر');
   const [newQDiff, setNewQDiff] = useState('سهل');
   const [newQType, setNewQType] = useState('اختيار من متعدد');
   const [targetBank, setTargetBank] = useState('بنك مركزي (الوزارة)');
-  const [qStandard, setQStandard] = useState('الهدف الأول');
+  const [qStandard, setQStandard] = useState('');
   const [qTime, setQTime] = useState('5');
   const [newQOptions, setNewQOptions] = useState<any[]>([
     { id: '1', text: '', isCorrect: true, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
@@ -446,7 +485,7 @@ export default function QuestionBank() {
 
 
 
-  const [assessmentsList, setAssessmentsList] = useState<{ id: string; title: string; subject: string; questionCount: number; totalPoints: number; className: string; classId: string; status: string; createdAt: string }[]>([]);
+  const [assessmentsList, setAssessmentsList] = useState<{ id: string; title: string; subject: string; questionCount: number; totalPoints: number; className: string; classId: string; status: string; approvalStatus: string; createdAt: string }[]>([]);
   const [isLoadingAssessments, setIsLoadingAssessments] = useState(true);
 
   const refreshAssessments = () => {
@@ -479,15 +518,16 @@ export default function QuestionBank() {
       scope: scopeFromLabel(targetBank),
       subject: activeSubject.subject,
       grade: activeSubject.grade,
-      unit: newQUnit || 'بدون وحدة',
+      unit: newQUnit || (language === 'ar' ? 'بدون وحدة' : 'No unit'),
+      lesson: newQLesson || undefined,
       bloomLevel: newQBloom,
       difficulty: newQDiff,
       type: newQType,
-      question: { title: newQTitle, options: newQOptions, correctOption: newQCorrectOption },
+      question: { title: newQTitle, options: newQOptions, correctOption: newQCorrectOption, standard: qStandard || undefined },
     });
     setIsSavingQuestion(false);
     if (!id) {
-      setSaveQuestionError(error || 'حصل خطأ أثناء الحفظ');
+      setSaveQuestionError(error || (language === 'ar' ? 'حصل خطأ أثناء الحفظ' : 'An error occurred while saving'));
       return;
     }
     refreshQuestions();
@@ -595,6 +635,22 @@ export default function QuestionBank() {
     if (typeof s.timeLimitMinutes === 'number') setTimeLimitMinutes(s.timeLimitMinutes);
     if (typeof s.retryWaitHours === 'number') setRetryWaitHours(s.retryWaitHours);
     if (typeof s.gradebookMaxValue === 'number') setGradebookMaxValue(s.gradebookMaxValue);
+    if (s.expiryBehavior) setExpiryBehavior(s.expiryBehavior);
+    if (s.multiAttemptGradeMethod) setMultiAttemptGradeMethod(s.multiAttemptGradeMethod);
+    if (quiz.releaseAt) {
+      const d = new Date(quiz.releaseAt);
+      setReleaseDate(d.toISOString().slice(0, 10));
+      setReleaseTime(d.toTimeString().slice(0, 5));
+    } else {
+      setReleaseDate('');
+    }
+    if (quiz.dueDate) {
+      const d = new Date(quiz.dueDate);
+      setDueDateValue(d.toISOString().slice(0, 10));
+      setDueTimeValue(d.toTimeString().slice(0, 5));
+    } else {
+      setDueDateValue('');
+    }
     setAssessmentView('SETTINGS');
   };
 
@@ -605,15 +661,15 @@ export default function QuestionBank() {
 
   const handlePublishBlueprint = async (status: 'Active' | 'Draft') => {
     if (!blueprintClassId) {
-      setPublishError('لازم تختار الفصل المستهدف الأول (من فورم المعايير)');
+      setPublishError(language === 'ar' ? 'لازم تختار الفصل المستهدف الأول (من فورم المعايير)' : 'You need to pick a target class first (in the criteria form)');
       return;
     }
     if (blueprintQuestions.length === 0) {
-      setPublishError('مفيش أسئلة مختارة للتقييم ده');
+      setPublishError(language === 'ar' ? 'مفيش أسئلة مختارة للتقييم ده' : 'No questions selected for this assessment');
       return;
     }
     if (!authUser?.teacherId) {
-      setPublishError('نشر التقييمات محتاج حساب معلم مرتبط بفصل — حساب المشرف مينفعش ينشر تقييم مباشرة، لازم معلم الفصل هو اللي ينشره');
+      setPublishError(language === 'ar' ? 'نشر التقييمات محتاج حساب معلم مرتبط بفصل — حساب المشرف مينفعش ينشر تقييم مباشرة، لازم معلم الفصل هو اللي ينشره' : 'Publishing assessments needs a teacher account linked to a class — a supervisor account cannot publish directly; the class teacher needs to publish it');
       return;
     }
     setIsPublishing(true);
@@ -634,13 +690,22 @@ export default function QuestionBank() {
       timeLimitMinutes,
       retryWaitHours,
       gradebookMaxValue,
+      expiryBehavior,
+      multiAttemptGradeMethod,
     };
     const assignedClasses = targetingType === 'CLASSES' && selectedItems.length > 0 ? selectedItems : [blueprintClassId];
+    const computedReleaseAt = availabilityMode === 'TIMEFRAME' && releaseDate ? new Date(`${releaseDate}T${releaseTime || '00:00'}`).toISOString() : null;
+    const computedDueDate = availabilityMode === 'TIMEFRAME' && dueDateValue ? new Date(`${dueDateValue}T${dueTimeValue || '23:59'}`).toISOString() : null;
+    // نشر فعلي (Active) من معلم عادي محتاج اعتماد مشرف بنك الأسئلة؛ المسودة والمشرف نفسه معتمدين على طول
+    const computedApprovalStatus: 'pending' | 'approved' = (status === 'Active' && !isSupervisor) ? 'pending' : 'approved';
 
     if (editingAssessmentId) {
       const { ok, error } = await updateQuiz(editingAssessmentId, {
         title: blueprintTitle || 'تقييم من بنك الأسئلة',
         status,
+        approvalStatus: computedApprovalStatus,
+        dueDate: computedDueDate,
+        releaseAt: computedReleaseAt,
         questions: quizQuestions,
         sections: [{ id: 'default', title: 'القسم الأول' }],
         settings: settingsBlob,
@@ -648,7 +713,7 @@ export default function QuestionBank() {
       });
       setIsPublishing(false);
       if (!ok) {
-        setPublishError(error || 'حصل خطأ أثناء تعديل التقييم');
+        setPublishError(error || (language === 'ar' ? 'حصل خطأ أثناء تعديل التقييم' : 'An error occurred while updating the assessment'));
         return;
       }
       // نمسح الروابط القديمة ونعمل روابط جديدة تطابق الأسئلة الحالية بالظبط
@@ -663,9 +728,10 @@ export default function QuestionBank() {
       { teacherId: authUser?.teacherId || '', classId: blueprintClassId, subject: blueprintSubject },
       {
         title: blueprintTitle || 'تقييم من بنك الأسئلة',
-        dueDate: null,
-        releaseAt: null,
+        dueDate: computedDueDate,
+        releaseAt: computedReleaseAt,
         status,
+        approvalStatus: computedApprovalStatus,
         questions: quizQuestions,
         sections: [{ id: 'default', title: 'القسم الأول' }],
         settings: settingsBlob,
@@ -674,7 +740,7 @@ export default function QuestionBank() {
     );
     setIsPublishing(false);
     if (!quizId) {
-      setPublishError(error || 'حصل خطأ أثناء إنشاء التقييم');
+      setPublishError(error || (language === 'ar' ? 'حصل خطأ أثناء إنشاء التقييم' : 'An error occurred while creating the assessment'));
       return;
     }
     await linkQuestionsToQuiz(quizId, blueprintQuestions.map((q) => q.id));
@@ -683,6 +749,17 @@ export default function QuestionBank() {
 
   const [manualSwapAlternatives, setManualSwapAlternatives] = useState<BankQuestion[]>([]);
   const [manualSwapSearch, setManualSwapSearch] = useState('');
+  const [manualPoolQuestions, setManualPoolQuestions] = useState<BankQuestion[]>([]);
+  const [isLoadingManualPool, setIsLoadingManualPool] = useState(false);
+
+  useEffect(() => {
+    if (assessmentView !== 'MANUAL_SELECTION' || !blueprintSubject || !blueprintGrade) return;
+    setIsLoadingManualPool(true);
+    getVisibleQuestions({ subject: blueprintSubject, grade: blueprintGrade, isSupervisor: true }).then((qs) => {
+      setManualPoolQuestions(qs.filter((q) => q.status === 'approved'));
+      setIsLoadingManualPool(false);
+    });
+  }, [assessmentView, blueprintSubject, blueprintGrade]);
 
   useEffect(() => {
     if (!manualSwapModalQId) { setManualSwapAlternatives([]); return; }
@@ -757,8 +834,8 @@ export default function QuestionBank() {
                  <Database size={24} />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-slate-800">بنك الأسئلة</h1>
-                <p className="text-slate-500 font-medium">المركز الشامل لإدارة الأسئلة وتقييمات الطلاب</p>
+                <h1 className="text-3xl font-bold text-slate-800">{language === 'ar' ? 'بنك الأسئلة' : 'Question Bank'}</h1>
+                <p className="text-slate-500 font-medium">{language === 'ar' ? 'المركز الشامل لإدارة الأسئلة وتقييمات الطلاب' : 'The complete hub for managing questions and student assessments'}</p>
               </div>
             </div>
 
@@ -774,7 +851,7 @@ export default function QuestionBank() {
                 }`}
               >
                 <LayoutTemplate size={18} />
-                لوحة البيانات
+                {language === 'ar' ? 'لوحة البيانات' : 'Dashboard'}
               </button>
               )}
               <button
@@ -786,7 +863,7 @@ export default function QuestionBank() {
                 }`}
               >
                 <Database size={18} />
-                إدارة البنك
+                {language === 'ar' ? 'إدارة البنك' : 'Manage Bank'}
               </button>
               {isSupervisor && (
               <button
@@ -798,7 +875,7 @@ export default function QuestionBank() {
                 }`}
               >
                 <ListChecks size={18} />
-                التقييمات
+                {language === 'ar' ? 'التقييمات' : 'Assessments'}
               </button>
               )}
               {isSupervisor && (
@@ -811,7 +888,7 @@ export default function QuestionBank() {
                 }`}
               >
                 <ShieldCheck size={18} />
-                الاعتمادات
+                {language === 'ar' ? 'الاعتمادات' : 'Approvals'}
               </button>
               )}
             </div>
@@ -820,7 +897,7 @@ export default function QuestionBank() {
           {/* DASHBOARD TAB */}
           {activeTab === 'DASHBOARD' && (
             <div className="w-full">
-              <AnalyticsDashboard />
+              <AnalyticsDashboard language={language} />
             </div>
           )}
 
@@ -839,7 +916,7 @@ export default function QuestionBank() {
                           : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
                       }`}
                     >
-                      بنوك مركزية (الوزارة)
+                      {language === 'ar' ? 'بنوك مركزية (الوزارة)' : 'Central Banks (Ministry)'}
                     </button>
                     <button
                       onClick={() => setBankScope('shared')}
@@ -849,7 +926,7 @@ export default function QuestionBank() {
                           : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
                       }`}
                     >
-                      بنوك مشتركة (المدرسة)
+                      {language === 'ar' ? 'بنوك مشتركة (المدرسة)' : 'Shared Banks (School)'}
                     </button>
                     <button
                       onClick={() => setBankScope('private')}
@@ -859,7 +936,7 @@ export default function QuestionBank() {
                           : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
                       }`}
                     >
-                      بنكي الخاص (المعلم)
+                      {language === 'ar' ? 'بنكي الخاص (المعلم)' : 'My Private Bank (Teacher)'}
                     </button>
                   </div>
 
@@ -867,16 +944,16 @@ export default function QuestionBank() {
                   <div className="flex gap-4 items-end bg-white p-4 rounded-2xl border border-slate-100 shadow-none">
                      <div className="flex items-center gap-2 text-slate-400 mr-2 ml-4 mb-3">
                         <Filter size={18} />
-                        <span className="font-bold text-sm">تصفية المواد:</span>
+                        <span className="font-bold text-sm">{language === 'ar' ? 'تصفية المواد:' : 'Filter Subjects:'}</span>
                      </div>
                      <HubFilterDropdown 
-                       label="الصف الدراسي" 
-                       value="كل الصفوف" 
-                       options={['كل الصفوف', 'الصف العاشر', 'الصف الحادي عشر', 'الصف الثاني عشر']} 
-                       onChange={() => {}} 
+                       label={language === 'ar' ? 'الصف الدراسي' : 'Grade'} 
+                       value={hubGradeFilter} 
+                       options={[language === 'ar' ? 'كل الصفوف' : 'All Grades', ...Array.from(new Set(hubCombos.map(c => c.grade)))]} 
+                       onChange={setHubGradeFilter} 
                      />
                      <HubFilterDropdown 
-                       label="المادة" 
+                       label={language === 'ar' ? 'المادة' : 'Subject'} 
                        value={hubSubjectFilter} 
                        options={['كل المواد', ...Array.from(new Set(hubCombos.map(c => c.subject)))]} 
                        onChange={setHubSubjectFilter} 
@@ -884,12 +961,12 @@ export default function QuestionBank() {
                   </div>
 
                   {isLoadingHub ? (
-                    <p className="text-center text-sm text-slate-400 py-16">جاري التحميل...</p>
+                    <p className="text-center text-sm text-slate-400 py-16">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
                   ) : hubCombos.length === 0 ? (
-                    <p className="text-center text-sm text-slate-400 py-16">لا توجد مواد متاحة حاليًا في المنهج</p>
+                    <p className="text-center text-sm text-slate-400 py-16">{language === 'ar' ? 'لا توجد مواد متاحة حاليًا في المنهج' : 'No subjects are currently available in the curriculum'}</p>
                   ) : (
                   <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                    {hubCombos.filter(c => hubSubjectFilter === 'كل المواد' || c.subject === hubSubjectFilter).map(sub => {
+                    {hubCombos.filter(c => (hubSubjectFilter === 'كل المواد' || c.subject === hubSubjectFilter) && (hubGradeFilter === 'كل الصفوف' || hubGradeFilter === 'All Grades' || c.grade === hubGradeFilter)).map(sub => {
                       return (
                         <div 
                           key={`${sub.subject}-${sub.grade}`} 
@@ -906,7 +983,7 @@ export default function QuestionBank() {
                           <p className="text-[11px] font-bold text-slate-400 mb-4">{sub.grade}</p>
                           <div className="border-t border-slate-50 pt-3 mt-auto">
                             <div className="flex items-center justify-between mb-2">
-                               <span className="text-xs font-semibold text-slate-700">{sub.count.toLocaleString('ar-SA')} سؤال</span>
+                               <span className="text-xs font-semibold text-slate-700">{sub.count.toLocaleString(language === 'ar' ? 'ar-SA' : 'en-US')} {language === 'ar' ? 'سؤال' : 'questions'}</span>
                             </div>
                             <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
                               <div className="h-full rounded-full bg-violet-500" style={{ width: `${Math.min(100, sub.count * 2)}%` }}></div>
@@ -933,15 +1010,15 @@ export default function QuestionBank() {
                     <div className="flex gap-4 flex-wrap">
                       <button className="px-6 py-2.5 bg-white border border-purple-200 text-purple-700 hover:bg-purple-50 font-bold rounded-xl flex items-center gap-2 transition-colors shadow-none text-sm">
                         <UploadCloud size={18} />
-                        استيراد بنك أسئلة (QTI XML / Excel)
+                        {language === 'ar' ? 'استيراد بنك أسئلة (QTI XML / Excel)' : 'Import Question Bank (QTI XML / Excel)'}
                       </button>
                       <button className="px-6 py-2.5 bg-white border border-purple-200 text-purple-700 hover:bg-purple-50 font-bold rounded-xl flex items-center gap-2 transition-colors shadow-none text-sm">
                         <DownloadCloud size={18} />
-                        تصدير البنك الحالي (QTI XML)
+                        {language === 'ar' ? 'تصدير البنك الحالي (QTI XML)' : 'Export Current Bank (QTI XML)'}
                       </button>
                       <button onClick={() => setMgtStep('FACTORY')} className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl flex items-center gap-2 transition-colors shadow-none text-sm">
                         <Plus size={18} />
-                        إضافة سؤال جديد
+                        {language === 'ar' ? 'إضافة سؤال جديد' : 'Add New Question'}
                       </button>
                     </div>
                   </div>
@@ -957,7 +1034,7 @@ export default function QuestionBank() {
                          </div>
                          <input 
                            type="text" 
-                           placeholder="البحث في الأسئلة..." 
+                           placeholder={language === 'ar' ? 'البحث في الأسئلة...' : 'Search questions...'} 
                            value={mainSearchQuery}
                            onChange={(e) => setMainSearchQuery(e.target.value)}
                            className="h-12 pl-4 pr-12 rounded-xl w-full border border-slate-200 text-sm focus:outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 font-medium shadow-sm transition-all bg-white" 
@@ -965,11 +1042,11 @@ export default function QuestionBank() {
                        </div>
                        
                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
-                         <CustomSelect value={filterType} onChange={setFilterType} options={uniqueTypes} icon={ListChecks} label="نوع السؤال" />
-                         <CustomSelect value={filterUnit} onChange={setFilterUnit} options={uniqueUnits} icon={BookOpen} label="الوحدة" />
-                         <CustomSelect value={filterLesson} onChange={setFilterLesson} options={uniqueLessons} icon={LayoutTemplate} label="الدرس" />
-                         <CustomSelect value={filterBloom} onChange={setFilterBloom} options={uniqueBlooms} icon={BrainCircuit} label="مستوى بلوم" />
-                         <CustomSelect value={filterDifficulty} onChange={setFilterDifficulty} options={uniqueDifficulties} icon={Filter} label="الصعوبة" />
+                         <CustomSelect value={filterType} onChange={setFilterType} options={uniqueTypes} icon={ListChecks} label={language === 'ar' ? 'نوع السؤال' : 'Question Type'} />
+                         <CustomSelect value={filterUnit} onChange={setFilterUnit} options={uniqueUnits} icon={BookOpen} label={language === 'ar' ? 'الوحدة' : 'Unit'} />
+                         <CustomSelect value={filterLesson} onChange={setFilterLesson} options={uniqueLessons} icon={LayoutTemplate} label={language === 'ar' ? 'الدرس' : 'Lesson'} />
+                         <CustomSelect value={filterBloom} onChange={setFilterBloom} options={uniqueBlooms} icon={BrainCircuit} label={language === 'ar' ? 'مستوى بلوم' : 'Bloom Level'} />
+                         <CustomSelect value={filterDifficulty} onChange={setFilterDifficulty} options={uniqueDifficulties} icon={Filter} label={language === 'ar' ? 'الصعوبة' : 'Difficulty'} />
                        </div>
                     </div>
 
@@ -978,20 +1055,26 @@ export default function QuestionBank() {
                       <table className="w-full text-right text-sm">
                         <thead className="bg-slate-50 border-b border-slate-100">
                           <tr>
-                            <th className="px-6 py-5 font-bold text-slate-500 w-1/3 text-xs uppercase tracking-wider">نص السؤال</th>
-                            <th className="px-6 py-5 font-bold text-slate-500 text-xs uppercase tracking-wider">نوع السؤال</th>
-                            <th className="px-6 py-5 font-bold text-slate-500 text-xs uppercase tracking-wider">الوحدة</th>
-                            <th className="px-6 py-5 font-bold text-slate-500 text-xs uppercase tracking-wider">الدرس</th>
-                            <th className="px-6 py-5 font-bold text-slate-500 text-center text-xs uppercase tracking-wider">مستوى بلوم</th>
-                            <th className="px-6 py-5 font-bold text-slate-500 text-center text-xs uppercase tracking-wider">الصعوبة</th>
-                            <th className="px-6 py-5 font-bold text-slate-500 text-center text-xs uppercase tracking-wider">الإجراءات</th>
+                            <th className="px-6 py-5 font-bold text-slate-500 w-1/3 text-xs uppercase tracking-wider">{language === 'ar' ? 'نص السؤال' : 'Question Text'}</th>
+                            <th className="px-6 py-5 font-bold text-slate-500 text-xs uppercase tracking-wider">{language === 'ar' ? 'نوع السؤال' : 'Type'}</th>
+                            <th className="px-6 py-5 font-bold text-slate-500 text-xs uppercase tracking-wider">{language === 'ar' ? 'الوحدة' : 'Unit'}</th>
+                            <th className="px-6 py-5 font-bold text-slate-500 text-xs uppercase tracking-wider">{language === 'ar' ? 'الدرس' : 'Lesson'}</th>
+                            <th className="px-6 py-5 font-bold text-slate-500 text-center text-xs uppercase tracking-wider">{language === 'ar' ? 'مستوى بلوم' : 'Bloom Level'}</th>
+                            <th className="px-6 py-5 font-bold text-slate-500 text-center text-xs uppercase tracking-wider">{language === 'ar' ? 'الصعوبة' : 'Difficulty'}</th>
+                            <th className="px-6 py-5 font-bold text-slate-500 text-center text-xs uppercase tracking-wider">{language === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50/80">
-                          {filteredQuestions.length === 0 ? (
+                          {isLoadingQuestions ? (
+                            <tr>
+                              <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                                {language === 'ar' ? 'جاري التحميل...' : 'Loading...'}
+                              </td>
+                            </tr>
+                          ) : filteredQuestions.length === 0 ? (
                             <tr>
                               <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
-                                لا توجد أسئلة تطابق معايير البحث الحالية.
+                                {language === 'ar' ? 'لا توجد أسئلة تطابق معايير البحث الحالية.' : 'No questions match the current search criteria.'}
                               </td>
                             </tr>
                           ) : (
@@ -1032,7 +1115,7 @@ export default function QuestionBank() {
                                     <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-400 hover:text-violet-600 hover:border-violet-300 hover:bg-violet-50 transition-colors flex items-center justify-center" aria-label="تعديل">
                                       <Edit2 size={14} />
                                     </button>
-                                    <button onClick={async () => { if (confirm('تأكيد حذف السؤال؟')) { await deleteQuestion(q.id); refreshQuestions(); } }} className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors flex items-center justify-center" aria-label="حذف">
+                                    <button onClick={async () => { if (confirm(language === 'ar' ? 'تأكيد حذف السؤال؟' : 'Confirm deleting this question?')) { await deleteQuestion(q.id); refreshQuestions(); } }} className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors flex items-center justify-center" aria-label={language === 'ar' ? 'حذف' : 'Delete'}>
                                       <Trash2 size={14} />
                                     </button>
                                   </div>
@@ -1069,9 +1152,9 @@ export default function QuestionBank() {
                          <div>
                           <h3 className="font-bold text-slate-800 flex items-center gap-2">
                             <Database size={18} className="text-violet-600" />
-                            أسئلة الجلسة الحالية
+                            {language === 'ar' ? 'أسئلة الجلسة الحالية' : 'Current Session Questions'}
                           </h3>
-                          <p className="text-xs font-medium text-slate-400 mt-2">الأسئلة التي تمت إضافتها مؤخراً ({questions.length})</p>
+                          <p className="text-xs font-medium text-slate-400 mt-2">{language === 'ar' ? `الأسئلة التي تمت إضافتها مؤخراً (${questions.length})` : `Recently added questions (${questions.length})`}</p>
                          </div>
                          <button onClick={() => setIsVaultOpen(false)} className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 shadow-sm transition-colors"><ArrowRight size={16} /></button>
                        </div>
@@ -1081,7 +1164,7 @@ export default function QuestionBank() {
                             <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                             <input 
                               type="text" 
-                              placeholder="ابحث في نص السؤال..." 
+                              placeholder={language === 'ar' ? 'ابحث في نص السؤال...' : 'Search question text...'} 
                               value={vaultSearch}
                               onChange={(e) => setVaultSearch(e.target.value)}
                               className="w-full bg-slate-50 border border-slate-200 text-sm font-bold rounded-lg pl-9 pr-9 py-2 focus:outline-none focus:border-violet-400 focus:bg-white transition-colors"
@@ -1096,7 +1179,7 @@ export default function QuestionBank() {
                                 className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-3 py-2.5 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all cursor-pointer"
                               >
                                 {['الكل', 'اختيار من متعدد', 'صح أم خطأ', 'أكمل الفراغ', 'إجابة قصيرة', 'سؤال مقالي', 'توصيل', 'ترتيب'].map(type => (
-                                  <option key={type} value={type}>{type === 'الكل' ? 'تصفية حسب النوع: الكل' : type}</option>
+                                  <option key={type} value={type}>{type === 'الكل' ? (language === 'ar' ? 'تصفية حسب النوع: الكل' : 'Filter by type: All') : type}</option>
                                 ))}
                               </select>
                               <ChevronDown size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -1136,7 +1219,7 @@ export default function QuestionBank() {
                              >
                                <div className="absolute left-3 top-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                  <button className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-violet-600 hover:bg-violet-50 flex items-center justify-center transition-colors shadow-none"><Edit2 size={14} /></button>
-                                 <button onClick={async (e) => { e.stopPropagation(); if (confirm('تأكيد حذف السؤال؟')) { await deleteQuestion(q.id); refreshQuestions(); } }} className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors shadow-none"><Trash2 size={14} /></button>
+                                 <button onClick={async (e) => { e.stopPropagation(); if (confirm(language === 'ar' ? 'تأكيد حذف السؤال؟' : 'Confirm deleting this question?')) { await deleteQuestion(q.id); refreshQuestions(); } }} className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors shadow-none"><Trash2 size={14} /></button>
                                </div>
                                <div className="flex items-center gap-2 mb-3">
                                  <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
@@ -1158,7 +1241,7 @@ export default function QuestionBank() {
                          {filteredVaultQuestions.length === 0 && (
                            <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-3 pb-10 mt-10">
                               <LayoutTemplate size={32} className="opacity-20" />
-                              <p className="text-sm font-medium">لم يتم العثور على أي أسئلة</p>
+                              <p className="text-sm font-medium">{language === 'ar' ? 'لم يتم العثور على أي أسئلة' : 'No questions found'}</p>
                            </div>
                          )}
                        </div>
@@ -1173,7 +1256,7 @@ export default function QuestionBank() {
                     {/* Header & Back */}
                     <div className="flex items-center justify-between">
                        <h2 className="text-sm font-bold text-slate-500 flex items-center gap-2">
-                          بنوك الأسئلة <span className="text-slate-300">/</span> {activeSubject.subject} <span className="text-slate-300">/</span> <span className="text-slate-800">إنشاء سؤال جديد</span>
+                          {language === 'ar' ? 'بنوك الأسئلة' : 'Question Banks'} <span className="text-slate-300">/</span> {activeSubject.subject} <span className="text-slate-300">/</span> <span className="text-slate-800">{language === 'ar' ? 'إنشاء سؤال جديد' : 'Create New Question'}</span>
                        </h2>
                        <div className="flex items-center gap-3">
                          <button 
@@ -1181,7 +1264,7 @@ export default function QuestionBank() {
                            className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-bold rounded-lg hover:bg-violet-700 transition-all shadow-sm group"
                          >
                            <Layers size={16} className="text-violet-200 group-hover:text-white transition-colors" />
-                           سجل الأسئلة المضافة
+                           {language === 'ar' ? 'سجل الأسئلة المضافة' : 'Added Questions Log'}
                            <span className="bg-white text-violet-700 text-[10px] font-black min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full ml-1 border border-transparent">
                              {questions.length}
                            </span>
@@ -1191,13 +1274,13 @@ export default function QuestionBank() {
                     </div>
 
                     {/* STUDIO WORKSPACE */}
-                    <div className="flex relative w-full min-h-[75vh] gap-6 items-start" dir="rtl">
+                    <div className="flex relative w-full min-h-[75vh] gap-6 items-start" dir={language === 'ar' ? 'rtl' : 'ltr'}>
                        
                        {/* 1. THE RIGHT-SIDE TYPE MENU (Question Types) */}
                        <div className="w-[280px] shrink-0 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden sticky top-6">
                            <div className="p-5 border-b border-slate-100 bg-slate-50/50">
                                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                                  <LayoutGrid size={16} className="text-violet-600" /> أنواع الأسئلة
+                                  <LayoutGrid size={16} className="text-violet-600" /> {language === 'ar' ? 'أنواع الأسئلة' : 'Question Types'}
                                </h3>
                            </div>
                            <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1.5 pb-20">
@@ -1230,7 +1313,7 @@ export default function QuestionBank() {
                                         }`}
                                      >
                                         <Icon size={18} className={isActive ? 'text-violet-600' : 'text-slate-400'} />
-                                        {type.label}
+                                        {typeLabel(type.label)}
                                      </button>
                                   )
                                })}
@@ -1242,7 +1325,7 @@ export default function QuestionBank() {
                          
                          {/* 1. Target Bank Selector */}
                          <div className="flex flex-col gap-2 mb-2">
-                           <label className="text-xs font-bold text-slate-500 px-1">مستودع حفظ السؤال:</label>
+                           <label className="text-xs font-bold text-slate-500 px-1">{language === 'ar' ? 'مستودع حفظ السؤال:' : 'Question Storage:'}</label>
                            <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100 shadow-none h-12 items-center gap-1 w-full md:w-max">
                              {['بنك مركزي (الوزارة)', 'بنك مشترك (المدرسة)', 'بنكي الخاص (المعلم)'].map(bank => (
                                <button
@@ -1250,7 +1333,7 @@ export default function QuestionBank() {
                                  onClick={() => setTargetBank(bank)}
                                  className={`px-4 py-2 text-xs font-bold rounded-lg transition-all shadow-none h-full ${targetBank === bank ? 'bg-purple-100 text-purple-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100/50'}`}
                                >
-                                 {bank}
+                                 {language === 'ar' ? bank : (bank === 'بنك مركزي (الوزارة)' ? 'Central Bank (Ministry)' : bank === 'بنك مشترك (المدرسة)' ? 'Shared Bank (School)' : 'My Private Bank (Teacher)')}
                                </button>
                              ))}
                            </div>
@@ -1258,16 +1341,31 @@ export default function QuestionBank() {
 
                          {/* 2. THE GLOBAL CONTEXT ROW */}
                          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 shrink-0 transition-all z-20">
-                             <FormSelect label="الوحدة" value={newQUnit} onChange={setNewQUnit} options={['الوحدة الأولى', 'الوحدة الثانية', 'الوحدة الثالثة']} icon={BookOpen} />
-                             <FormSelect label="الدرس" value={''} onChange={() => {}} options={['الدرس الأول', 'الدرس الثاني']} icon={FileText} />
-                             <FormSelect label="مستوى بلوم" value={newQBloom} onChange={setNewQBloom} options={['تذكر', 'فهم', 'تطبيق', 'تحليل', 'تقييم', 'ابتكار']} icon={BrainCircuit} />
-                             <FormSelect label="معيار المنهج / الهدف" value={qStandard} onChange={setQStandard} options={['الهدف الأول', 'الهدف الثاني']} icon={Flag} />
+                             <div>
+                               <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 mb-2 px-1"><BookOpen size={12} />{language === 'ar' ? 'الوحدة' : 'Unit'}</label>
+                               <input list="unit-suggestions" type="text" value={newQUnit} onChange={(e) => setNewQUnit(e.target.value)} placeholder={language === 'ar' ? 'اكتب اسم الوحدة' : 'Type the unit name'} className="w-full h-[42px] px-3.5 rounded-xl border text-xs font-bold transition-all bg-slate-50 border-slate-100 text-slate-700 focus:outline-none focus:border-violet-300 shadow-none" />
+                               <datalist id="unit-suggestions">
+                                 {Array.from(new Set(questions.map((q) => q.unit))).map((u) => <option key={u} value={u} />)}
+                               </datalist>
+                             </div>
+                             <div>
+                               <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 mb-2 px-1"><FileText size={12} />{language === 'ar' ? 'الدرس' : 'Lesson'}</label>
+                               <input list="lesson-suggestions" type="text" value={newQLesson} onChange={(e) => setNewQLesson(e.target.value)} placeholder={language === 'ar' ? 'اكتب اسم الدرس (اختياري)' : 'Type the lesson name (optional)'} className="w-full h-[42px] px-3.5 rounded-xl border text-xs font-bold transition-all bg-slate-50 border-slate-100 text-slate-700 focus:outline-none focus:border-violet-300 shadow-none" />
+                               <datalist id="lesson-suggestions">
+                                 {Array.from(new Set(questions.map((q) => q.lesson).filter(Boolean))).map((l) => <option key={l as string} value={l as string} />)}
+                               </datalist>
+                             </div>
+                             <FormSelect label={language === 'ar' ? 'مستوى بلوم' : 'Bloom Level'} value={newQBloom} onChange={setNewQBloom} options={['تذكر', 'فهم', 'تطبيق', 'تحليل', 'تقييم', 'ابتكار']} icon={BrainCircuit} />
+                             <div>
+                               <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 mb-2 px-1"><Flag size={12} />{language === 'ar' ? 'معيار المنهج / الهدف' : 'Curriculum Standard / Objective'}</label>
+                               <input type="text" value={qStandard} onChange={(e) => setQStandard(e.target.value)} placeholder={language === 'ar' ? 'اكتب المعيار أو الهدف (اختياري)' : 'Type the standard or objective (optional)'} className="w-full h-[42px] px-3.5 rounded-xl border text-xs font-bold transition-all bg-slate-50 border-slate-100 text-slate-700 focus:outline-none focus:border-violet-300 shadow-none" />
+                             </div>
                              <div>
                                <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 mb-2 px-1">
                                  <Clock size={12} />
-                                 زمن الحل (دقائق)
+                                 {language === 'ar' ? 'زمن الحل (دقائق)' : 'Time to Solve (minutes)'}
                                </label>
-                               <input type="number" min="1" value={qTime} onChange={e => setQTime(e.target.value)} className="w-full h-[42px] px-3.5 rounded-xl border text-xs font-bold transition-all bg-slate-50 border-slate-100 text-slate-700 focus:outline-none focus:border-violet-300 shadow-none" placeholder="مثال: 5" />
+                               <input type="number" min="1" value={qTime} onChange={e => setQTime(e.target.value)} className="w-full h-[42px] px-3.5 rounded-xl border text-xs font-bold transition-all bg-slate-50 border-slate-100 text-slate-700 focus:outline-none focus:border-violet-300 shadow-none" placeholder={language === 'ar' ? 'مثال: 5' : 'e.g. 5'} />
                              </div>
                          </div>
 
@@ -1279,7 +1377,7 @@ export default function QuestionBank() {
                                 <div className="flex items-center gap-4">
                                    <div className="flex items-center gap-2">
                                       <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500">
-                                        <Signal size={14} /> الصعوبة:
+                                        <Signal size={14} /> {language === 'ar' ? 'الصعوبة:' : 'Difficulty:'}
                                       </label>
                                       <div className="flex bg-slate-50 p-1 rounded-lg border border-slate-200/60 h-8 items-center gap-1">
                                         {['سهل', 'متوسط', 'صعب'].map(level => (
@@ -1288,20 +1386,20 @@ export default function QuestionBank() {
                                              onClick={() => setNewQDiff(level)}
                                              className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all shadow-none h-full ${newQDiff === level ? 'bg-white text-violet-700 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100/50'}`}
                                            >
-                                             {level}
+                                             {language === 'ar' ? level : (level === 'سهل' ? 'Easy' : level === 'متوسط' ? 'Medium' : 'Hard')}
                                            </button>
                                         ))}
                                       </div>
                                    </div>
                                 </div>
                                 <div className="flex items-center gap-2 text-slate-400">
-                                  <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center hover:text-violet-600 transition-colors" aria-label="نسخ"><Copy size={16} /></button>
+                                  <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center hover:text-violet-600 transition-colors" aria-label={language === 'ar' ? 'نسخ' : 'Copy'}><Copy size={16} /></button>
                                   <button onClick={() => { setNewQTitle(''); setNewQOptions([
                                     { id: '1', text: '', isCorrect: true, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
                                     { id: '2', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
                                     { id: '3', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
                                     { id: '4', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null }
-                                  ]); setNewQCorrectOption(0); }} className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center hover:text-red-600 hover:border-red-200 transition-colors" aria-label="مسح المسودة"><Trash2 size={16} /></button>
+                                  ]); setNewQCorrectOption(0); }} className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center hover:text-red-600 hover:border-red-200 transition-colors" aria-label={language === 'ar' ? 'مسح المسودة' : 'Clear draft'}><Trash2 size={16} /></button>
                                 </div>
                              </div>
 
@@ -1309,7 +1407,7 @@ export default function QuestionBank() {
                          <div className="p-8 flex-1 bg-slate-50/30">
                             <div className="flex justify-between items-center mb-6">
                                <div className="text-violet-600 font-extrabold text-[10px] tracking-widest uppercase bg-violet-50 px-3 py-1 rounded-full border border-violet-100/50">
-                                  السؤال 1 • {newQType}
+                                  {language === 'ar' ? 'السؤال 1' : 'Question 1'} • {newQType}
                                </div>
                            </div>
 
@@ -1317,17 +1415,17 @@ export default function QuestionBank() {
                            <div className="mb-10 bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-none focus-within:border-violet-300 transition-colors">
                               {/* WYSIWYG Toolbar */}
                               <div className="flex items-center gap-2 p-2 px-3 border-b border-gray-100 bg-slate-50">
-                                <button className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="تسجيل صوتي">
+                                <button className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title={language === 'ar' ? 'تسجيل صوتي' : 'Audio recording'}>
                                   <Mic size={16} />
                                 </button>
-                                <button className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="معادلات">
+                                <button className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title={language === 'ar' ? 'معادلات' : 'Equations'}>
                                   <Sigma size={16} />
                                 </button>
                               </div>
                               <textarea 
                                 value={newQTitle}
                                 onChange={e => setNewQTitle(e.target.value)}
-                                placeholder="اكتب نص السؤال هنا..."
+                                placeholder={language === 'ar' ? 'اكتب نص السؤال هنا...' : 'Write the question text here...'}
                                 className="w-full p-4 text-xl font-bold text-slate-800 bg-transparent resize-y outline-none placeholder:text-slate-300 min-h-[140px]"
                                 rows={5}
                               />
@@ -1340,6 +1438,8 @@ export default function QuestionBank() {
                                     {newQOptions.map((opt, idx) => {
                                       const isSelected = opt.isCorrect;
                                       const arabicLetters = ['أ', 'ب', 'ج', 'د', 'هـ', 'و'];
+                                      const englishLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
+                                      const letters = language === 'ar' ? arabicLetters : englishLetters;
                                       return (
                                         <div key={opt.id} className={`flex items-center gap-4 p-3.5 pr-4 rounded-2xl border transition-all ${
                                           isSelected ? 'border-emerald-500 bg-emerald-50/10 shadow-[0_4px_12px_rgba(16,185,129,0.05)]' : 'border-slate-200 bg-white'
@@ -1353,7 +1453,7 @@ export default function QuestionBank() {
                                               isSelected ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                                             }`}
                                           >
-                                             {arabicLetters[idx] || (idx + 1)}
+                                             {letters[idx] || (idx + 1)}
                                           </button>
                                           <input 
                                              type="text" 
@@ -1363,7 +1463,7 @@ export default function QuestionBank() {
                                                newOpts[idx].text = e.target.value;
                                                setNewQOptions(newOpts);
                                              }}
-                                             placeholder={`الخيار ${idx + 1}`}
+                                             placeholder={language === 'ar' ? `الخيار ${idx + 1}` : `Option ${idx + 1}`}
                                              className="flex-1 w-full bg-transparent text-slate-800 text-sm font-bold focus:outline-none placeholder:font-normal placeholder:text-slate-400"
                                           />
                                           
@@ -1394,7 +1494,7 @@ export default function QuestionBank() {
 
                                           <label
                                             className={`cursor-pointer shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${opt.mediaFile ? 'text-violet-600 bg-violet-50' : 'text-slate-400 hover:text-violet-600 hover:bg-slate-50'}`}
-                                            title="إضافة وسائط (صورة/فيديو)"
+                                            title={language === 'ar' ? 'إضافة وسائط (صورة/فيديو)' : 'Add media (image/video)'}
                                           >
                                             <input 
                                                type="file" 
@@ -1440,7 +1540,7 @@ export default function QuestionBank() {
                                 <motion.div key="tf" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4 mb-4">
                                    {[0, 1].map(idx => {
                                       const isSelected = newQCorrectOption === idx;
-                                      const labels = ['صح', 'خطأ'];
+                                      const labels = language === 'ar' ? ['صح', 'خطأ'] : ['True', 'False'];
                                       return (
                                         <div key={idx} className={`flex items-center gap-4 p-3.5 pr-4 rounded-2xl border transition-all ${
                                           isSelected ? 'border-emerald-500 bg-emerald-50/10 shadow-[0_4px_12px_rgba(16,185,129,0.05)]' : 'border-slate-200 bg-white'
@@ -1470,7 +1570,7 @@ export default function QuestionBank() {
                               {newQType === 'سؤال مقالي' && (
                                  <motion.div key="essay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4 mb-4">
                                     <textarea 
-                                      placeholder="نموذج الإجابة أو دليل التصحيح..."
+                                      placeholder={language === 'ar' ? 'نموذج الإجابة أو دليل التصحيح...' : 'Model answer or grading guide...'}
                                       className="w-full h-32 bg-slate-50 border border-slate-200 text-slate-800 rounded-2xl p-4 font-bold text-sm focus:outline-none focus:border-violet-400 resize-none transition-colors placeholder:font-normal placeholder:text-slate-400"
                                     />
                                  </motion.div>
@@ -1484,11 +1584,11 @@ export default function QuestionBank() {
                                       </div>
                                       <input 
                                         type="text" 
-                                        placeholder="الكلمة المفقودة (الإجابة الصحيحة)..."
+                                        placeholder={language === 'ar' ? 'الكلمة المفقودة (الإجابة الصحيحة)...' : 'The missing word (correct answer)...'}
                                         className="w-full bg-transparent text-slate-800 text-sm font-bold px-4 py-3 focus:outline-none placeholder:font-normal placeholder:text-slate-400"
                                       />
                                     </div>
-                                    <p className="text-xs font-semibold text-slate-400 px-2 mt-2">ملاحظة: استخدم الرمز <span className="font-mono text-slate-600 bg-slate-100 px-1 py-0.5 rounded">___</span> في نص السؤال للإشارة إلى الفراغ.</p>
+                                    <p className="text-xs font-semibold text-slate-400 px-2 mt-2">{language === 'ar' ? <>ملاحظة: استخدم الرمز <span className="font-mono text-slate-600 bg-slate-100 px-1 py-0.5 rounded">___</span> في نص السؤال للإشارة إلى الفراغ.</> : <>Note: use the <span className="font-mono text-slate-600 bg-slate-100 px-1 py-0.5 rounded">___</span> symbol in the question text to mark the blank.</>}</p>
                                  </motion.div>
                               )}
                            </AnimatePresence>
@@ -1506,42 +1606,55 @@ export default function QuestionBank() {
                                       disabled={newQOptions.length >= 6}
                                       className="flex items-center gap-2 hover:text-violet-600 transition-colors disabled:opacity-50 disabled:hover:text-slate-400"
                                     >
-                                      <Plus size={16} /> إضافة خيار
+                                      <Plus size={16} /> {language === 'ar' ? 'إضافة خيار' : 'Add Option'}
                                     </button>
                                     <div className="w-px h-4 bg-slate-200"></div>
                                   </>
                                )}
                                <button className="flex items-center gap-2 hover:text-violet-600 transition-colors">
-                                 <MessageSquare size={16} strokeWidth={2.5} /> وسائط وملاحظات إضافية
+                                 <MessageSquare size={16} strokeWidth={2.5} /> {language === 'ar' ? 'وسائط وملاحظات إضافية' : 'Extra Media & Notes'}
                                </button>
                            </div>
                        </div>
 
                        {/* 4. DEDICATED ACTION BAR */}
-                       <div className="relative mt-auto p-5 border-t border-slate-100 bg-slate-50 flex items-center justify-end z-10 space-x-reverse space-x-3">
+                       <div className="relative mt-auto p-5 border-t border-slate-100 bg-slate-50 flex flex-col gap-3 z-10">
+                          {saveQuestionError && <p className="text-sm font-bold text-rose-600">{saveQuestionError}</p>}
+                          {duplicateCheckResult.checked && (
+                            duplicateCheckResult.matches.length > 0 ? (
+                              <p className="text-sm font-bold text-amber-600">
+                                {language === 'ar' ? `لقينا ${duplicateCheckResult.matches.length} سؤال مشابه في البنك: "${duplicateCheckResult.matches[0].title}"` : `Found ${duplicateCheckResult.matches.length} similar question(s) in the bank: "${duplicateCheckResult.matches[0].title}"`}
+                              </p>
+                            ) : (
+                              <p className="text-sm font-bold text-emerald-600">{language === 'ar' ? 'مفيش تطابق — السؤال ده جديد على البنك' : "No matches — this question is new to the bank"}</p>
+                            )
+                          )}
+                          <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <button 
-                              onClick={() => {}} 
-                              className="px-6 py-2.5 bg-white border border-purple-200 text-purple-700 hover:bg-purple-50 font-bold rounded-xl transition-colors shadow-none flex items-center gap-2 text-sm"
+                              onClick={handleCheckDuplicates} 
+                              disabled={!newQTitle.trim()}
+                              className="px-6 py-2.5 bg-white border border-purple-200 text-purple-700 hover:bg-purple-50 disabled:opacity-50 font-bold rounded-xl transition-colors shadow-none flex items-center gap-2 text-sm"
                             >
                               <RefreshCw size={16} />
-                              فحص التطابق / التكرار
+                              {language === 'ar' ? 'فحص التطابق / التكرار' : 'Check Duplicates'}
                             </button>
                             <button 
                               onClick={() => { handleSaveQuestion(true); setIsVaultOpen(true); }} 
-                              disabled={!newQTitle} 
+                              disabled={!newQTitle || isSavingQuestion} 
                               className="px-6 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-bold rounded-xl transition-all shadow-none flex items-center gap-2 text-sm"
                             >
                               <Plus size={16} />
-                              حفظ وإضافة جديد
+                              {isSavingQuestion ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...') : (language === 'ar' ? 'حفظ وإضافة جديد' : 'Save & Add New')}
                             </button>
                             <button 
                               onClick={() => handleSaveQuestion(false)} 
-                              disabled={!newQTitle} 
+                              disabled={!newQTitle || isSavingQuestion} 
                               className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 font-bold rounded-xl transition-colors shadow-none text-sm"
                             >
-                              حفظ والعودة
+                              {isSavingQuestion ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...') : (language === 'ar' ? 'حفظ والعودة' : 'Save & Return')}
                             </button>
+                          </div>
                           </div>
                       </div>
                     </div>
@@ -1561,8 +1674,8 @@ export default function QuestionBank() {
                   {/* Top Action */}
                   <div className="flex justify-between items-center bg-white p-6 rounded-2xl border border-slate-100 shadow-none">
                     <div>
-                      <h2 className="text-xl font-bold text-slate-800">مكتبة التقييمات</h2>
-                      <p className="text-sm font-medium text-slate-500 mt-1">إدارة الاختبارات والتقييمات المحفوظة وتعيينها للطلاب</p>
+                      <h2 className="text-xl font-bold text-slate-800">{language === 'ar' ? 'مكتبة التقييمات' : 'Assessments Library'}</h2>
+                      <p className="text-sm font-medium text-slate-500 mt-1">{language === 'ar' ? 'إدارة الاختبارات والتقييمات المحفوظة وتعيينها للطلاب' : 'Manage saved tests and assessments and assign them to students'}</p>
                     </div>
                     <button onClick={() => {
                       setEditingAssessmentId(null);
@@ -1571,18 +1684,22 @@ export default function QuestionBank() {
                       setBlueprintGrade('');
                       setBlueprintClassId('');
                       setBlueprintQuestions([]);
+                      setReleaseDate('');
+                      setReleaseTime('08:00');
+                      setDueDateValue('');
+                      setDueTimeValue('23:59');
                       setAssessmentView('BLUEPRINT_FORM');
                     }} className="px-6 py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl flex items-center gap-2 transition-colors shadow-none">
                       <Plus size={18} />
-                      إنشاء تقييم بالمعايير
+                      {language === 'ar' ? 'إنشاء تقييم بالمعايير' : 'Create by Criteria'}
                     </button>
                   </div>
 
                   {/* Assessment Grid */}
                   {isLoadingAssessments ? (
-                    <p className="text-center text-sm text-slate-400 py-16">جاري التحميل...</p>
+                    <p className="text-center text-sm text-slate-400 py-16">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
                   ) : assessmentsList.length === 0 ? (
-                    <p className="text-center text-sm text-slate-400 py-16">لسه مفيش تقييمات اتعملت بالمخطط — دوس "إنشاء تقييم بالمعايير" فوق</p>
+                    <p className="text-center text-sm text-slate-400 py-16">{language === 'ar' ? 'لسه مفيش تقييمات اتعملت بالمخطط — دوس "إنشاء تقييم بالمعايير" فوق' : 'No blueprint assessments created yet — use "Create by Criteria" above'}</p>
                   ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {assessmentsList.map(assessment => {
@@ -1592,10 +1709,14 @@ export default function QuestionBank() {
                           <div className="w-12 h-12 bg-violet-50 text-violet-600 rounded-2xl flex items-center justify-center">
                             <ListChecks size={24} />
                           </div>
-                          {assessment.status === 'Active' ? (
-                            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">منشور</span>
+                          {assessment.approvalStatus === 'pending' ? (
+                            <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full">{language === 'ar' ? 'بانتظار الاعتماد' : 'Pending Approval'}</span>
+                          ) : assessment.approvalStatus === 'rejected' ? (
+                            <span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full">{language === 'ar' ? 'مرفوض' : 'Rejected'}</span>
+                          ) : assessment.status === 'Active' ? (
+                            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">{language === 'ar' ? 'منشور' : 'Published'}</span>
                           ) : (
-                            <span className="px-3 py-1 bg-slate-100 text-slate-600 text-xs font-bold rounded-full">مسودة</span>
+                            <span className="px-3 py-1 bg-slate-100 text-slate-600 text-xs font-bold rounded-full">{language === 'ar' ? 'مسودة' : 'Draft'}</span>
                           )}
                         </div>
                         
@@ -1609,19 +1730,19 @@ export default function QuestionBank() {
                         
                         <div className="flex items-center gap-4 mb-5 pt-4 border-t border-slate-100 mt-auto">
                            <div className="flex flex-col">
-                             <span className="text-[10px] font-bold text-slate-400 mb-0.5">الأسئلة</span>
-                             <span className="text-sm font-black text-slate-700">{assessment.questionCount} سؤال</span>
+                             <span className="text-[10px] font-bold text-slate-400 mb-0.5">{language === 'ar' ? 'الأسئلة' : 'Questions'}</span>
+                             <span className="text-sm font-black text-slate-700">{assessment.questionCount} {language === 'ar' ? 'سؤال' : 'questions'}</span>
                            </div>
                            <div className="w-px h-8 bg-slate-200"></div>
                            <div className="flex flex-col">
-                             <span className="text-[10px] font-bold text-slate-400 mb-0.5">إجمالي الدرجات</span>
-                             <span className="text-sm font-black text-slate-700">{assessment.totalPoints} نقطة</span>
+                             <span className="text-[10px] font-bold text-slate-400 mb-0.5">{language === 'ar' ? 'إجمالي الدرجات' : 'Total Points'}</span>
+                             <span className="text-sm font-black text-slate-700">{assessment.totalPoints} {language === 'ar' ? 'نقطة' : 'pts'}</span>
                            </div>
                         </div>
 
                         <button onClick={() => handleOpenAssessmentForEdit(assessment.id)} disabled={isLoadingAssessmentEdit} className="w-full py-3 text-sm font-bold text-slate-700 bg-slate-50 hover:bg-violet-600 hover:text-white border border-slate-200 hover:border-violet-600 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
                           <Settings2 size={18} />
-                          ضبط الإعدادات والنشر
+                          {language === 'ar' ? 'ضبط الإعدادات والنشر' : 'Configure Settings & Publish'}
                         </button>
                       </div>
                     )})}
@@ -1635,7 +1756,7 @@ export default function QuestionBank() {
                   {/* Header & Back */}
                   <div className="flex items-center justify-between mb-2">
                      <h2 className="text-sm font-bold text-slate-500 flex items-center gap-2">
-                        التقييمات <span className="text-slate-300">/</span> <span className="text-slate-800">محرك بناء المعايير</span>
+                        {language === 'ar' ? 'التقييمات' : 'Assessments'} <span className="text-slate-300">/</span> <span className="text-slate-800">{language === 'ar' ? 'محرك بناء المعايير' : 'Criteria Builder Engine'}</span>
                      </h2>
                      <button onClick={() => setAssessmentView('LIBRARY')} className="w-10 h-10 bg-white border border-slate-200 text-slate-500 rounded-xl flex items-center justify-center hover:bg-slate-50 hover:text-slate-800 transition-colors shadow-none">
                        <ArrowRight size={20} />
@@ -1646,37 +1767,37 @@ export default function QuestionBank() {
                   <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-none">
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                        <div className="flex flex-col">
-                         <label className="text-sm text-slate-500 mb-1 font-bold">اسم التقييم</label>
-                         <input type="text" value={blueprintTitle} onChange={(e) => setBlueprintTitle(e.target.value)} placeholder="مثال: التقييم الختامي..." className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors" />
+                         <label className="text-sm text-slate-500 mb-1 font-bold">{language === 'ar' ? 'اسم التقييم' : 'Assessment Name'}</label>
+                         <input type="text" value={blueprintTitle} onChange={(e) => setBlueprintTitle(e.target.value)} placeholder={language === 'ar' ? 'مثال: التقييم الختامي...' : 'e.g. Final Assessment...'} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors" />
                        </div>
                        <div className="flex flex-col">
-                         <label className="text-sm text-slate-500 mb-1 font-bold">إجمالي الأسئلة</label>
+                         <label className="text-sm text-slate-500 mb-1 font-bold">{language === 'ar' ? 'إجمالي الأسئلة' : 'Total Questions'}</label>
                          <input type="number" value={TotalQuestions} onChange={(e) => setTotalQuestions(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors" />
                        </div>
                      </div>
                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                        <div className="flex flex-col">
-                         <label className="text-sm text-slate-500 mb-1 font-bold">المادة والصف</label>
+                         <label className="text-sm text-slate-500 mb-1 font-bold">{language === 'ar' ? 'المادة والصف' : 'Subject & Grade'}</label>
                          <select value={blueprintSubject && blueprintGrade ? `${blueprintSubject}|${blueprintGrade}` : ''} onChange={(e) => { const [s, g] = e.target.value.split('|'); setBlueprintSubject(s); setBlueprintGrade(g); setBlueprintClassId(''); }} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors">
-                           <option value="">اختر المادة والصف...</option>
+                           <option value="">{language === 'ar' ? 'اختر المادة والصف...' : 'Choose subject & grade...'}</option>
                            {hubCombos.map((c) => (
                              <option key={`${c.subject}-${c.grade}`} value={`${c.subject}|${c.grade}`}>{c.subject} • {c.grade}</option>
                            ))}
                          </select>
                        </div>
                        <div className="flex flex-col">
-                         <label className="text-sm text-slate-500 mb-1 font-bold">الفصل المستهدف</label>
+                         <label className="text-sm text-slate-500 mb-1 font-bold">{language === 'ar' ? 'الفصل المستهدف' : 'Target Class'}</label>
                          <select value={blueprintClassId} onChange={(e) => setBlueprintClassId(e.target.value)} disabled={!blueprintGrade} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors disabled:opacity-50">
-                           <option value="">اختر الفصل...</option>
+                           <option value="">{language === 'ar' ? 'اختر الفصل...' : 'Choose class...'}</option>
                            {teacherClasses.filter((c) => !blueprintGrade || c.gradeLevel === blueprintGrade).map((c) => (
                              <option key={c.id} value={c.id}>{c.name}</option>
                            ))}
                          </select>
                        </div>
                        <div className="flex flex-col">
-                         <label className="text-sm text-slate-500 mb-1 font-bold">الوحدات المستهدفة</label>
+                         <label className="text-sm text-slate-500 mb-1 font-bold">{language === 'ar' ? 'الوحدات المستهدفة' : 'Target Units'}</label>
                          <select value={blueprintUnit} onChange={(e) => setBlueprintUnit(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors cursor-pointer">
-                           <option>كل الوحدات</option>
+                           <option>{language === 'ar' ? 'كل الوحدات' : 'All Units'}</option>
                          </select>
                        </div>
                      </div>
@@ -1687,13 +1808,13 @@ export default function QuestionBank() {
                     {/* CARD A */}
                     <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-none flex flex-col">
                       <div className="flex items-center justify-between mb-6">
-                         <h3 className="font-bold text-slate-800 text-lg">توزيع مستويات الصعوبة</h3>
-                         <span className={`text-xs font-bold px-2 py-1 rounded-md ${diffTotal === 100 ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50'}`}>إجمالي النسبة: {diffTotal}%</span>
+                         <h3 className="font-bold text-slate-800 text-lg">{language === 'ar' ? 'توزيع مستويات الصعوبة' : 'Difficulty Distribution'}</h3>
+                         <span className={`text-xs font-bold px-2 py-1 rounded-md ${diffTotal === 100 ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50'}`}>{language === 'ar' ? `إجمالي النسبة: ${diffTotal}%` : `Total: ${diffTotal}%`}</span>
                       </div>
                       <div className="space-y-6 flex-1">
                          <div className="flex flex-col gap-2">
                            <div className="flex items-center justify-between">
-                             <span className="text-sm font-bold text-slate-600">سهل</span>
+                             <span className="text-sm font-bold text-slate-600">{language === 'ar' ? 'سهل' : 'Easy'}</span>
                              <div className="flex items-center gap-2">
                                <input type="number" min="0" max="100" value={diffEasy} onChange={(e) => setDiffEasy(Number(e.target.value))} className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-bold text-center focus:outline-none focus:border-emerald-500 transition-colors" />
                                <span className="text-sm font-bold text-slate-400">%</span>
@@ -1705,7 +1826,7 @@ export default function QuestionBank() {
                          </div>
                          <div className="flex flex-col gap-2">
                            <div className="flex items-center justify-between">
-                             <span className="text-sm font-bold text-slate-600">متوسط</span>
+                             <span className="text-sm font-bold text-slate-600">{language === 'ar' ? 'متوسط' : 'Medium'}</span>
                              <div className="flex items-center gap-2">
                                <input type="number" min="0" max="100" value={diffMed} onChange={(e) => setDiffMed(Number(e.target.value))} className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-bold text-center focus:outline-none focus:border-amber-500 transition-colors" />
                                <span className="text-sm font-bold text-slate-400">%</span>
@@ -1717,7 +1838,7 @@ export default function QuestionBank() {
                          </div>
                          <div className="flex flex-col gap-2">
                            <div className="flex items-center justify-between">
-                             <span className="text-sm font-bold text-slate-600">صعب</span>
+                             <span className="text-sm font-bold text-slate-600">{language === 'ar' ? 'صعب' : 'Hard'}</span>
                              <div className="flex items-center gap-2">
                                <input type="number" min="0" max="100" value={diffHard} onChange={(e) => setDiffHard(Number(e.target.value))} className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-bold text-center focus:outline-none focus:border-rose-500 transition-colors" />
                                <span className="text-sm font-bold text-slate-400">%</span>
@@ -1733,13 +1854,13 @@ export default function QuestionBank() {
                     {/* CARD B */}
                     <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-none flex flex-col">
                       <div className="flex items-center justify-between mb-6">
-                         <h3 className="font-bold text-slate-800 text-lg">توزيع مستويات بلوم المعرفية</h3>
-                         <span className={`text-xs font-bold px-2 py-1 rounded-md ${bloomTotal === 100 ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50'}`}>إجمالي النسبة: {bloomTotal}%</span>
+                         <h3 className="font-bold text-slate-800 text-lg">{language === 'ar' ? 'توزيع مستويات بلوم المعرفية' : "Bloom's Taxonomy Distribution"}</h3>
+                         <span className={`text-xs font-bold px-2 py-1 rounded-md ${bloomTotal === 100 ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50'}`}>{language === 'ar' ? `إجمالي النسبة: ${bloomTotal}%` : `Total: ${bloomTotal}%`}</span>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                          <div className="flex flex-col gap-2">
                            <div className="flex items-center justify-between">
-                             <span className="text-xs font-bold text-slate-600">تذكر</span>
+                             <span className="text-xs font-bold text-slate-600">{language === 'ar' ? 'تذكر' : 'Remember'}</span>
                              <div className="flex items-center gap-1.5">
                                <input type="number" min="0" max="100" value={bloomRemember} onChange={(e) => setBloomRemember(Number(e.target.value))} className="w-16 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-center focus:outline-none focus:border-violet-500 transition-colors" />
                                <span className="text-xs font-bold text-slate-400">%</span>
@@ -1751,7 +1872,7 @@ export default function QuestionBank() {
                          </div>
                          <div className="flex flex-col gap-2">
                            <div className="flex items-center justify-between">
-                             <span className="text-xs font-bold text-slate-600">فهم</span>
+                             <span className="text-xs font-bold text-slate-600">{language === 'ar' ? 'فهم' : 'Understand'}</span>
                              <div className="flex items-center gap-1.5">
                                <input type="number" min="0" max="100" value={bloomUnderstand} onChange={(e) => setBloomUnderstand(Number(e.target.value))} className="w-16 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-center focus:outline-none focus:border-violet-500 transition-colors" />
                                <span className="text-xs font-bold text-slate-400">%</span>
@@ -1763,7 +1884,7 @@ export default function QuestionBank() {
                          </div>
                          <div className="flex flex-col gap-2">
                            <div className="flex items-center justify-between">
-                             <span className="text-xs font-bold text-slate-600">تطبيق</span>
+                             <span className="text-xs font-bold text-slate-600">{language === 'ar' ? 'تطبيق' : 'Apply'}</span>
                              <div className="flex items-center gap-1.5">
                                <input type="number" min="0" max="100" value={bloomApply} onChange={(e) => setBloomApply(Number(e.target.value))} className="w-16 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-center focus:outline-none focus:border-violet-500 transition-colors" />
                                <span className="text-xs font-bold text-slate-400">%</span>
@@ -1775,7 +1896,7 @@ export default function QuestionBank() {
                          </div>
                          <div className="flex flex-col gap-2">
                            <div className="flex items-center justify-between">
-                             <span className="text-xs font-bold text-slate-600">تحليل</span>
+                             <span className="text-xs font-bold text-slate-600">{language === 'ar' ? 'تحليل' : 'Analyze'}</span>
                              <div className="flex items-center gap-1.5">
                                <input type="number" min="0" max="100" value={bloomAnalyze} onChange={(e) => setBloomAnalyze(Number(e.target.value))} className="w-16 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-center focus:outline-none focus:border-violet-500 transition-colors" />
                                <span className="text-xs font-bold text-slate-400">%</span>
@@ -1787,7 +1908,7 @@ export default function QuestionBank() {
                          </div>
                          <div className="flex flex-col gap-2">
                            <div className="flex items-center justify-between">
-                             <span className="text-xs font-bold text-slate-600">تقييم</span>
+                             <span className="text-xs font-bold text-slate-600">{language === 'ar' ? 'تقييم' : 'Evaluate'}</span>
                              <div className="flex items-center gap-1.5">
                                <input type="number" min="0" max="100" value={bloomEvaluate} onChange={(e) => setBloomEvaluate(Number(e.target.value))} className="w-16 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-center focus:outline-none focus:border-violet-500 transition-colors" />
                                <span className="text-xs font-bold text-slate-400">%</span>
@@ -1799,7 +1920,7 @@ export default function QuestionBank() {
                          </div>
                          <div className="flex flex-col gap-2">
                            <div className="flex items-center justify-between">
-                             <span className="text-xs font-bold text-slate-600">ابتكار</span>
+                             <span className="text-xs font-bold text-slate-600">{language === 'ar' ? 'ابتكار' : 'Create'}</span>
                              <div className="flex items-center gap-1.5">
                                <input type="number" min="0" max="100" value={bloomCreate} onChange={(e) => setBloomCreate(Number(e.target.value))} className="w-16 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-center focus:outline-none focus:border-violet-500 transition-colors" />
                                <span className="text-xs font-bold text-slate-400">%</span>
@@ -1815,10 +1936,10 @@ export default function QuestionBank() {
 
                   {/* 3. SECTION 3: QUESTION TYPES */}
                   <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-none">
-                     <h3 className="font-bold text-slate-800 text-lg mb-4">توزيع أنواع الأسئلة</h3>
+                     <h3 className="font-bold text-slate-800 text-lg mb-4">{language === 'ar' ? 'توزيع أنواع الأسئلة' : 'Question Type Distribution'}</h3>
                      
                      <div className="mb-6">
-                       <h4 className="text-sm font-bold text-slate-500 mb-3">اختر الأنواع</h4>
+                       <h4 className="text-sm font-bold text-slate-500 mb-3">{language === 'ar' ? 'اختر الأنواع' : 'Choose Types'}</h4>
                        <div className="flex flex-wrap gap-2">
                          {questionTypesList.map((type) => {
                            const isActive = selectedTypes.includes(type);
@@ -1832,7 +1953,7 @@ export default function QuestionBank() {
                                    : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
                                }`}
                              >
-                               {type}
+                               {typeLabel(type)}
                              </button>
                            );
                          })}
@@ -1841,7 +1962,7 @@ export default function QuestionBank() {
 
                      {selectedTypes.length > 0 && (
                        <div>
-                         <h4 className="text-sm font-bold text-slate-500 mb-3">الأنواع المحددة</h4>
+                         <h4 className="text-sm font-bold text-slate-500 mb-3">{language === 'ar' ? 'الأنواع المحددة' : 'Selected Types'}</h4>
                          <div className="flex flex-col gap-3">
                            {selectedTypes.map((type) => {
                              const count = typeCounts[type] || 0;
@@ -1849,10 +1970,10 @@ export default function QuestionBank() {
                              
                              return (
                                <div key={type} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                 <span className="font-bold text-slate-700 text-sm">{type}</span>
+                                 <span className="font-bold text-slate-700 text-sm">{typeLabel(type)}</span>
                                  <div className="flex items-center gap-4">
                                    <div className="flex items-center gap-2">
-                                     <span className="text-xs font-bold text-slate-400">العدد</span>
+                                     <span className="text-xs font-bold text-slate-400">{language === 'ar' ? 'العدد' : 'Count'}</span>
                                      <input 
                                        type="number" 
                                        min="0" 
@@ -1862,7 +1983,7 @@ export default function QuestionBank() {
                                      />
                                    </div>
                                    <div className="flex items-center gap-2">
-                                     <span className="text-xs font-bold text-slate-400">النسبة</span>
+                                     <span className="text-xs font-bold text-slate-400">{language === 'ar' ? 'النسبة' : 'Percent'}</span>
                                      <div className="relative">
                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-violet-500">%</span>
                                        <input 
@@ -1888,11 +2009,11 @@ export default function QuestionBank() {
                   <div className="flex flex-col md:flex-row justify-end gap-3 pt-4 border-t border-slate-100">
                      <button onClick={() => setAssessmentView('MANUAL_SELECTION')} className="w-full md:w-auto px-8 py-3.5 bg-white hover:bg-violet-50 text-violet-700 border border-violet-200 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm text-sm">
                         <MousePointerClick size={18} />
-                        اختيار الأسئلة يدوياً
+                        {language === 'ar' ? 'اختيار الأسئلة يدوياً' : 'Select Questions Manually'}
                      </button>
                      <button onClick={handleGenerateBlueprint} disabled={!blueprintSubject || !blueprintGrade || isGeneratingBlueprint} className="w-full md:w-auto px-8 py-3.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm text-sm">
                         <ListChecks size={18} />
-                        {isGeneratingBlueprint ? 'جاري الاختيار...' : 'توليد حسب المعايير'}
+                        {isGeneratingBlueprint ? (language === 'ar' ? 'جاري الاختيار...' : 'Selecting...') : (language === 'ar' ? 'توليد حسب المعايير' : 'Generate by Criteria')}
                      </button>
                   </div>
 
@@ -1904,7 +2025,7 @@ export default function QuestionBank() {
                   {/* Header & Back */}
                   <div className="flex items-center justify-between mb-6">
                      <h2 className="text-sm font-bold text-slate-500 flex items-center gap-2">
-                        التقييمات <span className="text-slate-300">/</span> محرك بناء المعايير <span className="text-slate-300">/</span> <span className="text-slate-800">اختيار الأسئلة يدوياً</span>
+                        {language === 'ar' ? 'التقييمات' : 'Assessments'} <span className="text-slate-300">/</span> {language === 'ar' ? 'محرك بناء المعايير' : 'Criteria Builder Engine'} <span className="text-slate-300">/</span> <span className="text-slate-800">{language === 'ar' ? 'اختيار الأسئلة يدوياً' : 'Select Questions Manually'}</span>
                      </h2>
                      <button onClick={() => setAssessmentView('BLUEPRINT_FORM')} className="w-10 h-10 bg-white border border-slate-200 text-slate-500 rounded-xl flex items-center justify-center hover:bg-slate-50 hover:text-slate-800 transition-colors shadow-none">
                        <ArrowRight size={20} />
@@ -1918,7 +2039,7 @@ export default function QuestionBank() {
                          
                          {/* Compliance Meter */}
                          <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm flex flex-col items-center">
-                            <h3 className="font-bold text-slate-800 text-center w-full mb-6">المراقب الذكي للمعايير</h3>
+                            <h3 className="font-bold text-slate-800 text-center w-full mb-6">{language === 'ar' ? 'المراقب الذكي للمعايير' : 'Criteria Compliance Monitor'}</h3>
                             
                             <div className="w-32 h-32 relative mb-4">
                                <svg className="w-full h-full -rotate-90">
@@ -1929,42 +2050,45 @@ export default function QuestionBank() {
                                  <span className="font-black text-violet-700 text-3xl">{TotalQuestions > 0 ? Math.round((manualSelectedQuestions.length / TotalQuestions) * 100) : 0}%</span>
                                </div>
                             </div>
-                            <p className="text-sm font-bold text-slate-500 text-center">تم اختيار <span className="text-violet-600">{manualSelectedQuestions.length}</span> من أصل <span className="text-slate-800">{TotalQuestions}</span> أسئلة</p>
+                            <p className="text-sm font-bold text-slate-500 text-center">{language === 'ar' ? <>تم اختيار <span className="text-violet-600">{manualSelectedQuestions.length}</span> من أصل <span className="text-slate-800">{TotalQuestions}</span> أسئلة</> : <><span className="text-violet-600">{manualSelectedQuestions.length}</span> of <span className="text-slate-800">{TotalQuestions}</span> questions selected</>}</p>
                          </div>
 
                          {/* Compliance Checklist */}
                          <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-                            <h3 className="font-bold text-slate-800 mb-4 text-sm">حالة المعايير</h3>
+                            <h3 className="font-bold text-slate-800 mb-4 text-sm">{language === 'ar' ? 'حالة المعايير' : 'Criteria Status'}</h3>
                             <ul className="space-y-3">
                               <li className="flex items-center gap-3 text-sm">
                                 <span className={`w-2 h-2 rounded-full ${manualSelectedQuestions.length >= (TotalQuestions * diffHard / 100) ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
-                                <span className="font-bold text-slate-600 flex-1">أسئلة صعبة ({Math.round(TotalQuestions * diffHard / 100)})</span>
+                                <span className="font-bold text-slate-600 flex-1">{language === 'ar' ? `أسئلة صعبة (${Math.round(TotalQuestions * diffHard / 100)})` : `Hard questions (${Math.round(TotalQuestions * diffHard / 100)})`}</span>
                               </li>
                               <li className="flex items-center gap-3 text-sm">
                                 <span className={`w-2 h-2 rounded-full ${manualSelectedQuestions.length >= (TotalQuestions * diffEasy / 100) ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
-                                <span className="font-bold text-slate-600 flex-1">أسئلة سهلة ({Math.round(TotalQuestions * diffEasy / 100)})</span>
+                                <span className="font-bold text-slate-600 flex-1">{language === 'ar' ? `أسئلة سهلة (${Math.round(TotalQuestions * diffEasy / 100)})` : `Easy questions (${Math.round(TotalQuestions * diffEasy / 100)})`}</span>
                               </li>
                               <li className="flex items-center gap-3 text-sm">
                                 <span className={`w-2 h-2 rounded-full ${manualSelectedQuestions.length >= (TotalQuestions * bloomRemember / 100) ? 'bg-emerald-500' : 'bg-amber-400'}`}></span>
-                                <span className="font-bold text-slate-600 flex-1">معيار التذكر ({Math.round(TotalQuestions * bloomRemember / 100)})</span>
+                                <span className="font-bold text-slate-600 flex-1">{language === 'ar' ? `معيار التذكر (${Math.round(TotalQuestions * bloomRemember / 100)})` : `Remember criterion (${Math.round(TotalQuestions * bloomRemember / 100)})`}</span>
                               </li>
                               <li className="flex items-center gap-3 text-sm">
                                 <span className={`w-2 h-2 rounded-full ${manualSelectedQuestions.length >= (TotalQuestions * bloomApply / 100) ? 'bg-emerald-500' : 'bg-amber-400'}`}></span>
-                                <span className="font-bold text-slate-600 flex-1">معيار التطبيق ({Math.round(TotalQuestions * bloomApply / 100)})</span>
+                                <span className="font-bold text-slate-600 flex-1">{language === 'ar' ? `معيار التطبيق (${Math.round(TotalQuestions * bloomApply / 100)})` : `Apply criterion (${Math.round(TotalQuestions * bloomApply / 100)})`}</span>
                               </li>
                             </ul>
                          </div>
 
                          {/* Action Footer */}
                          <button 
-                           onClick={() => setAssessmentView('BLUEPRINT_REVIEW')}
+                           onClick={() => {
+                             setBlueprintQuestions(manualPoolQuestions.filter((q) => manualSelectedQuestions.includes(q.id)));
+                             setAssessmentView('BLUEPRINT_REVIEW');
+                           }}
                            disabled={manualSelectedQuestions.length === 0}
                            className={`w-full py-4 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm text-sm ${
                              manualSelectedQuestions.length === TotalQuestions ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-50 disabled:cursor-not-allowed'
                            }`}
                          >
                            {manualSelectedQuestions.length === TotalQuestions ? <CheckCircle2 size={18} /> : <Eye size={18} />}
-                           {manualSelectedQuestions.length === TotalQuestions ? 'اعتماد التقييم النهائي' : 'مراجعة الأسئلة المختارة'}
+                           {manualSelectedQuestions.length === TotalQuestions ? (language === 'ar' ? 'اعتماد التقييم النهائي' : 'Finalize Assessment') : (language === 'ar' ? 'مراجعة الأسئلة المختارة' : 'Review Selected Questions')}
                          </button>
                        </div>
                      </div>
@@ -1973,27 +2097,30 @@ export default function QuestionBank() {
                      <div className="lg:col-span-8 order-1 lg:order-2 flex flex-col h-[calc(100vh-180px)]">
                        <div className="bg-slate-50 pb-4 pt-2 -mt-2 shrink-0">
                          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                           <input type="text" placeholder="ابحث في مخزن الأسئلة..." className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors" />
+                           <input type="text" placeholder={language === 'ar' ? 'ابحث في مخزن الأسئلة...' : 'Search the question pool...'} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors" />
                            <div className="flex gap-2 items-center overflow-x-auto custom-scrollbar pb-1">
                              <select className="bg-slate-50 border border-slate-200 text-slate-600 text-[11px] font-bold rounded-lg px-3 py-2 outline-none focus:border-violet-500 cursor-pointer">
-                               <option>الوحدة (الكل)</option>
+                               <option>{language === 'ar' ? 'الوحدة (الكل)' : 'Unit (All)'}</option>
                              </select>
                              <select className="bg-slate-50 border border-slate-200 text-slate-600 text-[11px] font-bold rounded-lg px-3 py-2 outline-none focus:border-violet-500 cursor-pointer">
-                               <option>النوع (الكل)</option>
+                               <option>{language === 'ar' ? 'النوع (الكل)' : 'Type (All)'}</option>
                              </select>
                              <select className="bg-slate-50 border border-slate-200 text-slate-600 text-[11px] font-bold rounded-lg px-3 py-2 outline-none focus:border-violet-500 cursor-pointer">
-                               <option>الصعوبة (الكل)</option>
+                               <option>{language === 'ar' ? 'الصعوبة (الكل)' : 'Difficulty (All)'}</option>
                              </select>
                              <select className="bg-slate-50 border border-slate-200 text-slate-600 text-[11px] font-bold rounded-lg px-3 py-2 outline-none focus:border-violet-500 cursor-pointer">
-                               <option>مستوى بلوم (الكل)</option>
+                               <option>{language === 'ar' ? 'مستوى بلوم (الكل)' : 'Bloom Level (All)'}</option>
                              </select>
                            </div>
                          </div>
                        </div>
                        
                        <div className="flex-1 overflow-y-auto pl-2 space-y-4 custom-scrollbar">
-                         {/* We will reuse our generatedQuestions array to show some available questions to select */}
-                         {[...savedQuestions, {id: 'm1', title: 'علل: لا يمكن اعتبار الضوء موجة ميكانيكية.', options: [], type: 'مقال', bloom: 'تحليل', diff: 'صعب', correctIdx: -1}, {id: 'm2', title: 'الزخم هو حاصل ضرب الكتلة في التسارع', options: ['صح', 'خطأ'], type: 'صح أم خطأ', bloom: 'تذكر', diff: 'سهل', correctIdx: 1}].map((q) => {
+                         {isLoadingManualPool ? (
+                           <p className="text-center text-sm text-slate-400 py-10">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
+                         ) : manualPoolQuestions.length === 0 ? (
+                           <p className="text-center text-sm text-slate-400 py-10">{language === 'ar' ? 'لا توجد أسئلة معتمدة متاحة لهذه المادة والصف' : 'No approved questions available for this subject and grade'}</p>
+                         ) : manualPoolQuestions.map((q) => {
                             const isSelected = manualSelectedQuestions.includes(q.id);
                             return (
                                <div key={q.id} className={`bg-white border rounded-2xl p-5 shadow-sm transition-all duration-300 ${isSelected ? 'border-violet-500 ring-1 ring-violet-500/20 shadow-violet-500/10' : 'border-slate-200 hover:border-slate-300'}`}>
@@ -2001,15 +2128,15 @@ export default function QuestionBank() {
                                    <div className="flex-1">
                                      <p className="text-sm font-bold text-slate-800 mb-3 leading-relaxed">{q.title}</p>
                                      <div className="flex flex-wrap gap-2 mb-4">
-                                       <span className="text-[10px] font-bold bg-slate-50 border border-slate-200 text-slate-600 px-2 py-1 rounded">{q.type}</span>
-                                       <span className="text-[10px] font-bold bg-violet-50 text-violet-700 px-2 py-1 rounded">{q.bloom}</span>
-                                       <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded">{q.diff}</span>
+                                       <span className="text-[10px] font-bold bg-slate-50 border border-slate-200 text-slate-600 px-2 py-1 rounded">{typeLabel(q.type)}</span>
+                                       <span className="text-[10px] font-bold bg-violet-50 text-violet-700 px-2 py-1 rounded">{q.bloomLevel}</span>
+                                       <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded">{q.difficulty}</span>
                                      </div>
                                      {q.options && q.options.length > 0 && (
                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-100">
-                                         {q.options.map((opt, oIdx) => (
-                                           <div key={oIdx} className={`text-xs font-bold p-2 rounded-lg border ${oIdx === q.correctIdx ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
-                                             {opt}
+                                         {q.options.map((opt: any, oIdx: number) => (
+                                           <div key={opt.id || oIdx} className={`text-xs font-bold p-2 rounded-lg border ${opt.isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
+                                             {opt.text}
                                            </div>
                                          ))}
                                        </div>
@@ -2030,7 +2157,7 @@ export default function QuestionBank() {
                                            : 'bg-violet-50 border-violet-100 text-violet-700 hover:bg-violet-100'
                                        }`}
                                      >
-                                       {isSelected ? <><Trash2 size={14} /> إزالة</> : <><Plus size={14} /> إضافة للتقييم</>}
+                                       {isSelected ? <><Trash2 size={14} /> {language === 'ar' ? 'إزالة' : 'Remove'}</> : <><Plus size={14} /> {language === 'ar' ? 'إضافة للتقييم' : 'Add to Assessment'}</>}
                                      </button>
                                    </div>
                                  </div>
@@ -2048,7 +2175,7 @@ export default function QuestionBank() {
                   {/* Header & Back */}
                   <div className="flex items-center justify-between">
                      <h2 className="text-sm font-bold text-slate-500 flex items-center gap-2">
-                        التقييمات <span className="text-slate-300">/</span> <span className="text-slate-800">مراجعة التقييم المولد</span>
+                        {language === 'ar' ? 'التقييمات' : 'Assessments'} <span className="text-slate-300">/</span> <span className="text-slate-800">{language === 'ar' ? 'مراجعة التقييم المولد' : 'Review Generated Assessment'}</span>
                      </h2>
                      <div className="flex gap-3">
                      </div>
@@ -2066,15 +2193,15 @@ export default function QuestionBank() {
                        </div>
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-slate-800">{blueprintQuestions.length >= TotalQuestions ? 'تم الوصول للعدد المطلوب بالكامل' : 'البنك مفيهوش أسئلة كفاية بالمعايير دي'}</h3>
-                      <p className="text-sm font-medium text-slate-500 mt-1">تم اختيار {blueprintQuestions.length} من {TotalQuestions} سؤال مطلوب من البنك الحقيقي. تقدر تراجع الأسئلة وتستبدلها لو محتاج.</p>
+                      <h3 className="text-lg font-bold text-slate-800">{blueprintQuestions.length >= TotalQuestions ? (language === 'ar' ? 'تم الوصول للعدد المطلوب بالكامل' : 'Reached the full required count') : (language === 'ar' ? 'البنك مفيهوش أسئلة كفاية بالمعايير دي' : 'The bank doesn\'t have enough questions matching these criteria')}</h3>
+                      <p className="text-sm font-medium text-slate-500 mt-1">{language === 'ar' ? `تم اختيار ${blueprintQuestions.length} من ${TotalQuestions} سؤال مطلوب من البنك الحقيقي. تقدر تراجع الأسئلة وتستبدلها لو محتاج.` : `Selected ${blueprintQuestions.length} of ${TotalQuestions} requested questions from the real bank. You can review and swap them if needed.`}</p>
                     </div>
                   </div>
 
                   {/* Selected Questions List */}
                   <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-none">
                      <div className="flex items-center justify-between mb-6">
-                       <h3 className="text-lg font-bold text-slate-800">الأسئلة المختارة ({blueprintQuestions.length} سؤال)</h3>
+                       <h3 className="text-lg font-bold text-slate-800">{language === 'ar' ? `الأسئلة المختارة (${blueprintQuestions.length} سؤال)` : `Selected Questions (${blueprintQuestions.length})`}</h3>
                      </div>
                      <div className="space-y-3">
                        {blueprintQuestions.map((q, idx) => {
@@ -2121,17 +2248,17 @@ export default function QuestionBank() {
                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 rounded-lg transition-colors w-[90px] justify-center"
                              >
                                {isSwapping ? <Loader2 size={14} className="animate-spin" /> : <Layers size={14} />} 
-                               {isSwapping ? 'جارٍ...' : 'استبدال'}
+                               {isSwapping ? (language === 'ar' ? 'جارٍ...' : 'Working...') : (language === 'ar' ? 'استبدال' : 'Swap')}
                              </button>
                              {activeSwapMenuId === q.id && (
                                 <DropdownMenu 
                                   options={[
-                                    {label: 'استبدال تلقائي', icon: Layers},
-                                    {label: 'استبدال يدوي', icon: MousePointerClick}
+                                    {label: language === 'ar' ? 'استبدال تلقائي' : 'Automatic Swap', icon: Layers},
+                                    {label: language === 'ar' ? 'استبدال يدوي' : 'Manual Swap', icon: MousePointerClick}
                                   ]} 
                                   onSelect={(opt) => {
                                      setActiveSwapMenuId(null);
-                                     if (opt === 'استبدال تلقائي') {
+                                     if (opt === (language === 'ar' ? 'استبدال تلقائي' : 'Automatic Swap')) {
                                         handleSwapBlueprintQuestion(q.id);
                                      } else {
                                         setManualSwapModalQId(q.id);
@@ -2146,10 +2273,10 @@ export default function QuestionBank() {
                      
                      <div className="mt-8 pt-6 border-t border-slate-100 flex justify-end gap-4">
                        <button onClick={() => setAssessmentView('BLUEPRINT_FORM')} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl flex items-center gap-2 hover:bg-slate-50 transition-colors shadow-none text-sm">
-                         تعديل المعايير
+                         {language === 'ar' ? 'تعديل المعايير' : 'Edit Criteria'}
                        </button>
                        <button onClick={() => setAssessmentView('LIBRARY')} className="px-6 py-2.5 bg-violet-600 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-violet-700 transition-colors shadow-sm text-sm">
-                         اعتماد وحفظ في المكتبة <Check size={16} />
+                         {language === 'ar' ? 'اعتماد وحفظ في المكتبة' : 'Approve & Save to Library'} <Check size={16} />
                        </button>
                      </div>
                   </div>
@@ -2164,24 +2291,24 @@ export default function QuestionBank() {
                              <div className="sticky top-0 bg-white z-20 border-b border-slate-200 shadow-sm shrink-0">
                                <div className="px-6 py-4 flex items-center justify-between">
                                  <div>
-                                   <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><RefreshCw size={18} className="text-violet-600" /> استبدال يدوي</h3>
-                                   <p className="text-[11px] font-bold text-slate-500 mt-1">الأسئلة مفلترة لتتطابق مع المعايير المطلوبة</p>
+                                   <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><RefreshCw size={18} className="text-violet-600" /> {language === 'ar' ? 'استبدال يدوي' : 'Manual Swap'}</h3>
+                                   <p className="text-[11px] font-bold text-slate-500 mt-1">{language === 'ar' ? 'الأسئلة مفلترة لتتطابق مع المعايير المطلوبة' : 'Questions are filtered to match the required criteria'}</p>
                                  </div>
                                  <button onClick={() => setManualSwapModalQId(null)} className="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 text-slate-500 flex items-center justify-center hover:bg-slate-100 transition-colors">
                                    <X size={16} />
                                  </button>
                                </div>
                                <div className="px-6 pb-4 space-y-3">
-                                 <input type="text" value={manualSwapSearch} onChange={(e) => setManualSwapSearch(e.target.value)} placeholder="ابحث في الأسئلة البديلة..." className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors" />
+                                 <input type="text" value={manualSwapSearch} onChange={(e) => setManualSwapSearch(e.target.value)} placeholder={language === 'ar' ? 'ابحث في الأسئلة البديلة...' : 'Search alternative questions...'} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors" />
                                  <div className="flex gap-2 items-center overflow-x-auto custom-scrollbar pb-1">
                                    <select className="bg-slate-50 border border-slate-200 text-slate-600 text-[11px] font-bold rounded-md px-2 py-1.5 outline-none focus:border-violet-500 cursor-pointer">
-                                     <option>الوحدة (الكل)</option>
+                                     <option>{language === 'ar' ? 'الوحدة (الكل)' : 'Unit (All)'}</option>
                                    </select>
                                    <select className="bg-slate-50 border border-slate-200 text-slate-600 text-[11px] font-bold rounded-md px-2 py-1.5 outline-none focus:border-violet-500 cursor-pointer">
-                                     <option>النوع (الكل)</option>
+                                     <option>{language === 'ar' ? 'النوع (الكل)' : 'Type (All)'}</option>
                                    </select>
                                    <select className="bg-slate-50 border border-slate-200 text-slate-600 text-[11px] font-bold rounded-md px-2 py-1.5 outline-none focus:border-violet-500 cursor-pointer">
-                                     <option>الصعوبة (مفلتر مسبقاً)</option>
+                                     <option>{language === 'ar' ? 'الصعوبة (مفلتر مسبقاً)' : 'Difficulty (pre-filtered)'}</option>
                                    </select>
                                  </div>
                                </div>
@@ -2189,7 +2316,7 @@ export default function QuestionBank() {
                              
                              <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4">
                                {manualSwapAlternatives.filter((alt) => alt.title.toLowerCase().includes(manualSwapSearch.toLowerCase())).length === 0 ? (
-                                 <p className="text-center text-sm text-slate-400 py-10">مفيش أسئلة بديلة متاحة حاليًا</p>
+                                 <p className="text-center text-sm text-slate-400 py-10">{language === 'ar' ? 'مفيش أسئلة بديلة متاحة حاليًا' : 'No alternative questions available right now'}</p>
                                ) : manualSwapAlternatives.filter((alt) => alt.title.toLowerCase().includes(manualSwapSearch.toLowerCase())).map((alt) => (
                                  <div key={alt.id} className="p-4 border border-slate-200 rounded-xl hover:border-violet-300 transition-colors bg-white">
                                     <p className="text-sm font-bold text-slate-800 mb-3">{alt.title}</p>
@@ -2213,7 +2340,7 @@ export default function QuestionBank() {
                                           }, 1500);
                                         }
                                       }} className="px-5 py-2 bg-violet-50 text-violet-700 hover:bg-violet-100 font-bold rounded-lg transition-colors text-sm border border-violet-100 flex items-center gap-2">
-                                        <Check size={14} /> اختيار
+                                        <Check size={14} /> {language === 'ar' ? 'اختيار' : 'Select'}
                                       </button>
                                     </div>
                                  </div>
@@ -2230,8 +2357,8 @@ export default function QuestionBank() {
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="h-full flex flex-col -m-6 h-[calc(100vh-80px)] bg-slate-50">
                   {/* Header */}
                   <div className="bg-white border-b border-slate-200 p-6 flex flex-col gap-1 shrink-0 z-10 w-full">
-                    <h2 className="text-xl font-bold text-slate-800">إعدادات التقييم المتقدمة</h2>
-                    <p className="text-sm font-medium text-slate-500">ضبط خصائص النشر، الوقت، والربط بسجل الدرجات للتقييم.</p>
+                    <h2 className="text-xl font-bold text-slate-800">{language === 'ar' ? 'إعدادات التقييم المتقدمة' : 'Advanced Assessment Settings'}</h2>
+                    <p className="text-sm font-medium text-slate-500">{language === 'ar' ? 'ضبط خصائص النشر، الوقت، والربط بسجل الدرجات للتقييم.' : 'Configure publishing, timing, and gradebook-linking properties for the assessment.'}</p>
                   </div>
 
                   <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12 w-full">
@@ -2239,11 +2366,11 @@ export default function QuestionBank() {
                     <div className="lg:col-span-3 border-l border-slate-200 bg-white overflow-y-auto w-full">
                       <div className="p-4 space-y-1">
                         {[
-                          { id: 'AVAILABILITY', label: 'الإتاحة والاستهداف', icon: Globe },
-                          { id: 'DELIVERY', label: 'خيارات التقديم', icon: Play },
-                          { id: 'GRADEBOOK', label: 'الربط بسجل الدرجات', icon: Award },
-                          { id: 'RESULTS', label: 'النتائج والتغذية الراجعة', icon: BarChart },
-                          { id: 'SECURITY', label: 'الأمان والقيود', icon: Settings2 }
+                          { id: 'AVAILABILITY', label: language === 'ar' ? 'الإتاحة والاستهداف' : 'Availability & Targeting', icon: Globe },
+                          { id: 'DELIVERY', label: language === 'ar' ? 'خيارات التقديم' : 'Delivery Options', icon: Play },
+                          { id: 'GRADEBOOK', label: language === 'ar' ? 'الربط بسجل الدرجات' : 'Gradebook Link', icon: Award },
+                          { id: 'RESULTS', label: language === 'ar' ? 'النتائج والتغذية الراجعة' : 'Results & Feedback', icon: BarChart },
+                          { id: 'SECURITY', label: language === 'ar' ? 'الأمان والقيود' : 'Security & Restrictions', icon: Settings2 }
                         ].map((tab) => {
                           const Icon = tab.icon;
                           const isActive = settingsTab === tab.id;
@@ -2271,15 +2398,15 @@ export default function QuestionBank() {
                         
                         {settingsTab === 'AVAILABILITY' && (
                           <div className="space-y-6">
-                            <h3 className="font-bold text-slate-800 text-lg border-b border-slate-100 pb-4 mb-6">الإتاحة والاستهداف</h3>
+                            <h3 className="font-bold text-slate-800 text-lg border-b border-slate-100 pb-4 mb-6">{language === 'ar' ? 'الإتاحة والاستهداف' : 'Availability & Targeting'}</h3>
                             
                             <div className="border border-slate-200 rounded-2xl p-6 flex flex-col gap-8">
                               {/* Targeting Field */}
                               <div>
-                                <label className="text-sm font-bold text-slate-700 block mb-2">تحديد المستهدفين</label>
+                                <label className="text-sm font-bold text-slate-700 block mb-2">{language === 'ar' ? 'تحديد المستهدفين' : 'Select Targets'}</label>
                                 <div className="relative w-full">
                                   <button onClick={(e) => { e.preventDefault(); setIsTargetDropdownOpen(!isTargetDropdownOpen); }} className="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors shadow-none text-right hover:bg-slate-50">
-                                    <span>{targetingType === 'ALL' ? 'كل طلاب الصف' : targetingType === 'CLASSES' ? 'فصول محددة' : 'طلاب محددين'}</span>
+                                    <span>{targetingType === 'ALL' ? (language === 'ar' ? 'كل طلاب الصف' : 'All class students') : targetingType === 'CLASSES' ? (language === 'ar' ? 'فصول محددة' : 'Specific classes') : (language === 'ar' ? 'طلاب محددين' : 'Specific students')}</span>
                                     <ChevronDown size={16} className={`text-slate-400 transition-transform ${isTargetDropdownOpen ? 'rotate-180' : ''}`} />
                                   </button>
                                   {/* Dropdown Menu Concept */}
@@ -2289,16 +2416,16 @@ export default function QuestionBank() {
                                         <div className="fixed inset-0 z-40" onClick={() => setIsTargetDropdownOpen(false)}></div>
                                         <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 5 }} className="absolute top-12 right-0 w-full bg-white border border-slate-200 shadow-xl rounded-xl z-50 overflow-hidden">
                                           <div className="p-1">
-                                            <button onClick={(e) => { e.preventDefault(); setTargetingType('ALL'); setSelectedItems([]); setIsTargetDropdownOpen(false); }} className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-bold rounded-lg">كل طلاب الصف</button>
-                                            <button onClick={(e) => { e.preventDefault(); setTargetingType('CLASSES'); setSelectedItems([]); setIsTargetDropdownOpen(false); }} className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">فصول محددة</button>
-                                            <button onClick={(e) => { e.preventDefault(); setTargetingType('STUDENTS'); setSelectedItems([]); setIsTargetDropdownOpen(false); }} className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">طلاب محددين</button>
+                                            <button onClick={(e) => { e.preventDefault(); setTargetingType('ALL'); setSelectedItems([]); setIsTargetDropdownOpen(false); }} className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-bold rounded-lg">{language === 'ar' ? 'كل طلاب الصف' : 'All class students'}</button>
+                                            <button onClick={(e) => { e.preventDefault(); setTargetingType('CLASSES'); setSelectedItems([]); setIsTargetDropdownOpen(false); }} className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">{language === 'ar' ? 'فصول محددة' : 'Specific classes'}</button>
+                                            <button onClick={(e) => { e.preventDefault(); setTargetingType('STUDENTS'); setSelectedItems([]); setIsTargetDropdownOpen(false); }} className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">{language === 'ar' ? 'طلاب محددين' : 'Specific students'}</button>
                                           </div>
                                         </motion.div>
                                       </>
                                     )}
                                   </AnimatePresence>
                                 </div>
-                                <p className="text-xs text-slate-400 mt-2 font-medium">اختر الفصول أو المجموعات المسموح لها بإجراء هذا التقييم.</p>
+                                <p className="text-xs text-slate-400 mt-2 font-medium">{language === 'ar' ? 'اختر الفصول أو المجموعات المسموح لها بإجراء هذا التقييم.' : 'Choose the classes or groups allowed to take this assessment.'}</p>
 
                                 <AnimatePresence>
                                   {(targetingType === 'CLASSES' || targetingType === 'STUDENTS') && (
@@ -2318,7 +2445,7 @@ export default function QuestionBank() {
                                           ))}
                                           <input 
                                             type="text" 
-                                            placeholder="ابحث واختر..." 
+                                            placeholder={language === 'ar' ? 'ابحث واختر...' : 'Search and select...'} 
                                             className="flex-1 bg-transparent border-none focus:outline-none min-w-[100px] text-sm text-slate-700 p-1" 
                                             value={searchQuery}
                                             onChange={(e) => {
@@ -2341,11 +2468,11 @@ export default function QuestionBank() {
                                               >
                                                 <div className="p-1">
                                                   {(() => {
-                                                    const options = targetingType === 'CLASSES' ? mockClasses : mockStudents;
+                                                    const options = targetingType === 'CLASSES' ? teacherClasses.map(c => c.name) : realClassStudents.map(s => s.name);
                                                     const filtered = options.filter(opt => opt.includes(searchQuery) && !selectedItems.includes(opt));
                                                     
                                                     if (filtered.length === 0) {
-                                                      return <div className="p-4 text-center text-sm text-slate-500 font-medium">لا توجد نتائج مطابقة</div>;
+                                                      return <div className="p-4 text-center text-sm text-slate-500 font-medium">{language === 'ar' ? 'لا توجد نتائج مطابقة' : 'No matching results'}</div>;
                                                     }
                                                     
                                                     return filtered.map((opt, i) => (
@@ -2377,7 +2504,7 @@ export default function QuestionBank() {
 
                               {/* Availability Mode */}
                               <div className="space-y-4">
-                                <label className="text-sm font-bold text-slate-700 block">إتاحة التقييم</label>
+                                <label className="text-sm font-bold text-slate-700 block">{language === 'ar' ? 'إتاحة التقييم' : 'Assessment Availability'}</label>
                                 <div className="flex flex-col sm:flex-row gap-6">
                                   <label className="cursor-pointer flex items-center gap-3 group" onClick={(e) => { e.preventDefault(); setAvailabilityMode('ALWAYS'); }}>
                                     {availabilityMode === 'ALWAYS' ? (
@@ -2387,7 +2514,7 @@ export default function QuestionBank() {
                                     ) : (
                                       <div className="w-5 h-5 rounded-full border-2 border-slate-300 group-hover:border-violet-400 transition-colors shrink-0" />
                                     )}
-                                    <span className={availabilityMode === 'ALWAYS' ? "text-sm font-bold text-violet-700" : "text-sm font-medium text-slate-600 group-hover:text-slate-800 transition-colors"}>متاح دائماً</span>
+                                    <span className={availabilityMode === 'ALWAYS' ? "text-sm font-bold text-violet-700" : "text-sm font-medium text-slate-600 group-hover:text-slate-800 transition-colors"}>{language === 'ar' ? 'متاح دائماً' : 'Always available'}</span>
                                   </label>
 
                                   <label className="cursor-pointer flex items-center gap-3 group" onClick={(e) => { e.preventDefault(); setAvailabilityMode('TIMEFRAME'); }}>
@@ -2398,7 +2525,7 @@ export default function QuestionBank() {
                                     ) : (
                                       <div className="w-5 h-5 rounded-full border-2 border-slate-300 group-hover:border-violet-400 transition-colors shrink-0" />
                                     )}
-                                    <span className={availabilityMode === 'TIMEFRAME' ? "text-sm font-bold text-violet-700" : "text-sm font-medium text-slate-600 group-hover:text-slate-800 transition-colors"}>تحديد فترة زمنية</span>
+                                    <span className={availabilityMode === 'TIMEFRAME' ? "text-sm font-bold text-violet-700" : "text-sm font-medium text-slate-600 group-hover:text-slate-800 transition-colors"}>{language === 'ar' ? 'تحديد فترة زمنية' : 'Set a time window'}</span>
                                   </label>
                                 </div>
                               </div>
@@ -2407,16 +2534,16 @@ export default function QuestionBank() {
                               <div className={`flex flex-col gap-6 transition-all duration-300 ${availabilityMode === 'TIMEFRAME' ? 'opacity-100 pointer-events-auto' : 'opacity-40 pointer-events-none select-none'}`}>
                                 {/* Start Row */}
                                 <div>
-                                  <label className="text-sm font-bold text-slate-700 block mb-2">تاريخ ووقت البدء</label>
+                                  <label className="text-sm font-bold text-slate-700 block mb-2">{language === 'ar' ? 'تاريخ ووقت البدء' : 'Start Date & Time'}</label>
                                   <div className="grid grid-cols-2 gap-4">
-                                    <button className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-right">
+                                    <div className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl text-right">
                                       <Calendar size={18} className="text-slate-400 shrink-0" />
-                                      <span className="block text-sm font-bold text-slate-800">12 أكتوبر 2026</span>
-                                    </button>
-                                    <button className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-right">
+                                      <input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="block text-sm font-bold text-slate-800 bg-transparent outline-none w-full" />
+                                    </div>
+                                    <div className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl text-right">
                                       <Clock size={18} className="text-slate-400 shrink-0" />
-                                      <span className="block text-sm font-bold text-slate-800">08:00 صباحاً</span>
-                                    </button>
+                                      <input type="time" value={releaseTime} onChange={(e) => setReleaseTime(e.target.value)} className="block text-sm font-bold text-slate-800 bg-transparent outline-none w-full" />
+                                    </div>
                                   </div>
                                 </div>
                                 
@@ -2424,16 +2551,16 @@ export default function QuestionBank() {
                                 
                                 {/* Due Row */}
                                 <div>
-                                  <label className="text-sm font-bold text-slate-700 block mb-2">تاريخ الاستحقاق</label>
+                                  <label className="text-sm font-bold text-slate-700 block mb-2">{language === 'ar' ? 'تاريخ الاستحقاق' : 'Due Date'}</label>
                                   <div className="grid grid-cols-2 gap-4">
-                                    <button className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-right">
+                                    <div className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl text-right">
                                       <Calendar size={18} className="text-slate-400 shrink-0" />
-                                      <span className="block text-sm font-bold text-slate-800">15 أكتوبر 2026</span>
-                                    </button>
-                                    <button className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-right">
+                                      <input type="date" value={dueDateValue} onChange={(e) => setDueDateValue(e.target.value)} className="block text-sm font-bold text-slate-800 bg-transparent outline-none w-full" />
+                                    </div>
+                                    <div className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl text-right">
                                       <Clock size={18} className="text-slate-400 shrink-0" />
-                                      <span className="block text-sm font-bold text-slate-800">11:59 مساءً</span>
-                                    </button>
+                                      <input type="time" value={dueTimeValue} onChange={(e) => setDueTimeValue(e.target.value)} className="block text-sm font-bold text-slate-800 bg-transparent outline-none w-full" />
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -2443,27 +2570,29 @@ export default function QuestionBank() {
 
                         {settingsTab === 'DELIVERY' && (
                           <div className="space-y-6">
-                            <h3 className="font-bold text-slate-800 text-lg border-b border-slate-100 pb-4 mb-6">خيارات التقديم</h3>
+                            <h3 className="font-bold text-slate-800 text-lg border-b border-slate-100 pb-4 mb-6">{language === 'ar' ? 'خيارات التقديم' : 'Delivery Options'}</h3>
                             
                             {/* Container 1 (Time Limit) */}
                             <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden divide-y divide-slate-100 mb-6">
                               <div className="flex justify-between items-center p-5">
-                                <label className="text-sm font-bold text-slate-700">المدة الزمنية (بالدقائق)</label>
+                                <label className="text-sm font-bold text-slate-700">{language === 'ar' ? 'المدة الزمنية (بالدقائق)' : 'Time Limit (minutes)'}</label>
                                 <input type="number" value={timeLimitMinutes} onChange={(e) => setTimeLimitMinutes(Number(e.target.value))} className="w-24 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-center text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors hover:bg-slate-100" />
                               </div>
                               <div className="flex justify-between items-center p-5 bg-slate-50">
-                                <label className="text-sm font-bold text-slate-700">عند انتهاء الوقت</label>
-                                <div className="relative w-56 group">
-                                  <button className="w-full flex items-center justify-between px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-violet-500 transition-colors shadow-none text-slate-700">
-                                    <span>تسليم تلقائي للإجابات</span>
-                                    <ChevronDown size={14} className="text-slate-400" />
+                                <label className="text-sm font-bold text-slate-700">{language === 'ar' ? 'عند انتهاء الوقت' : 'When time runs out'}</label>
+                                <div className="flex bg-slate-50 p-1 rounded-lg border border-slate-200 gap-1">
+                                  <button
+                                    onClick={() => setExpiryBehavior('auto_submit')}
+                                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${expiryBehavior === 'auto_submit' ? 'bg-white text-violet-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                                  >
+                                    {language === 'ar' ? 'تسليم تلقائي للإجابات' : 'Auto-submit answers'}
                                   </button>
-                                  <div className="absolute top-11 right-0 w-full bg-white border border-slate-200 shadow-xl rounded-xl invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-50 overflow-hidden">
-                                    <div className="p-1">
-                                      <button className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">تسليم تلقائي للإجابات</button>
-                                      <button className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">فترة سماح 5 دقائق</button>
-                                    </div>
-                                  </div>
+                                  <button
+                                    onClick={() => setExpiryBehavior('grace_5min')}
+                                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${expiryBehavior === 'grace_5min' ? 'bg-white text-violet-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                                  >
+                                    {language === 'ar' ? 'فترة سماح 5 دقائق' : '5-minute grace period'}
+                                  </button>
                                 </div>
                               </div>
                             </div>
@@ -2471,27 +2600,27 @@ export default function QuestionBank() {
                             {/* Container 2 (Toggles Group) */}
                             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm divide-y divide-slate-100 mb-6">
                               <div className="flex justify-between items-center p-5 cursor-pointer hover:bg-slate-50" onClick={() => setShuffleQuestions(!shuffleQuestions)}>
-                                <span className="font-bold text-slate-700 text-sm">خلط الأسئلة</span>
+                                <span className="font-bold text-slate-700 text-sm">{language === 'ar' ? 'خلط الأسئلة' : 'Shuffle Questions'}</span>
                                 <div className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${shuffleQuestions ? 'bg-violet-600' : 'bg-slate-300'}`}>
                                   <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 shadow-sm transition-transform ${shuffleQuestions ? 'left-0.5 translate-x-5' : 'left-0.5'}`}></div>
                                 </div>
                               </div>
                               <div className="flex justify-between items-center p-5 cursor-pointer hover:bg-slate-50" onClick={() => setShuffleAnswers(!shuffleAnswers)}>
-                                <span className="font-bold text-slate-700 text-sm">خلط الإجابات</span>
+                                <span className="font-bold text-slate-700 text-sm">{language === 'ar' ? 'خلط الإجابات' : 'Shuffle Answers'}</span>
                                 <div className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${shuffleAnswers ? 'bg-violet-600' : 'bg-slate-300'}`}>
                                   <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 shadow-sm transition-transform ${shuffleAnswers ? 'left-0.5 translate-x-5' : 'left-0.5'}`}></div>
                                 </div>
                               </div>
                               
                               <div className="flex justify-between items-center p-5 cursor-pointer hover:bg-slate-50" onClick={() => setShowOneQuestion(!showOneQuestion)}>
-                                <span className="font-bold text-slate-700 text-sm">عرض سؤال واحد في كل مرة</span>
+                                <span className="font-bold text-slate-700 text-sm">{language === 'ar' ? 'عرض سؤال واحد في كل مرة' : 'Show One Question at a Time'}</span>
                                 <div className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${showOneQuestion ? 'bg-violet-600' : 'bg-slate-300'}`}>
                                   <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 shadow-sm transition-transform ${showOneQuestion ? 'left-0.5 translate-x-5' : 'left-0.5'}`}></div>
                                 </div>
                               </div>
                               
                               <div className={`flex justify-between items-center p-5 bg-slate-50 transition-all duration-300 ${showOneQuestion ? 'opacity-100 pointer-events-auto cursor-pointer hover:bg-slate-100' : 'opacity-40 pointer-events-none select-none'}`} onClick={() => showOneQuestion && setPreventBacktracking(!preventBacktracking)}>
-                                <span className="font-bold text-slate-600 text-sm">منع الرجوع للسؤال السابق</span>
+                                <span className="font-bold text-slate-600 text-sm">{language === 'ar' ? 'منع الرجوع للسؤال السابق' : 'Prevent Going Back'}</span>
                                 <div className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${preventBacktracking ? 'bg-violet-600' : 'bg-slate-300'}`}>
                                   <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 shadow-sm transition-transform ${preventBacktracking ? 'left-0.5 translate-x-5' : 'left-0.5'}`}></div>
                                 </div>
@@ -2501,32 +2630,27 @@ export default function QuestionBank() {
                             {/* Container 3 (Advanced Attempts) */}
                             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm divide-y divide-slate-100 mb-6">
                               <div className="flex justify-between items-center p-5 cursor-pointer hover:bg-slate-50" onClick={() => setAllowMultipleAttempts(!allowMultipleAttempts)}>
-                                <span className="font-bold text-slate-700 text-sm">السماح بمحاولات متعددة</span>
+                                <span className="font-bold text-slate-700 text-sm">{language === 'ar' ? 'السماح بمحاولات متعددة' : 'Allow Multiple Attempts'}</span>
                                 <div className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${allowMultipleAttempts ? 'bg-violet-600' : 'bg-slate-300'}`}>
                                   <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 shadow-sm transition-transform ${allowMultipleAttempts ? 'left-0.5 translate-x-5' : 'left-0.5'}`}></div>
                                 </div>
                               </div>
 
                               <div className={`bg-slate-50 p-5 flex justify-between items-center transition-all duration-300 ${allowMultipleAttempts ? 'opacity-100 pointer-events-auto' : 'opacity-40 pointer-events-none select-none'}`}>
-                                <label className="text-sm font-bold text-slate-600">طريقة احتساب الدرجة</label>
-                                <div className="relative w-48 group">
-                                  <button className="w-full flex items-center justify-between px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-violet-500 transition-colors shadow-none text-slate-700">
-                                    <span>أعلى درجة</span>
-                                    <ChevronDown size={14} className="text-slate-400" />
-                                  </button>
-                                  {/* Dropdown Menu Concept (Visible on hover for now to satisfy pure CSS) */}
-                                  <div className="absolute top-11 right-0 w-full bg-white border border-slate-200 shadow-xl rounded-xl invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-50 overflow-hidden">
-                                    <div className="p-1">
-                                      <button className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">أعلى درجة</button>
-                                      <button className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">متوسط الدرجات</button>
-                                      <button className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">المحاولة الأخيرة</button>
-                                    </div>
-                                  </div>
-                                </div>
+                                <label className="text-sm font-bold text-slate-600">{language === 'ar' ? 'طريقة احتساب الدرجة' : 'Grade Calculation Method'}</label>
+                                <select
+                                  value={multiAttemptGradeMethod}
+                                  onChange={(e) => setMultiAttemptGradeMethod(e.target.value)}
+                                  className="w-48 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-violet-500 transition-colors shadow-none text-slate-700"
+                                >
+                                  <option value="highest">{language === 'ar' ? 'أعلى درجة' : 'Highest Score'}</option>
+                                  <option value="average">{language === 'ar' ? 'متوسط الدرجات' : 'Average Score'}</option>
+                                  <option value="last">{language === 'ar' ? 'المحاولة الأخيرة' : 'Last Attempt'}</option>
+                                </select>
                               </div>
                               
                               <div className={`bg-slate-50 p-5 flex justify-between items-center transition-all duration-300 ${allowMultipleAttempts ? 'opacity-100 pointer-events-auto' : 'opacity-40 pointer-events-none select-none'}`}>
-                                <label className="text-sm font-bold text-slate-600">الانتظار بين المحاولات (بالساعات)</label>
+                                <label className="text-sm font-bold text-slate-600">{language === 'ar' ? 'الانتظار بين المحاولات (بالساعات)' : 'Wait Between Attempts (hours)'}</label>
                                 <input type="number" value={retryWaitHours} onChange={(e) => setRetryWaitHours(Number(e.target.value))} className="w-24 bg-white border border-slate-200 rounded-lg px-3 py-2 text-center text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors hover:bg-slate-50" />
                               </div>
                             </div>
@@ -2534,7 +2658,7 @@ export default function QuestionBank() {
                             {/* Container 4 (Late Submission) */}
                             <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
                               <div className="flex justify-between items-center p-5 cursor-pointer hover:bg-slate-50" onClick={() => setAllowLateSubmission(!allowLateSubmission)}>
-                                <span className="font-bold text-slate-700 text-sm">السماح بالتسليم بعد تاريخ الاستحقاق (يُسجل كمتأخر)</span>
+                                <span className="font-bold text-slate-700 text-sm">{language === 'ar' ? 'السماح بالتسليم بعد تاريخ الاستحقاق (يُسجل كمتأخر)' : 'Allow Submission After Due Date (marked as late)'}</span>
                                 <div className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${allowLateSubmission ? 'bg-violet-600' : 'bg-slate-300'}`}>
                                   <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 shadow-sm transition-transform ${allowLateSubmission ? 'left-0.5 translate-x-5' : 'left-0.5'}`}></div>
                                 </div>
@@ -2545,14 +2669,14 @@ export default function QuestionBank() {
 
                         {settingsTab === 'GRADEBOOK' && (
                           <div className="space-y-6">
-                            <h3 className="font-bold text-slate-800 text-lg border-b border-slate-100 pb-4 mb-6">الربط بسجل الدرجات</h3>
+                            <h3 className="font-bold text-slate-800 text-lg border-b border-slate-100 pb-4 mb-6">{language === 'ar' ? 'الربط بسجل الدرجات' : 'Gradebook Link'}</h3>
 
                             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                               {/* Card Header (The Toggle) */}
                               <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 cursor-pointer" onClick={() => setAddToGradebook(!addToGradebook)}>
                                 <div className="space-y-1">
-                                  <span className="font-bold text-slate-800 text-base block">إدراج في دفتر الدرجات</span>
-                                  <span className="text-sm font-medium text-slate-500 block">سيتم احتساب التقييم ضمن المجموع النهائي</span>
+                                  <span className="font-bold text-slate-800 text-base block">{language === 'ar' ? 'إدراج في دفتر الدرجات' : 'Add to Gradebook'}</span>
+                                  <span className="text-sm font-medium text-slate-500 block">{language === 'ar' ? 'سيتم احتساب التقييم ضمن المجموع النهائي' : 'This assessment will count toward the final total'}</span>
                                 </div>
                                 <div className={`w-11 h-6 rounded-full relative shrink-0 transition-colors ${addToGradebook ? 'bg-violet-600' : 'bg-slate-300'}`}>
                                   <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 shadow-sm transition-transform ${addToGradebook ? 'left-0.5 translate-x-5' : 'left-0.5'}`}></div>
@@ -2566,18 +2690,18 @@ export default function QuestionBank() {
                                     <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
                                       {/* Right Column */}
                                       <div className="space-y-3">
-                                        <label className="text-sm font-bold text-slate-700">تصنيف التقييم</label>
+                                        <label className="text-sm font-bold text-slate-700">{language === 'ar' ? 'تصنيف التقييم' : 'Assessment Category'}</label>
                                         <div className="relative w-full group">
                                           <button className="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-violet-500 transition-colors shadow-none text-slate-700">
-                                            <span>أعمال سنة</span>
+                                            <span>{language === 'ar' ? 'أعمال سنة' : 'Coursework'}</span>
                                             <ChevronDown size={14} className="text-slate-400" />
                                           </button>
                                           {/* Headless Dropdown Menu */}
                                           <div className="absolute top-12 right-0 w-full bg-white border border-slate-200 shadow-xl rounded-xl invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-50 overflow-hidden">
                                             <div className="p-1">
-                                              <button className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">أعمال سنة</button>
-                                              <button className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">اختبار نصفي</button>
-                                              <button className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">مشاركة وتفاعل</button>
+                                              <button className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">{language === 'ar' ? 'أعمال سنة' : 'Coursework'}</button>
+                                              <button className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">{language === 'ar' ? 'اختبار نصفي' : 'Midterm Exam'}</button>
+                                              <button className="w-full text-right px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">{language === 'ar' ? 'مشاركة وتفاعل' : 'Participation'}</button>
                                             </div>
                                           </div>
                                         </div>
@@ -2595,7 +2719,7 @@ export default function QuestionBank() {
                                             ) : (
                                               <div className="w-4 h-4 rounded-full border-2 border-slate-300 group-hover:border-violet-400 transition-colors" />
                                             )}
-                                            <span className={gradebookCalculationMode === 'PERCENTAGE' ? "text-sm font-bold text-violet-700" : "text-sm font-medium text-slate-500 group-hover:text-slate-700 transition-colors"}>نسبة مئوية</span>
+                                            <span className={gradebookCalculationMode === 'PERCENTAGE' ? "text-sm font-bold text-violet-700" : "text-sm font-medium text-slate-500 group-hover:text-slate-700 transition-colors"}>{language === 'ar' ? 'نسبة مئوية' : 'Percentage'}</span>
                                           </label>
                                           
                                           <label className="cursor-pointer flex items-center gap-2 group" onClick={(e) => { e.preventDefault(); setGradebookCalculationMode('POINTS'); }}>
@@ -2606,7 +2730,7 @@ export default function QuestionBank() {
                                             ) : (
                                               <div className="w-4 h-4 rounded-full border-2 border-slate-300 group-hover:border-violet-400 transition-colors" />
                                             )}
-                                            <span className={gradebookCalculationMode === 'POINTS' ? "text-sm font-bold text-violet-700" : "text-sm font-medium text-slate-500 group-hover:text-slate-700 transition-colors"}>نقاط</span>
+                                            <span className={gradebookCalculationMode === 'POINTS' ? "text-sm font-bold text-violet-700" : "text-sm font-medium text-slate-500 group-hover:text-slate-700 transition-colors"}>{language === 'ar' ? 'نقاط' : 'Points'}</span>
                                           </label>
                                         </div>
                                         
@@ -2634,14 +2758,14 @@ export default function QuestionBank() {
 
                         {settingsTab === 'RESULTS' && (
                           <div className="space-y-6">
-                            <h3 className="font-bold text-slate-800 text-lg border-b border-slate-100 pb-4 mb-6">النتائج والتغذية الراجعة</h3>
+                            <h3 className="font-bold text-slate-800 text-lg border-b border-slate-100 pb-4 mb-6">{language === 'ar' ? 'النتائج والتغذية الراجعة' : 'Results & Feedback'}</h3>
                             
-                            <p className="text-sm font-bold text-slate-600 mb-2">ماذا يرى الطالب بعد التسليم؟</p>
+                            <p className="text-sm font-bold text-slate-600 mb-2">{language === 'ar' ? 'ماذا يرى الطالب بعد التسليم؟' : 'What does the student see after submitting?'}</p>
                             <div className="space-y-3 max-w-lg">
                               {[
-                                { id: 'SCORE_ONLY', title: 'الدرجة النهائية فقط', desc: 'يظهر للطالب الدرجة التي حصل عليها فقط.' },
-                                { id: 'SCORE_ERRORS', title: 'الدرجة + الأخطاء', desc: 'يظهر للطالب أسئلته الخاطئة دون عرض الإجابة الصحيحة.' },
-                                { id: 'FULL', title: 'الدرجة + الإجابات النموذجية', desc: 'مراجعة كاملة لكل الإجابات الصحيحة والخاطئة.'}
+                                { id: 'SCORE_ONLY', title: language === 'ar' ? 'الدرجة النهائية فقط' : 'Final Score Only', desc: language === 'ar' ? 'يظهر للطالب الدرجة التي حصل عليها فقط.' : 'The student only sees the score they received.' },
+                                { id: 'SCORE_ERRORS', title: language === 'ar' ? 'الدرجة + الأخطاء' : 'Score + Errors', desc: language === 'ar' ? 'يظهر للطالب أسئلته الخاطئة دون عرض الإجابة الصحيحة.' : 'The student sees which questions they got wrong, without the correct answers.' },
+                                { id: 'FULL', title: language === 'ar' ? 'الدرجة + الإجابات النموذجية' : 'Score + Model Answers', desc: language === 'ar' ? 'مراجعة كاملة لكل الإجابات الصحيحة والخاطئة.' : 'A full review of all correct and incorrect answers.'}
                               ].map((option, idx) => (
                                 <div key={option.id} className={`p-5 rounded-xl border-2 flex gap-4 cursor-pointer transition-all ${idx === 2 ? 'border-violet-600 bg-violet-50/50 shadow-sm' : 'border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50'}`}>
                                   <div className={`w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center shrink-0 transition-colors ${idx === 2 ? 'border-violet-600' : 'border-slate-300'}`}>
@@ -2659,7 +2783,7 @@ export default function QuestionBank() {
 
                         {settingsTab === 'SECURITY' && (
                           <div className="space-y-6">
-                            <h3 className="font-bold text-slate-800 text-lg border-b border-slate-100 pb-4 mb-6">الأمان والقيود</h3>
+                            <h3 className="font-bold text-slate-800 text-lg border-b border-slate-100 pb-4 mb-6">{language === 'ar' ? 'الأمان والقيود' : 'Security & Restrictions'}</h3>
                             
                             <div className="border border-gray-200 rounded-2xl p-6 flex flex-col gap-6">
                               
@@ -2667,8 +2791,8 @@ export default function QuestionBank() {
                               <div className="space-y-3">
                                 <label className="cursor-pointer flex items-center justify-between gap-4 group" onClick={(e) => { e.preventDefault(); setGenerateUniquePasswords(!generateUniquePasswords); }}>
                                   <div>
-                                    <span className="font-bold text-slate-800 text-sm block">توليد كلمات مرور فريدة (ديناميكية)</span>
-                                    <span className="text-xs text-slate-500 font-medium">إلغاء كلمة المرور الموحدة لزيادة الأمان ومنع الغش.</span>
+                                    <span className="font-bold text-slate-800 text-sm block">{language === 'ar' ? 'توليد كلمات مرور فريدة (ديناميكية)' : 'Generate Unique Passwords (Dynamic)'}</span>
+                                    <span className="text-xs text-slate-500 font-medium">{language === 'ar' ? 'إلغاء كلمة المرور الموحدة لزيادة الأمان ومنع الغش.' : 'Disables the shared password for extra security and to prevent cheating.'}</span>
                                   </div>
                                   <div className={`w-11 h-6 rounded-full relative transition-colors ${generateUniquePasswords ? 'bg-violet-600' : 'bg-slate-300'}`}>
                                     <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform shadow-none border border-slate-200 ${generateUniquePasswords ? 'left-0.5 translate-x-5' : 'left-0.5'}`}></div>
@@ -2681,7 +2805,7 @@ export default function QuestionBank() {
                                       <div className="bg-indigo-50 border border-indigo-100 text-indigo-800 rounded-xl p-4 flex items-start gap-3 mt-1 shadow-none">
                                         <ShieldCheck size={20} className="shrink-0 mt-0.5" />
                                         <p className="text-sm font-medium leading-relaxed">
-                                          سيتم توليد كلمة مرور عشوائية ومختلفة لكل طالب تلقائياً، وإرسالها كإشعار آمن داخل ملفه الشخصي (البروفايل) فور بدء وقت الإتاحة.
+                                          {language === 'ar' ? 'سيتم توليد كلمة مرور عشوائية ومختلفة لكل طالب تلقائياً، وإرسالها كإشعار آمن داخل ملفه الشخصي (البروفايل) فور بدء وقت الإتاحة.' : 'A random, different password will be automatically generated for each student and sent as a secure notification in their profile as soon as the availability window opens.'}
                                         </p>
                                       </div>
                                     </motion.div>
@@ -2695,8 +2819,8 @@ export default function QuestionBank() {
                               <div className="space-y-3">
                                 <label className="cursor-pointer flex items-center justify-between gap-4 group" onClick={(e) => { e.preventDefault(); setRestrictBrowser(!restrictBrowser); }}>
                                   <div>
-                                    <span className="font-bold text-slate-800 text-sm block">تقييد المتصفح (منع نوافذ أخرى)</span>
-                                    <span className="text-xs text-slate-500 font-medium">يتطلب متصفح آمن أو يغلق الاختبار عند فقدان التركيز.</span>
+                                    <span className="font-bold text-slate-800 text-sm block">{language === 'ar' ? 'تقييد المتصفح (منع نوافذ أخرى)' : 'Restrict Browser (Block Other Windows)'}</span>
+                                    <span className="text-xs text-slate-500 font-medium">{language === 'ar' ? 'يتطلب متصفح آمن أو يغلق الاختبار عند فقدان التركيز.' : 'Requires a locked-down browser or closes the test if focus is lost.'}</span>
                                   </div>
                                   <div className={`w-11 h-6 rounded-full relative transition-colors ${restrictBrowser ? 'bg-violet-600' : 'bg-slate-300'}`}>
                                     <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform shadow-none border border-slate-200 ${restrictBrowser ? 'left-0.5 translate-x-5' : 'left-0.5'}`}></div>
@@ -2716,11 +2840,11 @@ export default function QuestionBank() {
                   <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 shrink-0 flex justify-end gap-3 z-20 w-full shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
                     {publishError && <p className="text-sm font-bold text-rose-600 self-center ml-auto">{publishError}</p>}
                     <button onClick={() => handlePublishBlueprint('Draft')} disabled={isPublishing} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold rounded-xl transition-colors text-sm shadow-none disabled:opacity-50">
-                      حفظ كمسودة
+                      {language === 'ar' ? 'حفظ كمسودة' : 'Save as Draft'}
                     </button>
                     <button onClick={() => handlePublishBlueprint('Active')} disabled={isPublishing} className="px-8 py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl flex items-center gap-2 transition-colors shadow-sm text-sm disabled:opacity-50">
                       <Globe size={18} />
-                      {isPublishing ? 'جاري النشر...' : 'نشر واعتماد التقييم'}
+                      {isPublishing ? (language === 'ar' ? 'جاري النشر...' : 'Publishing...') : (language === 'ar' ? 'نشر واعتماد التقييم' : 'Publish Assessment')}
                     </button>
                   </div>
                 </motion.div>
@@ -2731,7 +2855,7 @@ export default function QuestionBank() {
           {/* APPROVAL_HUB TAB */}
           {activeTab === 'APPROVAL_HUB' && (
             <div className="w-full">
-              <ApprovalHub />
+              <ApprovalHub language={language} />
             </div>
           )}
         </div>

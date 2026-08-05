@@ -227,7 +227,7 @@ export async function generateBlueprintQuestions(input: {
 }
 
 // التقييمات الحقيقية اللي اتعملت عن طريق مخطط بنك الأسئلة (مش أي كويز عادي)
-export async function getBlueprintAssessments(scope: { teacherId?: string; isSupervisor: boolean }): Promise<{ id: string; title: string; subject: string; status: string; questionCount: number; totalPoints: number; className: string; classId: string; createdAt: string }[]> {
+export async function getBlueprintAssessments(scope: { teacherId?: string; isSupervisor: boolean }): Promise<{ id: string; title: string; subject: string; status: string; approvalStatus: string; questionCount: number; totalPoints: number; className: string; classId: string; createdAt: string }[]> {
   const { data: links, error: linksError } = await supabase.from('question_bank_quiz_links').select('quiz_id');
   if (linksError || !links) return [];
   const quizIds = Array.from(new Set(links.map((l: any) => l.quiz_id)));
@@ -235,7 +235,7 @@ export async function getBlueprintAssessments(scope: { teacherId?: string; isSup
 
   let query = supabase
     .from('assignments')
-    .select('id, title, subject, status, questions, created_at, class_id, class_sections(name)')
+    .select('id, title, subject, status, approval_status, questions, created_at, class_id, class_sections(name)')
     .in('id', quizIds);
   if (!scope.isSupervisor && scope.teacherId) {
     query = query.eq('teacher_id', scope.teacherId);
@@ -250,6 +250,7 @@ export async function getBlueprintAssessments(scope: { teacherId?: string; isSup
       title: row.title,
       subject: row.subject,
       status: row.status,
+      approvalStatus: row.approval_status || 'approved',
       questionCount: qs.length,
       totalPoints: qs.reduce((sum: number, q: any) => sum + (q.points || 0), 0),
       className: row.class_sections?.name || '',
@@ -257,6 +258,75 @@ export async function getBlueprintAssessments(scope: { teacherId?: string; isSup
       createdAt: row.created_at,
     };
   });
+}
+
+// التقييمات المولّدة من مخطط بنك الأسئلة واللي لسه بانتظار اعتماد مشرف بنك الأسئلة
+export async function getPendingAssessments(): Promise<{ id: string; title: string; subject: string; className: string; teacherName: string; questionCount: number; createdAt: string }[]> {
+  const { data: links, error: linksError } = await supabase.from('question_bank_quiz_links').select('quiz_id');
+  if (linksError || !links) return [];
+  const quizIds = Array.from(new Set(links.map((l: any) => l.quiz_id)));
+  if (quizIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('assignments')
+    .select('id, title, subject, questions, created_at, class_sections(name), teachers(users(name))')
+    .in('id', quizIds)
+    .eq('approval_status', 'pending')
+    .order('created_at', { ascending: true });
+  if (error) return [];
+
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    title: row.title,
+    subject: row.subject,
+    className: row.class_sections?.name || '',
+    teacherName: row.teachers?.users?.name || 'غير معروف',
+    questionCount: (row.questions || []).length,
+    createdAt: row.created_at,
+  }));
+}
+
+// بيجيب تفاصيل تقييم واحد بانتظار الاعتماد، مع الأسئلة الحقيقية المرتبطة بيه لعرضها في شاشة المراجعة
+export async function getPendingAssessmentDetail(assignmentId: string): Promise<{
+  id: string; title: string; subject: string; className: string; teacherName: string; createdAt: string;
+  bloomData: { name: string; value: number }[];
+  difficultyData: { name: string; value: number; color: string }[];
+  questions: BankQuestion[];
+} | null> {
+  const { data: row, error } = await supabase
+    .from('assignments')
+    .select('id, title, subject, created_at, class_sections(name), teachers(users(name))')
+    .eq('id', assignmentId)
+    .maybeSingle();
+  if (error || !row) return null;
+
+  const questions = await getQuestionsForQuiz(assignmentId);
+  const bloomLevels = ['تذكر', 'فهم', 'تطبيق', 'تحليل', 'تقييم', 'ابتكار'];
+  const bloomData = bloomLevels.map((name) => ({ name, value: questions.filter((q) => q.bloomLevel === name).length })).filter((b) => b.value > 0);
+  const diffColors: Record<string, string> = { 'سهل': '#10b981', 'متوسط': '#f59e0b', 'صعب': '#f43f5e' };
+  const difficultyData = ['سهل', 'متوسط', 'صعب'].map((name) => ({ name, value: questions.filter((q) => q.difficulty === name).length, color: diffColors[name] })).filter((d) => d.value > 0);
+
+  return {
+    id: (row as any).id,
+    title: (row as any).title,
+    subject: (row as any).subject,
+    className: (row as any).class_sections?.name || '',
+    teacherName: (row as any).teachers?.users?.name || 'غير معروف',
+    createdAt: (row as any).created_at,
+    bloomData,
+    difficultyData,
+    questions,
+  };
+}
+
+export async function approveAssessment(id: string): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await supabase.from('assignments').update({ approval_status: 'approved', approval_rejection_note: null }).eq('id', id);
+  return { ok: !error, error: error?.message || null };
+}
+
+export async function rejectAssessment(id: string, note: string): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await supabase.from('assignments').update({ approval_status: 'rejected', approval_rejection_note: note, status: 'Draft' }).eq('id', id);
+  return { ok: !error, error: error?.message || null };
 }
 
 // تحليلات حقيقية لبنك الأسئلة (لوحة البيانات) — بتحسب كل الأرقام من الأسئلة الفعلية في قاعدة البيانات
@@ -267,6 +337,8 @@ export async function getBankAnalytics(filters?: { grade?: string; subject?: str
   recentQuestions: { title: string; type: string; time: string; subject: string }[];
   topSubjects: { name: string; count: number; percent: number }[];
   totalQuestions: number;
+  approvedCount: number;
+  activeSubjectsCount: number;
 }> {
   let query = supabase.from('question_bank').select('*');
   if (filters?.grade) query = query.eq('grade', filters.grade);
@@ -305,7 +377,16 @@ export async function getBankAnalytics(filters?: { grade?: string; subject?: str
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
 
-  return { bloomData, difficultyData, typeData, recentQuestions, topSubjects, totalQuestions: data.length };
+  return {
+    bloomData,
+    difficultyData,
+    typeData,
+    recentQuestions,
+    topSubjects,
+    totalQuestions: data.length,
+    approvedCount: data.filter((q: any) => q.status === 'approved').length,
+    activeSubjectsCount: new Set(data.map((q: any) => q.subject)).size,
+  };
 }
 
 // بيجيب أسئلة بنك محددة بالـ id بتاعها (يستخدم لإعادة فتح تقييم موجود اتعمل بالمخطط للتعديل)

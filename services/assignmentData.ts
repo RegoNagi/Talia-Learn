@@ -34,6 +34,8 @@ export interface Quiz {
   dueDate: string | null;
   releaseAt: string | null;
   status: 'Active' | 'Closed' | 'Draft';
+  approvalStatus: 'pending' | 'approved' | 'rejected';
+  approvalRejectionNote: string | null;
   createdAt: string;
   settings: Record<string, any>;
   questions: any[];
@@ -115,7 +117,7 @@ export async function createAssignment(scope: AssignmentScope, input: { title: s
   return { id: data.id, error: null };
 }
 
-const QUIZ_SELECT = 'id, title, due_date, release_at, status, created_at, settings, questions, sections, assigned_classes, assigned_students';
+const QUIZ_SELECT = 'id, title, due_date, release_at, status, approval_status, approval_rejection_note, created_at, settings, questions, sections, assigned_classes, assigned_students';
 
 function mapQuiz(row: any): Quiz {
   return {
@@ -124,6 +126,8 @@ function mapQuiz(row: any): Quiz {
     dueDate: row.due_date,
     releaseAt: row.release_at,
     status: row.status,
+    approvalStatus: row.approval_status || 'approved',
+    approvalRejectionNote: row.approval_rejection_note || null,
     createdAt: row.created_at,
     settings: row.settings || {},
     questions: row.questions || [],
@@ -154,7 +158,7 @@ export async function getQuizById(id: string): Promise<Quiz | null> {
   return mapQuiz(data);
 }
 
-export async function createQuiz(scope: AssignmentScope, input: { title: string; dueDate: string | null; releaseAt: string | null; status?: 'Active' | 'Draft'; unitId?: string | null; settings?: Record<string, any>; questions: any[]; sections: any[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ id: string | null; error: string | null }> {
+export async function createQuiz(scope: AssignmentScope, input: { title: string; dueDate: string | null; releaseAt: string | null; status?: 'Active' | 'Draft'; approvalStatus?: 'pending' | 'approved'; unitId?: string | null; settings?: Record<string, any>; questions: any[]; sections: any[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ id: string | null; error: string | null }> {
   const { data, error } = await supabase
     .from('assignments')
     .insert({
@@ -166,6 +170,7 @@ export async function createQuiz(scope: AssignmentScope, input: { title: string;
       due_date: input.dueDate,
       release_at: input.releaseAt,
       status: input.status || 'Active',
+      approval_status: input.approvalStatus || 'approved',
       unit_id: input.unitId || null,
       settings: input.settings || {},
       questions: input.questions || [],
@@ -198,12 +203,14 @@ export async function updateAssignment(id: string, input: { title?: string; inst
   return { ok: !error, error: error?.message || null };
 }
 
-export async function updateQuiz(id: string, input: { title?: string; dueDate?: string | null; releaseAt?: string | null; status?: string; unitId?: string | null; settings?: Record<string, any>; questions?: any[]; sections?: any[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ ok: boolean; error: string | null }> {
+export async function updateQuiz(id: string, input: { title?: string; dueDate?: string | null; releaseAt?: string | null; status?: string; approvalStatus?: 'pending' | 'approved' | 'rejected'; approvalRejectionNote?: string | null; unitId?: string | null; settings?: Record<string, any>; questions?: any[]; sections?: any[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ ok: boolean; error: string | null }> {
   const patch: any = {};
   if (input.title !== undefined) patch.title = input.title;
   if (input.dueDate !== undefined) patch.due_date = input.dueDate;
   if (input.releaseAt !== undefined) patch.release_at = input.releaseAt;
   if (input.status !== undefined) patch.status = input.status;
+  if (input.approvalStatus !== undefined) patch.approval_status = input.approvalStatus;
+  if (input.approvalRejectionNote !== undefined) patch.approval_rejection_note = input.approvalRejectionNote;
   if (input.unitId !== undefined) patch.unit_id = input.unitId;
   if (input.settings !== undefined) patch.settings = input.settings;
   if (input.questions !== undefined) patch.questions = input.questions;

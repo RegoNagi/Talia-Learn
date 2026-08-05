@@ -189,7 +189,7 @@ export default function Dashboard() {
   return (
     <div className="flex h-screen w-full bg-white overflow-hidden" dir={language === 'ar' ? 'rtl' : 'ltr'} style={{ fontFamily: "'Cairo', sans-serif" }}>
       {isAuthLoading ? (
-        <div className="w-full h-full flex items-center justify-center text-gray-400">جاري التحميل...</div>
+        <div className="w-full h-full flex items-center justify-center text-gray-400">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</div>
       ) : !isLoggedIn ? (
         // --- LOGIN PAGE ---
         <div className="w-screen h-screen flex relative">

@@ -36,7 +36,7 @@ const CANNED_RESPONSES = {
   ]
 };
 
-function FlatDropdown({ options, value, onChange, placeholder }: { options: {id: string, label: string}[], value: string, onChange: (val: string) => void, placeholder: string }) {
+function FlatDropdown({ options, value, onChange, placeholder, language = 'ar' }: { options: {id: string, label: string}[], value: string, onChange: (val: string) => void, placeholder: string, language?: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -71,7 +71,7 @@ function FlatDropdown({ options, value, onChange, placeholder }: { options: {id:
               onClick={() => { onChange('all'); setIsOpen(false); }}
               className="w-full flex items-center px-4 py-2 hover:bg-gray-50 text-sm text-gray-700 text-start font-bold"
             >
-              <span className="flex-1">الكل (All)</span>
+              <span className="flex-1">{language === 'ar' ? 'الكل' : 'All'}</span>
               {value === 'all' && <CheckCircle2 size={14} className="text-orange-500" />}
             </button>
             {options.map(opt => (
@@ -338,18 +338,21 @@ export function EarlyWarningRadar({ language = 'ar', teacherId, authUser }: { la
                value={subjectFilter} 
                onChange={setSubjectFilter} 
                placeholder={isRtl ? 'المادة' : 'Subject'} 
+               language={language}
              />
              <FlatDropdown 
                options={gradeOptions} 
                value={gradeFilter} 
                onChange={setGradeFilter} 
                placeholder={isRtl ? 'الصف الدراسي' : 'Grade'} 
+               language={language}
              />
              <FlatDropdown 
                options={classOptions} 
                value={classFilter} 
                onChange={setClassFilter} 
                placeholder={isRtl ? 'الفصل' : 'Class'} 
+               language={language}
              />
           </div>
         </div>

@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { CheckCircle2, XCircle, Clock, Search, ShieldCheck, HelpCircle, FileText, Flag, ChevronDown, ListChecks, Calendar, PieChart, Activity, AlertCircle } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Search, ShieldCheck, HelpCircle, FileText, Flag, ChevronDown, Calendar, PieChart, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getPendingQuestions, approveQuestion, rejectQuestion } from '@/services/questionBankData';
+import { getPendingQuestions, approveQuestion, rejectQuestion, getPendingAssessments, getPendingAssessmentDetail, approveAssessment, rejectAssessment, BankQuestion } from '@/services/questionBankData';
+import { getQuizById } from '@/services/assignmentData';
 
 function SmartDropdown({ label, options, value, onChange }: { label: string, options: string[], value: string, onChange: (v: string) => void }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -62,7 +63,7 @@ function SmartDropdown({ label, options, value, onChange }: { label: string, opt
   );
 }
 
-export function ApprovalHub() {
+export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
   const [subTab, setSubTab] = useState<'QUESTIONS' | 'ASSESSMENTS'>('QUESTIONS');
   
   // Smart Filters State
@@ -79,21 +80,14 @@ export function ApprovalHub() {
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectNote, setRejectNote] = useState('');
   
-  // الأسئلة المعلّقة الحقيقية (بانتظار اعتماد المشرف)
-  const [questions, setQuestions] = useState<{ id: string; type: string; subject: string; title: string; author: string; date: string }[]>([]);
+  // الأسئلة المعلّقة الحقيقية (بانتظار اعتماد المشرف) — بالبيانات الكاملة عشان نعرض الخيارات الحقيقية في شاشة المراجعة
+  const [questions, setQuestions] = useState<(BankQuestion & { creatorName: string; author: string; date: string })[]>([]);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(true);
 
   const refreshPending = () => {
     setIsLoadingQuestions(true);
     getPendingQuestions().then((qs) => {
-      setQuestions(qs.map((q) => ({
-        id: q.id,
-        type: q.type,
-        subject: q.subject,
-        title: q.title,
-        author: q.creatorName,
-        date: new Date(q.createdAt).toLocaleDateString(),
-      })));
+      setQuestions(qs.map((q) => ({ ...q, author: q.creatorName, date: new Date(q.createdAt).toLocaleDateString() })));
       setIsLoadingQuestions(false);
     });
   };
@@ -102,8 +96,38 @@ export function ApprovalHub() {
     refreshPending();
   }, []);
 
-  // مركز اعتماد التقييمات الكاملة (المولّدة من مخطط تلقائي) لسه مش مبني — يحتاج نظام المخطط نفسه الأول
-  const assessments: { id: string; subject: string; title: string; author: string; date: string }[] = [];
+  // التقييمات الحقيقية المولّدة من مخطط بنك الأسئلة واللي بانتظار اعتماد المشرف
+  const [assessments, setAssessments] = useState<{ id: string; subject: string; title: string; author: string; date: string; questionCount: number }[]>([]);
+  const [isLoadingAssessments, setIsLoadingAssessments] = useState(true);
+
+  const refreshPendingAssessments = () => {
+    setIsLoadingAssessments(true);
+    getPendingAssessments().then((list) => {
+      setAssessments(list.map((a) => ({
+        id: a.id,
+        subject: a.subject,
+        title: a.title,
+        author: a.teacherName,
+        date: new Date(a.createdAt).toLocaleDateString(),
+        questionCount: a.questionCount,
+      })));
+      setIsLoadingAssessments(false);
+    });
+  };
+
+  useEffect(() => {
+    refreshPendingAssessments();
+  }, []);
+
+  // تفاصيل التقييم المحدد حاليًا (الأسئلة الحقيقية المرتبطة + توزيع بلوم/الصعوبة + التواريخ)
+  const [assessmentDetail, setAssessmentDetail] = useState<{
+    bloomData: { name: string; value: number }[];
+    difficultyData: { name: string; value: number; color: string }[];
+    questions: BankQuestion[];
+    dueDate: string | null;
+    releaseAt: string | null;
+  } | null>(null);
+  const [isLoadingAssessmentDetail, setIsLoadingAssessmentDetail] = useState(false);
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>('q1');
   const [statusMap, setStatusMap] = useState<Record<string, 'APPROVED' | 'REJECTED'>>({});
@@ -111,14 +135,42 @@ export function ApprovalHub() {
   const activeList = subTab === 'QUESTIONS' ? questions : assessments;
   const activeItem = activeList.find(i => i.id === selectedItemId) || activeList[0];
 
+  useEffect(() => {
+    if (subTab !== 'ASSESSMENTS' || !activeItem) { setAssessmentDetail(null); return; }
+    setIsLoadingAssessmentDetail(true);
+    Promise.all([getPendingAssessmentDetail(activeItem.id), getQuizById(activeItem.id)]).then(([detail, quiz]) => {
+      if (detail) {
+        setAssessmentDetail({
+          bloomData: detail.bloomData,
+          difficultyData: detail.difficultyData,
+          questions: detail.questions,
+          dueDate: quiz?.dueDate || null,
+          releaseAt: quiz?.releaseAt || null,
+        });
+      } else {
+        setAssessmentDetail(null);
+      }
+      setIsLoadingAssessmentDetail(false);
+    });
+  }, [subTab, activeItem?.id]);
+
   const handleAction = async (id: string, action: 'APPROVED' | 'REJECTED', note?: string) => {
-    if (action === 'APPROVED') {
-      await approveQuestion(id);
+    if (subTab === 'QUESTIONS') {
+      if (action === 'APPROVED') {
+        await approveQuestion(id);
+      } else {
+        await rejectQuestion(id, note || '');
+      }
+      refreshPending();
     } else {
-      await rejectQuestion(id, note || '');
+      if (action === 'APPROVED') {
+        await approveAssessment(id);
+      } else {
+        await rejectAssessment(id, note || '');
+      }
+      refreshPendingAssessments();
     }
     setStatusMap(prev => ({ ...prev, [id]: action }));
-    refreshPending();
   };
 
   const submitRejection = () => {
@@ -130,16 +182,16 @@ export function ApprovalHub() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-160px)] bg-white rounded-3xl border border-slate-200 overflow-hidden" dir="rtl">
+    <div className="flex flex-col h-[calc(100vh-160px)] bg-white rounded-3xl border border-slate-200 overflow-hidden" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       
       {/* Horizontal Top Filter Bar */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white shrink-0">
         <div className="flex items-center gap-3">
-          <SmartDropdown label="الصف الدراسي" options={['الكل', 'الصف العاشر', 'الصف الحادي عشر', 'الصف الثاني عشر']} value={gradeFilter} onChange={setGradeFilter} />
-          <SmartDropdown label="المادة" options={['الكل', 'رياضيات', 'فيزياء', 'كيمياء', 'تاريخ', 'لغة عربية']} value={subjectFilter} onChange={setSubjectFilter} />
-          <SmartDropdown label="حالة الاعتماد" options={['الكل', 'قيد المراجعة', 'معتمد', 'مرفوض']} value={statusFilter} onChange={setStatusFilter} />
+          <SmartDropdown label={language === 'ar' ? 'الصف الدراسي' : 'Grade'} options={[language === 'ar' ? 'الكل' : 'All', 'الصف العاشر', 'الصف الحادي عشر', 'الصف الثاني عشر']} value={gradeFilter} onChange={setGradeFilter} />
+          <SmartDropdown label={language === 'ar' ? 'المادة' : 'Subject'} options={[language === 'ar' ? 'الكل' : 'All', 'رياضيات', 'فيزياء', 'كيمياء', 'تاريخ', 'لغة عربية']} value={subjectFilter} onChange={setSubjectFilter} />
+          <SmartDropdown label={language === 'ar' ? 'حالة الاعتماد' : 'Approval Status'} options={[language === 'ar' ? 'الكل' : 'All', 'قيد المراجعة', 'معتمد', 'مرفوض']} value={statusFilter} onChange={setStatusFilter} />
           {subTab === 'QUESTIONS' && (
-            <SmartDropdown label="نوع السؤال" options={['الكل', 'اختيار من متعدد', 'سؤال مقالي', 'صح أم خطأ']} value={typeFilter} onChange={setTypeFilter} />
+            <SmartDropdown label={language === 'ar' ? 'نوع السؤال' : 'Question Type'} options={[language === 'ar' ? 'الكل' : 'All', 'اختيار من متعدد', 'سؤال مقالي', 'صح أم خطأ']} value={typeFilter} onChange={setTypeFilter} />
           )}
         </div>
         
@@ -149,7 +201,7 @@ export function ApprovalHub() {
             type="text" 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="البحث في الطلبات..." 
+            placeholder={language === 'ar' ? 'البحث في الطلبات...' : 'Search requests...'} 
             className="w-full pl-3 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:bg-white focus:border-violet-300 transition-colors shadow-none"
           />
         </div>
@@ -164,22 +216,22 @@ export function ApprovalHub() {
                 onClick={() => { setSubTab('QUESTIONS'); setSelectedItemId(questions[0]?.id || null); setTypeFilter('الكل'); }}
                 className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors shadow-none ${subTab === 'QUESTIONS' ? 'bg-white text-violet-700 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                اعتماد الأسئلة
+                {language === 'ar' ? 'اعتماد الأسئلة' : 'Approve Questions'}
               </button>
               <button
                 onClick={() => { setSubTab('ASSESSMENTS'); setSelectedItemId(assessments[0]?.id || null); setAssessmentView('overview'); }}
                 className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors shadow-none ${subTab === 'ASSESSMENTS' ? 'bg-white text-violet-700 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                اعتماد التقييمات
+                {language === 'ar' ? 'اعتماد التقييمات' : 'Approve Assessments'}
               </button>
             </div>
           </div>
           
           <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-            {subTab === 'QUESTIONS' && isLoadingQuestions ? (
-              <p className="text-center text-sm text-slate-400 py-10">جاري التحميل...</p>
+            {(subTab === 'QUESTIONS' && isLoadingQuestions) || (subTab === 'ASSESSMENTS' && isLoadingAssessments) ? (
+              <p className="text-center text-sm text-slate-400 py-10">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
             ) : activeList.length === 0 ? (
-              <p className="text-center text-sm text-slate-400 py-10">{subTab === 'QUESTIONS' ? 'لا توجد أسئلة بانتظار الاعتماد' : 'مركز اعتماد التقييمات لسه مش شغّال — محتاج نظام مخطط التقييمات الأول'}</p>
+              <p className="text-center text-sm text-slate-400 py-10">{subTab === 'QUESTIONS' ? (language === 'ar' ? 'لا توجد أسئلة بانتظار الاعتماد' : 'No questions pending approval') : (language === 'ar' ? 'لا توجد تقييمات بانتظار الاعتماد' : 'No assessments pending approval')}</p>
             ) : activeList.map(item => {
               const isApproved = statusMap[item.id] === 'APPROVED';
               const isRejected = statusMap[item.id] === 'REJECTED';
@@ -228,24 +280,24 @@ export function ApprovalHub() {
                         <h2 className="text-2xl font-bold text-slate-800">{activeItem.title}</h2>
                         {!statusMap[activeItem.id] && (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                            قيد المراجعة
+                            {language === 'ar' ? 'قيد المراجعة' : 'Pending Review'}
                           </span>
                         )}
                         {statusMap[activeItem.id] === 'APPROVED' && (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            تم الاعتماد
+                            {language === 'ar' ? 'تم الاعتماد' : 'Approved'}
                           </span>
                         )}
                         {statusMap[activeItem.id] === 'REJECTED' && (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200">
-                            مرفوض بانتظار التعديل
+                            {language === 'ar' ? 'مرفوض بانتظار التعديل' : 'Rejected, Awaiting Edit'}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-4 text-sm text-slate-500 font-medium">
-                        <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-violet-600"></div>المادة: <b className="text-slate-700">{activeItem.subject}</b></span>
+                        <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-violet-600"></div>{language === 'ar' ? 'المادة:' : 'Subject:'} <b className="text-slate-700">{activeItem.subject}</b></span>
                         <span className="text-slate-300">|</span>
-                        <span className="flex items-center gap-1.5"><div className="w-5 h-5 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center text-xs font-bold text-slate-600 border border-white shadow-none">{activeItem.author.charAt(0)}</div>المرسل: <b className="text-slate-700">{activeItem.author}</b></span>
+                        <span className="flex items-center gap-1.5"><div className="w-5 h-5 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center text-xs font-bold text-slate-600 border border-white shadow-none">{activeItem.author.charAt(0)}</div>{language === 'ar' ? 'المرسل:' : 'Submitted by:'} <b className="text-slate-700">{activeItem.author}</b></span>
                       </div>
                     </div>
                     <div className="flex gap-3 shrink-0">
@@ -254,14 +306,14 @@ export function ApprovalHub() {
                         disabled={statusMap[activeItem.id] === 'REJECTED'}
                         className="px-5 py-2 rounded-lg border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-40 disabled:hover:bg-transparent shadow-none"
                       >
-                        إرسال للتعديل
+                        {language === 'ar' ? 'إرسال للتعديل' : 'Send for Revision'}
                       </button>
                       <button 
                         onClick={() => handleAction(activeItem.id, 'APPROVED')}
                         disabled={statusMap[activeItem.id] === 'APPROVED'}
                         className="px-5 py-2 rounded-lg bg-violet-600 text-white font-bold text-sm hover:bg-violet-700 transition-colors shadow-none disabled:opacity-50"
                       >
-                        اعتماد ونشر
+                        {language === 'ar' ? 'اعتماد ونشر' : 'Approve & Publish'}
                       </button>
                     </div>
                   </div>
@@ -272,13 +324,13 @@ export function ApprovalHub() {
                         onClick={() => setAssessmentView('overview')}
                         className={`px-6 py-2 text-sm font-bold rounded-lg transition-colors shadow-none ${assessmentView === 'overview' ? 'bg-white text-violet-700 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
                       >
-                        نظرة عامة وتحليل
+                        {language === 'ar' ? 'نظرة عامة وتحليل' : 'Overview & Analysis'}
                       </button>
                       <button
                         onClick={() => setAssessmentView('preview')}
                         className={`px-6 py-2 text-sm font-bold rounded-lg transition-colors shadow-none ${assessmentView === 'preview' ? 'bg-white text-violet-700 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
                       >
-                        استعراض الأسئلة
+                        {language === 'ar' ? 'استعراض الأسئلة' : 'Review Questions'}
                       </button>
                     </div>
                   )}
@@ -289,66 +341,76 @@ export function ApprovalHub() {
                     <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-none border-r-4 border-r-violet-400">
                       <h3 className="font-bold text-slate-700 mb-2 flex items-center gap-2">
                         <Flag size={16} className="text-violet-500" />
-                        ملاحظة من النظام
+                        {language === 'ar' ? 'ملاحظة من النظام' : 'System Note'}
                       </h3>
                       <p className="text-sm text-slate-600 font-medium">
-                        هذا المحتوى مقترح من قبل المعلم ({activeItem.author}) ويحتاج إلى مراجعة من قبل مشرف المادة قبل نشره في المكتبة العامة. تأكد من صحة الصياغة العلمية والمقاييس.
+                        {language === 'ar' ? `هذا المحتوى مقترح من قبل المعلم (${activeItem.author}) ويحتاج إلى مراجعة من قبل مشرف المادة قبل نشره في المكتبة العامة. تأكد من صحة الصياغة العلمية والمقاييس.` : `This content was submitted by the teacher (${activeItem.author}) and needs review by the subject supervisor before publishing to the public library. Verify the scientific accuracy and standards.`}
                       </p>
                     </div>
                     
                     {subTab === 'QUESTIONS' ? (
-                      // QUESTION VIEW
+                      // QUESTION VIEW — بيانات حقيقية من السؤال المحدد فعليًا
                       <div className="bg-white border border-slate-200 shadow-none rounded-2xl p-8 relative">
-                        <div className="absolute top-8 left-8">
+                        <div className="absolute top-8 left-8 flex gap-2">
                           <span className="px-3 py-1 bg-violet-50 text-violet-700 font-bold text-xs rounded-lg border border-violet-200">
-                            نقطتان (2)
+                            {(activeItem as any).bloomLevel}
+                          </span>
+                          <span className="px-3 py-1 bg-slate-50 text-slate-600 font-bold text-xs rounded-lg border border-slate-200">
+                            {(activeItem as any).difficulty}
                           </span>
                         </div>
                         <div className="inline-flex flex-col gap-2 mb-6">
                           <h4 className="font-bold text-slate-800 text-lg leading-relaxed">{activeItem.title}</h4>
                         </div>
-                        
-                        <div className="space-y-3">
-                          <div className="flex items-center p-4 rounded-xl border border-emerald-200 bg-emerald-50 relative overflow-hidden group">
-                            <div className="flex items-center gap-4 z-10 w-full">
-                              <div className="w-8 h-8 rounded-full bg-white text-emerald-600 border border-emerald-200 flex items-center justify-center text-sm font-bold shrink-0 shadow-none">أ</div>
-                              <span className="font-bold text-emerald-800 text-sm">إجابة صحيحة نموذجية (تطبيق القانون الثالث)</span>
-                              <div className="mr-auto"><CheckCircle2 size={20} className="text-emerald-500" /></div>
-                            </div>
+
+                        {(activeItem as any).type === 'اختيار من متعدد' && Array.isArray((activeItem as any).options) ? (
+                          <div className="space-y-3">
+                            {(activeItem as any).options.map((opt: any, idx: number) => (
+                              <div key={opt.id || idx} className={`flex items-center gap-4 p-4 rounded-xl border relative overflow-hidden ${opt.isCorrect ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+                                <div className={`w-8 h-8 rounded-full border flex items-center justify-center text-sm font-bold shrink-0 shadow-none ${opt.isCorrect ? 'bg-white text-emerald-600 border-emerald-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{['أ', 'ب', 'ج', 'د', 'هـ', 'و'][idx] || idx + 1}</div>
+                                <span className={`text-sm ${opt.isCorrect ? 'font-bold text-emerald-800' : 'font-medium text-slate-700'}`}>{opt.text}</span>
+                                {opt.isCorrect && <div className="mr-auto"><CheckCircle2 size={20} className="text-emerald-500" /></div>}
+                              </div>
+                            ))}
                           </div>
-                          <div className="flex items-center gap-4 p-4 rounded-xl border border-slate-200 bg-white">
-                            <div className="w-8 h-8 rounded-full bg-slate-50 text-slate-500 border border-slate-200 flex items-center justify-center text-sm font-bold shrink-0">ب</div>
-                            <span className="font-medium text-slate-700 text-sm">مشتت أول (نتيجة خطأ في الحساب)</span>
+                        ) : (activeItem as any).type === 'صح أم خطأ' && Array.isArray((activeItem as any).options) ? (
+                          <div className="space-y-3">
+                            {(activeItem as any).options.map((opt: any, idx: number) => (
+                              <div key={opt.id || idx} className={`flex items-center gap-4 p-4 rounded-xl border ${opt.isCorrect ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+                                <span className={`text-sm ${opt.isCorrect ? 'font-bold text-emerald-800' : 'font-medium text-slate-700'}`}>{opt.text}</span>
+                                {opt.isCorrect && <div className="mr-auto"><CheckCircle2 size={20} className="text-emerald-500" /></div>}
+                              </div>
+                            ))}
                           </div>
-                          <div className="flex items-center gap-4 p-4 rounded-xl border border-slate-200 bg-white">
-                            <div className="w-8 h-8 rounded-full bg-slate-50 text-slate-500 border border-slate-200 flex items-center justify-center text-sm font-bold shrink-0">ج</div>
-                            <span className="font-medium text-slate-700 text-sm">مشتت ثاني (استخدام قانون مختلف)</span>
-                          </div>
-                          <div className="flex items-center gap-4 p-4 rounded-xl border border-slate-200 bg-white">
-                            <div className="w-8 h-8 rounded-full bg-slate-50 text-slate-500 border border-slate-200 flex items-center justify-center text-sm font-bold shrink-0">د</div>
-                            <span className="font-medium text-slate-700 text-sm">مشتت ثالث (إجابة عشوائية)</span>
-                          </div>
-                        </div>
+                        ) : (
+                          <p className="text-sm font-medium text-slate-500 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                            {language === 'ar' ? `نوع السؤال: ${(activeItem as any).type}` : `Question type: ${(activeItem as any).type}`}
+                          </p>
+                        )}
                       </div>
                     ) : (
                       // ASSESSMENT VIEW
                       <>
-                        {assessmentView === 'overview' ? (
+                        {isLoadingAssessmentDetail ? (
+                          <p className="text-center text-sm text-slate-400 py-10">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
+                        ) : !assessmentDetail ? (
+                          <p className="text-center text-sm text-slate-400 py-10">{language === 'ar' ? 'تعذر تحميل تفاصيل التقييم' : 'Could not load assessment details'}</p>
+                        ) : assessmentView === 'overview' ? (
                           <div className="grid grid-cols-2 gap-6">
                             {/* Dates Card */}
                             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-none">
                               <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-6">
                                 <Calendar size={18} className="text-violet-500" />
-                                مواعيد الإتاحة
+                                {language === 'ar' ? 'مواعيد الإتاحة' : 'Availability Dates'}
                               </h3>
                               <div className="space-y-4">
                                 <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
-                                  <span className="text-sm font-bold text-slate-500">تاريخ البدء</span>
-                                  <span className="text-sm font-bold text-slate-800">12 أكتوبر 2023 - 08:00 ص</span>
+                                  <span className="text-sm font-bold text-slate-500">{language === 'ar' ? 'تاريخ البدء' : 'Start Date'}</span>
+                                  <span className="text-sm font-bold text-slate-800">{assessmentDetail.releaseAt ? new Date(assessmentDetail.releaseAt).toLocaleString() : (language === 'ar' ? 'متاح دائماً' : 'Always available')}</span>
                                 </div>
                                 <div className="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-200">
-                                  <span className="text-sm font-bold text-amber-700">تاريخ الاستحقاق</span>
-                                  <span className="text-sm font-bold text-amber-900">15 أكتوبر 2023 - 11:59 م</span>
+                                  <span className="text-sm font-bold text-amber-700">{language === 'ar' ? 'تاريخ الاستحقاق' : 'Due Date'}</span>
+                                  <span className="text-sm font-bold text-amber-900">{assessmentDetail.dueDate ? new Date(assessmentDetail.dueDate).toLocaleString() : (language === 'ar' ? 'بدون تاريخ استحقاق' : 'No due date')}</span>
                                 </div>
                               </div>
                             </div>
@@ -357,66 +419,84 @@ export function ApprovalHub() {
                             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-none">
                               <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-6">
                                 <PieChart size={18} className="text-violet-500" />
-                                تحليل محتوى التقييم
+                                {language === 'ar' ? 'تحليل محتوى التقييم' : 'Assessment Content Analysis'}
                               </h3>
                               
-                              <div className="mb-6">
-                                <div className="flex justify-between text-xs font-bold text-slate-500 mb-2">
-                                  <span>توزيع أنواع الأسئلة (15 سؤال)</span>
-                                </div>
-                                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
-                                  <div className="h-full bg-violet-600" style={{ width: '60%' }} title="اختياري (60%)"></div>
-                                  <div className="h-full bg-emerald-500" style={{ width: '25%' }} title="صح أم خطأ (25%)"></div>
-                                  <div className="h-full bg-amber-400" style={{ width: '15%' }} title="مقالي (15%)"></div>
-                                </div>
-                                <div className="flex gap-4 mt-2 text-[10px] font-medium text-slate-500">
-                                  <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-violet-600" /> اختياري (10)</span>
-                                  <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500" /> صح أم خطأ (3)</span>
-                                  <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-400" /> مقالي (2)</span>
-                                </div>
-                              </div>
+                              {(() => {
+                                const qs = assessmentDetail.questions;
+                                const typeCounts: Record<string, number> = {};
+                                qs.forEach((q) => { typeCounts[q.type] = (typeCounts[q.type] || 0) + 1; });
+                                const typeColors = ['bg-violet-600', 'bg-emerald-500', 'bg-amber-400', 'bg-sky-500', 'bg-rose-400'];
+                                const typeEntries = Object.entries(typeCounts);
+                                return (
+                                  <div className="mb-6">
+                                    <div className="flex justify-between text-xs font-bold text-slate-500 mb-2">
+                                      <span>{language === 'ar' ? `توزيع أنواع الأسئلة (${qs.length} سؤال)` : `Question Type Distribution (${qs.length} questions)`}</span>
+                                    </div>
+                                    <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
+                                      {typeEntries.map(([type, count], i) => (
+                                        <div key={type} className={`h-full ${typeColors[i % typeColors.length]}`} style={{ width: `${(count / qs.length) * 100}%` }} title={`${type} (${count})`}></div>
+                                      ))}
+                                    </div>
+                                    <div className="flex gap-4 mt-2 text-[10px] font-medium text-slate-500 flex-wrap">
+                                      {typeEntries.map(([type, count], i) => (
+                                        <span key={type} className="flex items-center gap-1"><div className={`w-2 h-2 rounded-full ${typeColors[i % typeColors.length]}`} /> {type} ({count})</span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
 
                               <div>
                                 <div className="flex justify-between text-xs font-bold text-slate-500 mb-2">
-                                  <span>مستويات بلوم</span>
+                                  <span>{language === 'ar' ? 'مستويات بلوم' : "Bloom's Levels"}</span>
                                 </div>
-                                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
-                                  <div className="h-full bg-indigo-500" style={{ width: '40%' }}></div>
-                                  <div className="h-full bg-sky-500" style={{ width: '40%' }}></div>
-                                  <div className="h-full bg-rose-400" style={{ width: '20%' }}></div>
-                                </div>
-                                <div className="flex gap-4 mt-2 text-[10px] font-medium text-slate-500">
-                                  <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-indigo-500" /> تذكر (40%)</span>
-                                  <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-sky-500" /> فهم (40%)</span>
-                                  <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-rose-400" /> تطبيق (20%)</span>
-                                </div>
+                                {assessmentDetail.bloomData.length === 0 ? (
+                                  <p className="text-xs text-slate-400">{language === 'ar' ? 'لا توجد بيانات' : 'No data'}</p>
+                                ) : (() => {
+                                  const bloomColors = ['bg-indigo-500', 'bg-sky-500', 'bg-rose-400', 'bg-emerald-500', 'bg-amber-400', 'bg-violet-500'];
+                                  const totalBloom = assessmentDetail.bloomData.reduce((s, b) => s + b.value, 0);
+                                  return (
+                                    <>
+                                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
+                                        {assessmentDetail.bloomData.map((b, i) => (
+                                          <div key={b.name} className={`h-full ${bloomColors[i % bloomColors.length]}`} style={{ width: `${(b.value / totalBloom) * 100}%` }}></div>
+                                        ))}
+                                      </div>
+                                      <div className="flex gap-4 mt-2 text-[10px] font-medium text-slate-500 flex-wrap">
+                                        {assessmentDetail.bloomData.map((b, i) => (
+                                          <span key={b.name} className="flex items-center gap-1"><div className={`w-2 h-2 rounded-full ${bloomColors[i % bloomColors.length]}`} /> {b.name} ({Math.round((b.value / totalBloom) * 100)}%)</span>
+                                        ))}
+                                      </div>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             </div>
                           </div>
                         ) : (
                           <div className="space-y-4">
-                            {[1, 2, 3].map((num) => (
-                              <div key={num} className="bg-white border border-slate-200 rounded-xl p-6 relative shadow-none">
-                                <div className="absolute top-6 left-6">
-                                  <span className="px-3 py-1 bg-violet-50 text-violet-700 font-bold text-xs rounded-lg border border-violet-200">
-                                    نقطتان (2)
-                                  </span>
+                            {assessmentDetail.questions.length === 0 ? (
+                              <p className="text-center text-sm text-slate-400 py-10">{language === 'ar' ? 'مفيش أسئلة مرتبطة بالتقييم ده' : 'No questions linked to this assessment'}</p>
+                            ) : assessmentDetail.questions.map((q, idx) => (
+                              <div key={q.id} className="bg-white border border-slate-200 rounded-xl p-6 relative shadow-none">
+                                <div className="absolute top-6 left-6 flex gap-2">
+                                  <span className="px-3 py-1 bg-violet-50 text-violet-700 font-bold text-xs rounded-lg border border-violet-200">{q.bloomLevel}</span>
+                                  <span className="px-3 py-1 bg-slate-50 text-slate-600 font-bold text-xs rounded-lg border border-slate-200">{q.difficulty}</span>
                                 </div>
-                                <h5 className="font-bold text-slate-800 text-sm mb-4 max-w-2xl leading-relaxed">السؤال رقم {num}: ما هو الأثر الرئيسي للثورة الصناعية على البنية الاجتماعية في أوروبا خلال القرن التاسع عشر؟</h5>
-                                <div className="space-y-2">
-                                  <div className="flex items-center p-3 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-sm font-bold relative">
-                                    <CheckCircle2 size={16} className="text-emerald-500 ml-2" />
-                                    ظهور طبقة عاملة حضرية جديدة (البروليتاريا)
+                                <h5 className="font-bold text-slate-800 text-sm mb-4 max-w-2xl leading-relaxed">{language === 'ar' ? `السؤال رقم ${idx + 1}: ${q.title}` : `Question ${idx + 1}: ${q.title}`}</h5>
+                                {Array.isArray(q.options) && q.options.length > 0 ? (
+                                  <div className="space-y-2">
+                                    {q.options.map((opt: any, oIdx: number) => (
+                                      <div key={opt.id || oIdx} className={`flex items-center p-3 rounded-lg border text-sm ${opt.isCorrect ? 'border-emerald-200 bg-emerald-50 text-emerald-800 font-bold' : 'border-slate-200 bg-slate-50 text-slate-600 font-medium'}`}>
+                                        {opt.isCorrect ? <CheckCircle2 size={16} className="text-emerald-500 ml-2" /> : <div className="w-4 h-4 ml-2" />}
+                                        {opt.text}
+                                      </div>
+                                    ))}
                                   </div>
-                                  <div className="flex items-center p-3 rounded-lg border border-slate-200 bg-slate-50 text-slate-600 text-sm font-medium">
-                                    <div className="w-4 h-4 ml-2" />
-                                    عودة النظام الإقطاعي بقوة
-                                  </div>
-                                  <div className="flex items-center p-3 rounded-lg border border-slate-200 bg-slate-50 text-slate-600 text-sm font-medium">
-                                    <div className="w-4 h-4 ml-2" />
-                                    انخفاض عدد سكان المدن الكبرى
-                                  </div>
-                                </div>
+                                ) : (
+                                  <p className="text-xs text-slate-400">{language === 'ar' ? `نوع السؤال: ${q.type}` : `Question type: ${q.type}`}</p>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -430,8 +510,8 @@ export function ApprovalHub() {
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-slate-50/50">
               <ShieldCheck size={64} className="mb-6 opacity-20 text-slate-400" />
-              <h3 className="text-xl font-bold text-slate-600 mb-2">مساحة الاعتمادات</h3>
-              <p className="text-sm font-medium">اختر عنصراً من القائمة الجانبية لمعاينته ومراجعته</p>
+              <h3 className="text-xl font-bold text-slate-600 mb-2">{language === 'ar' ? 'مساحة الاعتمادات' : 'Approvals Space'}</h3>
+              <p className="text-sm font-medium">{language === 'ar' ? 'اختر عنصراً من القائمة الجانبية لمعاينته ومراجعته' : 'Select an item from the sidebar to preview and review it'}</p>
             </div>
           )}
         </div>
@@ -461,14 +541,14 @@ export function ApprovalHub() {
               
               <h3 className="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">
                 <AlertCircle size={22} className="text-amber-500" />
-                سبب طلب التعديل
+                {language === 'ar' ? 'سبب طلب التعديل' : 'Reason for Revision Request'}
               </h3>
-              <p className="text-sm text-slate-500 font-medium mb-6">يرجى كتابة ملاحظاتك الإرشادية بوضوح ليتمكن المعلم من تصحيح المحتوى وإعادة إرساله.</p>
+              <p className="text-sm text-slate-500 font-medium mb-6">{language === 'ar' ? 'يرجى كتابة ملاحظاتك الإرشادية بوضوح ليتمكن المعلم من تصحيح المحتوى وإعادة إرساله.' : 'Please write clear guidance notes so the teacher can correct the content and resubmit it.'}</p>
               
               <textarea 
                 value={rejectNote}
                 onChange={(e) => setRejectNote(e.target.value)}
-                placeholder="مثال: يرجى مراجعة المشتت ب في السؤال الثالث ليكون أكثر ارتباطاً بالسياق..."
+                placeholder={language === 'ar' ? 'مثال: يرجى مراجعة المشتت ب في السؤال الثالث ليكون أكثر ارتباطاً بالسياق...' : 'e.g. Please review distractor B in question 3 to be more contextually relevant...'}
                 className="w-full h-32 p-4 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:border-violet-300 transition-all text-sm font-medium resize-none mb-6 shadow-none"
               />
               
@@ -477,14 +557,14 @@ export function ApprovalHub() {
                   onClick={() => setRejectModalOpen(false)}
                   className="px-6 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors shadow-none"
                 >
-                  إلغاء
+                  {language === 'ar' ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button 
                   onClick={submitRejection}
                   disabled={!rejectNote.trim()}
                   className="px-6 py-2.5 rounded-xl bg-amber-500 text-white font-bold hover:bg-amber-600 transition-colors disabled:opacity-50 shadow-none border border-amber-600"
                 >
-                  إرسال الملاحظات
+                  {language === 'ar' ? 'إرسال الملاحظات' : 'Send Feedback'}
                 </button>
               </div>
             </motion.div>
