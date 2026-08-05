@@ -471,7 +471,7 @@ export async function submitQuizAttempt(attemptId: string, quiz: Quiz): Promise<
       }
     } else if (q.type === 'numeric_answer') {
       const studentAnswer = parseFloat(answers[q.id]);
-      const correctValue = typeof q.numericAnswer === 'number' ? q.numericAnswer : parseFloat(q.numericAnswer);
+      const correctValue = typeof q.numericAnswer === 'number' ? q.numericAnswer : NaN;
       const tolerance = q.numericTolerance || 0;
       if (!isNaN(studentAnswer) && !isNaN(correctValue) && Math.abs(studentAnswer - correctValue) <= tolerance) {
         score += q.points || 0;
