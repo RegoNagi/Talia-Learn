@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   MessageSquare, 
   CheckSquare, 
@@ -37,10 +38,16 @@ interface ClassSpaceViewProps {
 }
 
 export function ClassSpaceView({ authUser, userRole, classId: initialClassId, subject: initialSubject, grade: initialGrade, className: initialClassName, myClasses = [], mySubjects = [] }: ClassSpaceViewProps) {
+  const router = useRouter();
   const [activeClassId, setActiveClassId] = useState(initialClassId);
   const [activeSubject, setActiveSubject] = useState(initialSubject);
   const [activeGrade, setActiveGrade] = useState(initialGrade);
   const [activeClassName, setActiveClassName] = useState(initialClassName);
+
+  const goToCreateAssignment = () => {
+    const from = typeof window !== 'undefined' ? encodeURIComponent(window.location.pathname + window.location.search) : '';
+    router.push(`/assessment-builder?type=assignment&classId=${activeClassId || ''}&subject=${encodeURIComponent(activeSubject || '')}&grade=${encodeURIComponent(activeGrade || '')}&from=${from}`);
+  };
 
   useEffect(() => {
     setActiveClassId(initialClassId);
@@ -63,7 +70,6 @@ export function ClassSpaceView({ authUser, userRole, classId: initialClassId, su
     scheduleLiveSession,
     homeworkList,
     isLoadingHomework,
-    createHomework,
     quizzes,
     isLoadingQuizzes,
     createQuiz,
@@ -327,7 +333,7 @@ export function ClassSpaceView({ authUser, userRole, classId: initialClassId, su
                   <HomeworkWidget
                     homeworkList={homeworkList}
                     isLoading={isLoadingHomework}
-                    onCreateHomework={createHomework}
+                    onAddClick={goToCreateAssignment}
                   />
                 </div>
 
@@ -381,6 +387,7 @@ export function ClassSpaceView({ authUser, userRole, classId: initialClassId, su
                     onSearchChange={setResourceSearch}
                     selectedCategory={resourceCategory}
                     onCategoryChange={setResourceCategory}
+                    onGoToLibrary={() => setActiveTab('resources')}
                   />
                 </div>
 
@@ -398,7 +405,7 @@ export function ClassSpaceView({ authUser, userRole, classId: initialClassId, su
             <HomeworkWidget
               homeworkList={homeworkList}
               isLoading={isLoadingHomework}
-              onCreateHomework={createHomework}
+              onAddClick={goToCreateAssignment}
             />
             <QuizzesWidget
               quizzes={quizzes}

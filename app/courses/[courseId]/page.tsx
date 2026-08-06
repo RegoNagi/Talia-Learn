@@ -11,10 +11,12 @@ import { AssessmentsTab } from '@/components/tabs/AssessmentsTab';
 import { GradebookTab } from '@/components/tabs/GradebookTab';
 import { LiveSessionsTab } from '@/components/tabs/LiveSessionsTab';
 import { TaliaAIAssistant } from '@/components/TaliaAIAssistant';
+import { TodoSidebar } from '@/components/TodoSidebar';
+import { getRealTodoTasks, TodoTask } from '@/services/todoData';
 import { AssessmentLanding, QuizEngine, AssignmentEngine } from '@/components/AssessmentEngine';
 import { User, Task } from '@/types/course';
 import { motion } from 'motion/react';
-import { Wand2, FileText, PenTool, Video, Book, Layout, ArrowLeft, Calendar, Sparkles, Globe, Clock, AlertCircle, BookOpen, Compass, Zap, Sun, CalendarRange, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Wand2, FileText, PenTool, Video, Book, Layout, ArrowLeft, Calendar, Sparkles, Globe } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams, useParams, useRouter } from 'next/navigation';
 
@@ -52,7 +54,9 @@ function CourseWorkspaceContent() {
   const [activeTab, setActiveTab] = useState('learning-path');
   const [activeSpace, setActiveSpace] = useState<string | null>(null);
   const [isSidebarPinned, setIsSidebarPinned] = useState(false);
-  const [isTodoOpen, setIsTodoOpen] = useState(true);
+  const [isTodoOpen, setIsTodoOpen] = useState(false);
+  const [todoTasks, setTodoTasks] = useState<TodoTask[]>([]);
+  const [isTodoLoading, setIsTodoLoading] = useState(true);
   const [isScheduleSessionOpen, setIsScheduleSessionOpen] = useState(false);
   
   // Assessment Journey view state
@@ -89,6 +93,19 @@ function CourseWorkspaceContent() {
   useEffect(() => {
     if (realClassId) getClassSectionById(realClassId).then(setRealClassInfo);
   }, [realClassId]);
+
+  const refreshTodo = () => {
+    if (!realClassId || !realSubject) { setIsTodoLoading(false); return; }
+    setIsTodoLoading(true);
+    getRealTodoTasks({ teacherId: authUser?.teacherId, classId: realClassId, subject: realSubject, grade: realClassInfo?.gradeLevel }).then((tasks) => {
+      setTodoTasks(tasks);
+      setIsTodoLoading(false);
+    });
+  };
+
+  useEffect(() => {
+    refreshTodo();
+  }, [realClassId, realSubject, realClassInfo?.gradeLevel, authUser?.teacherId]);
 
   const [demoAssessments, setDemoAssessments] = useState<DemoAssessment[]>([
     {
@@ -285,7 +302,7 @@ function CourseWorkspaceContent() {
                   </>
                 ) : (
                   <>
-                    {activeTab === 'subject-space' && <SpacesView space="subject" classId={realClassId} subject={realSubject} authUser={authUser} />}
+                    {activeTab === 'subject-space' && <SpacesView space="subject" classId={realClassId} subject={realSubject} authUser={authUser} onNavigate={setActiveTab} />}
                     {activeTab === 'learning-path' && <LearningPathTab viewRole={viewRole} demoAssessments={demoAssessments} language={language} onAssessmentClick={(id) => { setCurrentAssessmentId(id); setEngineView('ASSESSMENT_LANDING'); }} teacherId={authUser?.teacherId} classId={realClassId} subject={realSubject} grade={realClassInfo?.gradeLevel} />}
                     {activeTab === 'live-sessions' && <LiveSessionsTab viewRole={viewRole} classId={realClassId} subject={realSubject} teacherId={authUser?.teacherId} teacherName={authUser?.name} studentId={authUser?.studentId} className={realClassInfo?.name} />}
                     {activeTab === 'timeline' && <TimelineTab role={viewRole.toLowerCase()} language={language} classId={realClassId} subject={realSubject} grade={realClassInfo?.gradeLevel} teacherId={authUser?.teacherId} onOpenAssessments={() => setActiveTab('assessments')} />}
@@ -305,173 +322,15 @@ function CourseWorkspaceContent() {
         {activeTab === 'subject-space' && <TaliaAIAssistant />}
       </main>
 
-      {/* The Compass Sidebar (Right Sidebar) */}
-      <aside className={`${isTodoOpen ? 'w-96 px-5' : 'w-20 px-2'} h-screen sticky top-0 overflow-y-auto pt-12 pb-6 border-l border-slate-100 flex flex-col gap-6 flex-shrink-0 bg-slate-50/50 transition-all duration-300`}>
-        <div className={`flex items-center ${isTodoOpen ? 'justify-between px-2' : 'justify-center'}`}>
-          {isTodoOpen && (
-            <div className="flex items-center gap-2">
-              <Compass className="text-indigo-600" size={22} />
-              <h2 className="text-xl font-bold text-slate-800">{language === 'ar' ? 'المهام' : 'To Do'}</h2>
-            </div>
-          )}
-          <button onClick={() => setIsTodoOpen(!isTodoOpen)} className="text-slate-400 hover:text-slate-600 flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-200/50 transition-colors">
-            {isTodoOpen ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-          </button>
-        </div>
-        
-        {isTodoOpen ? (
-          <div className="flex flex-col gap-6">
-            {/* 1. Overdue / Cumulative */}
-            <div>
-              <h3 className="text-sm font-bold text-slate-700 mb-3 px-2 flex items-center gap-2">
-                <AlertCircle size={16} className="text-rose-500" />
-                Overdue / Cumulative
-              </h3>
-              <div className="flex flex-col gap-3">
-                <div className="bg-rose-100 border border-rose-300 shadow-sm opacity-100 transition-all hover:border-rose-400 rounded-2xl py-2.5 px-3.5 relative cursor-pointer">
-                   <div className="flex justify-end mb-1.5">
-                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/60 text-[10px] font-bold text-slate-600 shadow-sm"><BookOpen size={12}/> Chemistry</span>
-                   </div>
-                   <h4 className="text-sm font-bold text-slate-900 mb-2 mt-1">Grading: 12 Lab Reports Pending</h4>
-                   <div className="flex items-center gap-3 mt-1.5 text-xs font-medium text-slate-700">
-                     <span className="flex items-center gap-1 font-bold text-rose-500"><AlertCircle size={12}/> 2 Days Overdue</span>
-                   </div>
-                </div>
-                
-                <div className="bg-rose-100 border border-rose-300 shadow-sm opacity-100 transition-all hover:border-rose-400 rounded-2xl py-2.5 px-3.5 relative cursor-pointer">
-                   <div className="flex justify-end mb-1.5">
-                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/60 text-[10px] font-bold text-slate-600 shadow-sm"><BookOpen size={12}/> Math</span>
-                   </div>
-                   <h4 className="text-sm font-bold text-slate-900 mb-2 mt-1">Review Math Assignments</h4>
-                   <div className="flex items-center gap-3 mt-1.5 text-xs font-medium text-slate-700">
-                     <span className="flex items-center gap-1 font-bold text-rose-500"><AlertCircle size={12}/> 1 Day Overdue</span>
-                   </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Today */}
-            <div>
-              <h3 className="text-sm font-bold text-slate-700 mb-3 px-2 flex items-center gap-2">
-                <Zap size={16} className="text-amber-500" />
-                Today
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-              </h3>
-              <div className="flex flex-col gap-3">
-                <div className="bg-amber-100 border border-amber-300 shadow-sm opacity-100 transition-all hover:border-amber-400 rounded-2xl py-2.5 px-3.5 relative cursor-pointer">
-                   <div className="flex justify-end mb-1.5">
-                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/60 text-[10px] font-bold text-slate-600 shadow-sm"><BookOpen size={12}/> Math</span>
-                   </div>
-                   <h4 className="text-sm font-bold text-slate-900 mb-2 mt-1">Monitor Quiz: Advanced Linear Algebra</h4>
-                   <div className="flex items-center gap-3 mt-1.5 text-xs font-medium text-slate-700">
-                     <span className="flex items-center gap-1"><Calendar size={12}/> Today</span>
-                     <span className="flex items-center gap-1 text-red-500 font-bold"><Clock size={12}/> 🔴 Live Now</span>
-                   </div>
-                </div>
-
-                <div className="bg-amber-100 border border-amber-300 shadow-sm opacity-100 transition-all hover:border-amber-400 rounded-2xl py-2.5 px-3.5 relative cursor-pointer">
-                   <div className="flex justify-end mb-1.5">
-                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/60 text-[10px] font-bold text-slate-600 shadow-sm"><BookOpen size={12}/> Physics</span>
-                   </div>
-                   <h4 className="text-sm font-bold text-slate-900 mb-2 mt-1">Host Live Session</h4>
-                   <div className="flex items-center gap-3 mt-1.5 text-xs font-medium text-slate-700">
-                     <span className="flex items-center gap-1"><Calendar size={12}/> Today</span>
-                     <span className="flex items-center gap-1"><Clock size={12}/> 2:00 PM</span>
-                   </div>
-                </div>
-
-                <div className="bg-amber-100 border border-amber-300 shadow-sm opacity-100 transition-all hover:border-amber-400 rounded-2xl py-2.5 px-3.5 relative cursor-pointer">
-                   <div className="flex justify-end mb-1.5">
-                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/60 text-[10px] font-bold text-slate-600 shadow-sm"><BookOpen size={12}/> English</span>
-                   </div>
-                   <h4 className="text-sm font-bold text-slate-900 mb-2 mt-1">Grade Literature Essays</h4>
-                   <div className="flex items-center gap-3 mt-1.5 text-xs font-medium text-slate-700">
-                     <span className="flex items-center gap-1"><Calendar size={12}/> Today</span>
-                     <span className="flex items-center gap-1"><Clock size={12}/> 5:30 PM</span>
-                   </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Tomorrow */}
-            <div>
-              <h3 className="text-sm font-bold text-slate-700 mb-3 px-2 flex items-center gap-2">
-                <Sun size={16} className="text-sky-500" />
-                Tomorrow
-              </h3>
-              <div className="flex flex-col gap-3">
-                <div className="bg-blue-100 border border-blue-300 shadow-sm opacity-100 transition-all hover:border-blue-400 rounded-2xl py-2.5 px-3.5 relative cursor-pointer">
-                   <div className="flex justify-end mb-1.5">
-                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/60 text-[10px] font-bold text-slate-600 shadow-sm"><BookOpen size={12}/> World History</span>
-                   </div>
-                   <h4 className="text-sm font-bold text-slate-900 mb-2 mt-1">Review 25 History Projects</h4>
-                   <div className="flex items-center gap-3 mt-1.5 text-xs font-medium text-slate-700">
-                     <span className="flex items-center gap-1"><Calendar size={12}/> Tomorrow</span>
-                     <span className="flex items-center gap-1"><Clock size={12}/> 11:59 PM</span>
-                   </div>
-                </div>
-                
-                <div className="bg-blue-100 border border-blue-300 shadow-sm opacity-100 transition-all hover:border-blue-400 rounded-2xl py-2.5 px-3.5 relative cursor-pointer">
-                   <div className="flex justify-end mb-1.5">
-                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/60 text-[10px] font-bold text-slate-600 shadow-sm"><BookOpen size={12}/> Chemistry</span>
-                   </div>
-                   <h4 className="text-sm font-bold text-slate-900 mb-2 mt-1">Prepare Chemical Reactions Lab</h4>
-                   <div className="flex items-center gap-3 mt-1.5 text-xs font-medium text-slate-700">
-                     <span className="flex items-center gap-1"><Calendar size={12}/> Tomorrow</span>
-                     <span className="flex items-center gap-1"><Clock size={12}/> 10:00 AM</span>
-                   </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 4. Next Week */}
-            <div>
-              <h3 className="text-sm font-bold text-slate-700 mb-3 px-2 flex items-center gap-2">
-                <CalendarRange size={16} className="text-purple-600" />
-                Next Week
-              </h3>
-              <div className="flex flex-col gap-3">
-                <div className="bg-purple-100 border border-purple-300 shadow-sm opacity-100 transition-all hover:border-purple-400 rounded-2xl py-2.5 px-3.5 relative cursor-pointer">
-                   <div className="flex justify-end mb-1.5">
-                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/60 text-[10px] font-bold text-slate-600 shadow-sm"><BookOpen size={12}/> All Subjects</span>
-                   </div>
-                   <h4 className="text-sm font-bold text-slate-900 mb-2 mt-1">Curriculum Planning: Finals Week</h4>
-                   <div className="flex items-center gap-3 mt-1.5 text-xs font-medium text-slate-700">
-                     <span className="flex items-center gap-1"><Calendar size={12}/> Next Thursday</span>
-                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-6 items-center mt-4">
-            <div className="relative group cursor-pointer" onClick={() => setIsTodoOpen(true)} title="Overdue / Cumulative (2)">
-              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-500 flex items-center justify-center hover:bg-rose-200 transition-colors border border-rose-200">
-                <AlertCircle size={20} />
-              </div>
-              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white">2</span>
-            </div>
-            <div className="relative group cursor-pointer" onClick={() => setIsTodoOpen(true)} title="Today (3)">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-500 flex items-center justify-center hover:bg-amber-200 transition-colors border border-amber-200">
-                <Zap size={20} />
-              </div>
-              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white">3</span>
-            </div>
-            <div className="relative group cursor-pointer" onClick={() => setIsTodoOpen(true)} title="Tomorrow (2)">
-              <div className="w-10 h-10 rounded-xl bg-blue-100 text-sky-500 flex items-center justify-center hover:bg-blue-200 transition-colors border border-blue-200">
-                <Sun size={20} />
-              </div>
-              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white">2</span>
-            </div>
-            <div className="relative group cursor-pointer" onClick={() => setIsTodoOpen(true)} title="Next Week (1)">
-              <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center hover:bg-purple-200 transition-colors border border-purple-200">
-                <CalendarRange size={20} />
-              </div>
-              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-purple-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white">1</span>
-            </div>
-          </div>
-        )}
-      </aside>
+      {/* Real To Do Sidebar */}
+      <TodoSidebar
+        tasks={todoTasks}
+        isLoading={isTodoLoading}
+        isOpen={isTodoOpen}
+        onToggle={() => setIsTodoOpen(!isTodoOpen)}
+        language={language}
+        onTaskToggled={refreshTodo}
+      />
 
       <ScheduleSessionPopup 
         isOpen={isScheduleSessionOpen} 

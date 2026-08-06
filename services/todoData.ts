@@ -9,6 +9,7 @@ export interface TodoTask {
   bucket: 'overdue' | 'today' | 'tomorrow' | 'upcoming';
   classId: string;
   subject: string;
+  isCompleted?: boolean; // علامة "تم" حقيقية — بتخص المهام السريعة (quick_task) بس، لأنها الوحيدة اللي المعلم بيعلّمها بإيده
   meta?: { outcome?: string | null; resourceTitle?: string | null; lessonPlanTitle?: string | null; attachmentPath?: string | null };
 }
 
@@ -66,7 +67,7 @@ async function getCurriculumTasks(classId: string, subject: string, grade: strin
 export async function getQuickTasks(classId: string, subject: string): Promise<TodoTask[]> {
   const { data, error } = await supabase
     .from('quick_tasks')
-    .select('id, title, due_date, attachment_path')
+    .select('id, title, due_date, attachment_path, is_completed')
     .eq('class_id', classId)
     .eq('subject', subject);
   if (error || !data) return [];
@@ -78,6 +79,7 @@ export async function getQuickTasks(classId: string, subject: string): Promise<T
     bucket: computeBucket(row.due_date),
     classId,
     subject,
+    isCompleted: !!row.is_completed,
     meta: { attachmentPath: row.attachment_path || null },
   }));
 }
@@ -116,6 +118,12 @@ export async function createQuickTask(input: {
 export function getQuickTaskAttachmentUrl(storagePath: string): string {
   const { data } = supabase.storage.from('library-files').getPublicUrl(storagePath);
   return data.publicUrl;
+}
+
+// تعليم مهمة سريعة "تم" أو التراجع عن كده — المهام السريعة بس اللي ليها علامة إنجاز يدوية حقيقية
+export async function toggleQuickTaskCompletion(id: string, isCompleted: boolean): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await supabase.from('quick_tasks').update({ is_completed: isCompleted }).eq('id', id);
+  return { ok: !error, error: error?.message || null };
 }
 
 // بيجيب كل المهام الحقيقية اللي ليها تاريخ (واجبات، كويزات، مواضيع الجدول الزمني من 360، والمهام السريعة)

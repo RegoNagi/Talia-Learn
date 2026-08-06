@@ -1193,9 +1193,16 @@ function SpacesSidebar({ space, language = 'en', classId, subject, teacherId, au
         </div>
 
         <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <LinkIcon className="text-indigo-500" size={20} /> Important Resources
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <LinkIcon className="text-indigo-500" size={20} /> Important Resources
+            </h3>
+            {onNavigate && (
+              <button onClick={() => onNavigate('learning-path')} className="text-indigo-600 hover:text-indigo-800 text-xs font-bold flex items-center gap-1 transition-colors">
+                {language === 'ar' ? 'عرض الكل' : 'View All'} <ArrowRight size={12} />
+              </button>
+            )}
+          </div>
           <ul className="space-y-3">
             {isLoadingSidebarData ? (
               <p className="text-xs text-slate-400">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
@@ -1246,7 +1253,7 @@ function SpacesSidebar({ space, language = 'en', classId, subject, teacherId, au
   return null;
 }
 
-export function SpacesView({ space, language = 'en', classId, subject, authUser }: { space: 'school' | 'class' | 'subject', language?: 'ar' | 'en', classId?: string, subject?: string, authUser?: any }) {
+export function SpacesView({ space, language = 'en', classId, subject, authUser, onNavigate }: { space: 'school' | 'class' | 'subject', language?: 'ar' | 'en', classId?: string, subject?: string, authUser?: any, onNavigate?: (tab: string) => void }) {
   const isRealScope = space === 'subject' && !!classId && !!subject;
   const isRealSchoolScope = space === 'school';
   const isAnyRealScope = isRealScope || isRealSchoolScope;

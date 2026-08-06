@@ -11,6 +11,7 @@ interface ResourcesWidgetProps {
   onSearchChange: (q: string) => void;
   selectedCategory: string;
   onCategoryChange: (cat: string) => void;
+  onGoToLibrary?: () => void;
 }
 
 export function ResourcesWidget({
@@ -19,7 +20,8 @@ export function ResourcesWidget({
   searchQuery,
   onSearchChange,
   selectedCategory,
-  onCategoryChange
+  onCategoryChange,
+  onGoToLibrary
 }: ResourcesWidgetProps) {
   const typeBgMap: Record<string, string> = {
     PDF: 'bg-emerald-100 text-emerald-800',
@@ -87,10 +89,12 @@ export function ResourcesWidget({
       </div>
 
       {/* Button */}
-      <button className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-98">
-        <BookOpen size={14} />
-        <span>Go to Content Library</span>
-      </button>
+      {onGoToLibrary && (
+        <button onClick={onGoToLibrary} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-98">
+          <BookOpen size={14} />
+          <span>Go to Content Library</span>
+        </button>
+      )}
     </div>
   );
 }

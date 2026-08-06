@@ -1,42 +1,20 @@
 'use client';
 
-import React, { useState } from 'react';
-import { CheckSquare, Bookmark, Plus, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import React from 'react';
+import { CheckSquare, Bookmark, Plus } from 'lucide-react';
 import { HomeworkItem } from '@/types/classSpace';
 
 interface HomeworkWidgetProps {
   homeworkList: HomeworkItem[];
   isLoading: boolean;
-  onCreateHomework: (data: Omit<HomeworkItem, 'id' | 'submittedCount' | 'status'>) => void;
+  onAddClick: () => void;
 }
 
 export function HomeworkWidget({
   homeworkList,
   isLoading,
-  onCreateHomework
+  onAddClick
 }: HomeworkWidgetProps) {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [title, setTitle] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-
-    onCreateHomework({
-      title,
-      subject: 'Mathematics',
-      grade: 'Grade 10',
-      className: '10-A',
-      dueDate: new Date().toISOString(),
-      totalStudents: 28,
-      instructions: ''
-    });
-
-    setTitle('');
-    setIsModalOpen(false);
-  };
-
   const totalSubmitted = homeworkList.reduce((sum, h) => sum + h.submittedCount, 0);
   const totalStudents = homeworkList.reduce((sum, h) => sum + h.totalStudents, 0);
   const toGradeCount = homeworkList.filter((h) => h.status === 'grading').length;
@@ -55,7 +33,7 @@ export function HomeworkWidget({
             <Bookmark size={16} />
           </button>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={onAddClick}
             className="w-7 h-7 rounded-lg bg-orange-500 hover:bg-orange-600 text-white flex items-center justify-center transition-all shadow-xs"
           >
             <Plus size={16} />
@@ -112,60 +90,6 @@ export function HomeworkWidget({
           </div>
         ))}
       </div>
-
-      {/* Create Homework Modal */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl"
-            >
-              <div className="bg-indigo-600 p-4 text-white flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <CheckSquare size={18} />
-                  <h3 className="font-extrabold text-sm">New Homework Assignment</h3>
-                </div>
-                <button onClick={() => setIsModalOpen(false)} className="text-white/80 hover:text-white">
-                  <X size={18} />
-                </button>
-              </div>
-
-              <form onSubmit={handleSubmit} className="p-5 space-y-3.5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Title</label>
-                  <input
-                    type="text"
-                    required
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. Matrix Transformations Problem Set"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs"
-                  >
-                    Create Assignment
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

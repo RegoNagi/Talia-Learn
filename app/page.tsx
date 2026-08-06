@@ -14,8 +14,11 @@ import { ClassRoster } from '@/components/ClassRoster';
 import { EducationalCalendar } from '@/components/EducationalCalendar';
 import { TeacherDashboard } from '@/components/TeacherDashboard';
 import { TakeAttendance } from '@/components/TakeAttendance';
+import { TodoSidebar } from '@/components/TodoSidebar';
+import { getRealTodoTasksMulti, TodoTask } from '@/services/todoData';
+import { getMyClassSections } from '@/services/attendanceData';
 import { useAuth } from '@/contexts/AuthContext';
-import { Clock, Globe, BookOpen, BrainCircuit, Building, BarChart2, Calendar, AlertCircle, Compass, Zap, Sun, CalendarRange, ChevronRight, ChevronLeft, Menu, CheckCircle2, CheckSquare, Filter } from 'lucide-react';
+import { Globe, BookOpen, BrainCircuit, Building, BarChart2, Menu, CheckSquare } from 'lucide-react';
 
 import taliaLogo from '@/assets/talia-learn-logo.png';
 
@@ -38,37 +41,32 @@ export default function Dashboard() {
   const [activeSpace, setActiveSpace] = useState<string | null>('myClasses');
   const [isSidebarPinned, setIsSidebarPinned] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [isTodoOpen, setIsTodoOpen] = useState(true);
-  
-  // To Do State & Quick Focus Filter
-  const todoFilterRef = useRef<HTMLDivElement>(null);
-  const scrollTodoFilters = (direction: 'left' | 'right') => {
-    if (todoFilterRef.current) {
-      const scrollAmount = direction === 'left' ? -120 : 120;
-      todoFilterRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-    }
-  };
-
-  const [todoFilter, setTodoFilter] = useState<'all' | 'overdue' | 'today' | 'upcoming' | 'completed'>('all');
-  const [todoItems, setTodoItems] = useState([
-    { id: '1', title: 'Grading: 12 Lab Reports Pending', subject: 'Chemistry', category: 'overdue', time: '2 Days Overdue', completed: false, priority: 'critical' },
-    { id: '2', title: 'Review Math Assignments', subject: 'Math', category: 'overdue', time: '1 Day Overdue', completed: false, priority: 'critical' },
-    { id: '3', title: 'Monitor Quiz: Advanced Linear Algebra', subject: 'Math', category: 'today', time: '🔴 Live Now', completed: false, priority: 'today' },
-    { id: '4', title: 'Host Live Session', subject: 'Physics', category: 'today', time: '2:00 PM', completed: false, priority: 'today' },
-    { id: '5', title: 'Grade Literature Essays', subject: 'English', category: 'today', time: '5:30 PM', completed: false, priority: 'today' },
-    { id: '6', title: 'Review 25 History Projects', subject: 'World History', category: 'upcoming', time: 'Tomorrow 11:59 PM', completed: false, priority: 'upcoming' },
-    { id: '7', title: 'Prepare Chemical Reactions Lab', subject: 'Chemistry', category: 'upcoming', time: 'Tomorrow 10:00 AM', completed: false, priority: 'upcoming' },
-    { id: '8', title: 'Curriculum Planning: Finals Week', subject: 'All Subjects', category: 'upcoming', time: 'Next Thursday', completed: false, priority: 'upcoming' },
-  ]);
-
-  const toggleTodoItem = (id: string) => {
-    setTodoItems(prev => prev.map(item => item.id === id ? { ...item, completed: !item.completed } : item));
-  };
+  const [isTodoOpen, setIsTodoOpen] = useState(false);
+  const [todoTasks, setTodoTasks] = useState<TodoTask[]>([]);
+  const [isTodoLoading, setIsTodoLoading] = useState(true);
   
   // Auth & Global State
   const [language, setLanguage] = useState<'ar' | 'en'>('en');
   const { authUser, isLoggedIn, isAuthLoading, login, logout } = useAuth();
   const router = useRouter();
+
+  const refreshTodo = () => {
+    if (!authUser?.teacherId) { setIsTodoLoading(false); return; }
+    setIsTodoLoading(true);
+    getMyClassSections(authUser.teacherId).then((secs) => {
+      const scopes = secs.flatMap((sec) =>
+        (authUser.subjects || []).map((subject: string) => ({ teacherId: authUser.teacherId, classId: sec.id, subject, grade: sec.gradeLevel }))
+      );
+      getRealTodoTasksMulti(scopes).then((data) => {
+        setTodoTasks(data);
+        setIsTodoLoading(false);
+      });
+    });
+  };
+
+  useEffect(() => {
+    refreshTodo();
+  }, [authUser?.teacherId, authUser?.subjects]);
 
   // مشرف بنك الأسئلة معندوش أي حاجة تانية يشوفها هنا، فبنوديه على طول لصفحته
   useEffect(() => {
@@ -358,371 +356,25 @@ export default function Dashboard() {
             </main>
           </div>
 
-          {/* The Compass Sidebar (Right Sidebar) */}
+          {/* Real To Do Sidebar */}
           {(activeSpace === 'home' || activeSpace === 'myClasses' || activeSpace === 'subjects' || activeSpace === 'class' || activeSpace === 'subject' || !activeSpace) && (
             <>
-              {/* Mobile overlay for ToDo drawer */}
               {isTodoOpen && (
-                <div 
+                <div
                   onClick={() => setIsTodoOpen(false)}
                   className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 xl:hidden"
                 />
               )}
-
-              <aside 
-                className={`
-                  h-screen overflow-y-auto pt-6 xl:pt-12 pb-6 border-l border-slate-200 
-                  flex flex-col gap-6 bg-slate-50/90 transition-all duration-300 z-50
-                  fixed top-0 bottom-0 right-0 xl:static
-                  ${isTodoOpen 
-                    ? 'w-80 sm:w-96 px-4 sm:px-5 translate-x-0 shadow-2xl xl:shadow-none' 
-                    : 'w-0 px-0 translate-x-full xl:translate-x-0 xl:w-20 xl:px-2'
-                  }
-                `}
-              >
-          <div className={`flex items-center ${isTodoOpen ? 'justify-between px-2' : 'flex-col gap-3 items-center'}`}>
-            {isTodoOpen ? (
-              <div className="flex items-center gap-2">
-                <CheckSquare className="text-indigo-600" size={22} />
-                <h2 className="text-xl font-bold text-slate-800">{language === 'ar' ? 'المهام' : 'To Do'}</h2>
-              </div>
-            ) : (
-              <button
-                onClick={() => setIsTodoOpen(true)}
-                title="Open To Do List"
-                className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex flex-col items-center justify-center relative shadow-md hover:bg-indigo-700 transition-all hover:scale-105"
-              >
-                <CheckSquare size={20} />
-                <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full border-2 border-white shadow-2xs">
-                  {todoItems.filter(i => !i.completed).length}
-                </span>
-              </button>
-            )}
-            <button 
-              onClick={() => setIsTodoOpen(!isTodoOpen)} 
-              className="text-slate-400 hover:text-slate-600 flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-200/50 transition-colors"
-              title={isTodoOpen ? 'Collapse To Do' : 'Expand To Do'}
-            >
-              {isTodoOpen ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-            </button>
-          </div>
-          
-          {isTodoOpen ? (
-            <div className="flex flex-col gap-4">
-              {/* Daily Progress Target Banner (Today & Overdue tasks) */}
-              {(() => {
-                const targetTasks = todoItems.filter(i => i.category === 'today' || i.category === 'overdue');
-                const doneTargetTasks = targetTasks.filter(i => i.completed).length;
-                const totalTargetTasks = targetTasks.length;
-                const progressPct = totalTargetTasks > 0 ? (doneTargetTasks / totalTargetTasks) * 100 : 0;
-                
-                return (
-                  <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs space-y-1.5">
-                    <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                      <span className="flex items-center gap-1.5 text-slate-800 font-bold">
-                        <CheckSquare size={14} className="text-emerald-600" /> Daily Target (Today & Due)
-                      </span>
-                      <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full text-[11px] font-bold border border-slate-200">
-                        {doneTargetTasks} / {totalTargetTasks} Done
-                      </span>
-                    </div>
-
-                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                      <div 
-                        className="bg-emerald-500 h-2 rounded-full transition-all duration-500" 
-                        style={{ width: `${progressPct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Quick Focus Filter Pills with Left & Right Arrow Controls */}
-              <div className="relative flex items-center gap-1">
-                <button
-                  onClick={() => scrollTodoFilters('left')}
-                  className="shrink-0 p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
-                  aria-label="Scroll filter left"
-                  title="Scroll left"
-                >
-                  <ChevronLeft size={13} />
-                </button>
-
-                <div 
-                  ref={todoFilterRef}
-                  className="flex-1 flex items-center gap-1.5 overflow-x-auto py-0.5 scroll-smooth scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-                >
-                  <button
-                    onClick={() => setTodoFilter('all')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
-                      todoFilter === 'all'
-                        ? 'bg-slate-900 text-white shadow-2xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 border border-slate-200/50'
-                    }`}
-                  >
-                    All ({todoItems.length})
-                  </button>
-
-                  <button
-                    onClick={() => setTodoFilter('overdue')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
-                      todoFilter === 'overdue'
-                        ? 'bg-rose-600 text-white shadow-2xs'
-                        : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
-                    }`}
-                  >
-                    <span>Overdue</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                      todoFilter === 'overdue' ? 'bg-white/25 text-white' : 'bg-rose-200/80 text-rose-800'
-                    }`}>
-                      {todoItems.filter(i => i.category === 'overdue' && !i.completed).length}
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={() => setTodoFilter('today')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
-                      todoFilter === 'today'
-                        ? 'bg-amber-600 text-white shadow-2xs'
-                        : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
-                    }`}
-                  >
-                    <span>Today</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                      todoFilter === 'today' ? 'bg-white/25 text-white' : 'bg-amber-200/80 text-amber-900'
-                    }`}>
-                      {todoItems.filter(i => i.category === 'today' && !i.completed).length}
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={() => setTodoFilter('upcoming')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
-                      todoFilter === 'upcoming'
-                        ? 'bg-blue-600 text-white shadow-2xs'
-                        : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
-                    }`}
-                  >
-                    <span>Upcoming</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                      todoFilter === 'upcoming' ? 'bg-white/25 text-white' : 'bg-blue-200/80 text-blue-900'
-                    }`}>
-                      {todoItems.filter(i => i.category === 'upcoming' && !i.completed).length}
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={() => setTodoFilter('completed')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                      todoFilter === 'completed'
-                        ? 'bg-emerald-600 text-white shadow-2xs'
-                        : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
-                    }`}
-                  >
-                    Done ({todoItems.filter(i => i.completed).length})
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => scrollTodoFilters('right')}
-                  className="shrink-0 p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
-                  aria-label="Scroll filter right"
-                  title="Scroll right"
-                >
-                  <ChevronRight size={13} />
-                </button>
-              </div>
-
-              {/* Rich Light-Dark Colored Tasks List (No Stroke, Darker Subject Badges with White Text & Simple Checkmark) */}
-              <div className="space-y-4">
-                {/* 1. Overdue Section */}
-                {(todoFilter === 'all' || todoFilter === 'overdue') && (
-                  <div>
-                    <h3 className="text-[11px] font-bold text-rose-700 uppercase tracking-wider mb-2 px-1 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <AlertCircle size={14} /> Overdue Tasks
-                      </span>
-                      <span className="text-[10px] bg-rose-200 text-rose-900 font-extrabold px-2 py-0.5 rounded-full">
-                        {todoItems.filter(i => i.category === 'overdue').length}
-                      </span>
-                    </h3>
-
-                    <div className="flex flex-col gap-2">
-                      {todoItems.filter(i => i.category === 'overdue').map(item => (
-                        <div
-                          key={item.id}
-                          className={`rounded-2xl p-3 relative transition-all duration-200 ${
-                            item.completed
-                              ? 'bg-slate-200/60 opacity-60'
-                              : 'bg-rose-100/90 hover:bg-rose-200/90'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex-1 min-w-0 space-y-1.5">
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-600 text-white text-[10px] font-extrabold shadow-2xs">
-                                  <BookOpen size={10} /> {item.subject}
-                                </span>
-                                <span className="text-[10px] font-bold text-rose-800 flex items-center gap-0.5">
-                                  <Clock size={10} /> {item.time}
-                                </span>
-                              </div>
-
-                              <h4 className={`text-xs font-bold leading-snug ${item.completed ? 'line-through text-slate-400' : 'text-slate-900'}`}>
-                                {item.title}
-                              </h4>
-                            </div>
-
-                            <button
-                              onClick={() => toggleTodoItem(item.id)}
-                              title={item.completed ? 'Mark as incomplete' : 'Mark as complete'}
-                              className="shrink-0 p-1 transition-transform active:scale-90 cursor-pointer"
-                            >
-                              <CheckCircle2 size={22} className={item.completed ? 'fill-emerald-500 text-white' : 'text-rose-400/80 hover:text-emerald-500'} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 2. Today Section */}
-                {(todoFilter === 'all' || todoFilter === 'today') && (
-                  <div>
-                    <h3 className="text-[11px] font-bold text-amber-800 uppercase tracking-wider mb-2 px-1 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <Zap size={14} /> Today&apos;s Focus
-                      </span>
-                      <span className="text-[10px] bg-amber-200 text-amber-950 font-extrabold px-2 py-0.5 rounded-full">
-                        {todoItems.filter(i => i.category === 'today').length}
-                      </span>
-                    </h3>
-
-                    <div className="flex flex-col gap-2">
-                      {todoItems.filter(i => i.category === 'today').map(item => (
-                        <div
-                          key={item.id}
-                          className={`rounded-2xl p-3 relative transition-all duration-200 ${
-                            item.completed
-                              ? 'bg-slate-200/60 opacity-60'
-                              : 'bg-amber-100/90 hover:bg-amber-200/90'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex-1 min-w-0 space-y-1.5">
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-600 text-white text-[10px] font-extrabold shadow-2xs">
-                                  <BookOpen size={10} /> {item.subject}
-                                </span>
-                                <span className="text-[10px] font-bold text-amber-900 flex items-center gap-0.5">
-                                  <Clock size={10} /> {item.time}
-                                </span>
-                              </div>
-
-                              <h4 className={`text-xs font-bold leading-snug ${item.completed ? 'line-through text-slate-400' : 'text-slate-900'}`}>
-                                {item.title}
-                              </h4>
-                            </div>
-
-                            <button
-                              onClick={() => toggleTodoItem(item.id)}
-                              title={item.completed ? 'Mark as incomplete' : 'Mark as complete'}
-                              className="shrink-0 p-1 transition-transform active:scale-90 cursor-pointer"
-                            >
-                              <CheckCircle2 size={22} className={item.completed ? 'fill-emerald-500 text-white' : 'text-amber-500/80 hover:text-emerald-500'} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 3. Upcoming Section */}
-                {(todoFilter === 'all' || todoFilter === 'upcoming') && (
-                  <div>
-                    <h3 className="text-[11px] font-bold text-blue-800 uppercase tracking-wider mb-2 px-1 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <Sun size={14} /> Upcoming Tasks
-                      </span>
-                      <span className="text-[10px] bg-blue-200 text-blue-950 font-extrabold px-2 py-0.5 rounded-full">
-                        {todoItems.filter(i => i.category === 'upcoming').length}
-                      </span>
-                    </h3>
-
-                    <div className="flex flex-col gap-2">
-                      {todoItems.filter(i => i.category === 'upcoming').map(item => (
-                        <div
-                          key={item.id}
-                          className={`rounded-2xl p-3 relative transition-all duration-200 ${
-                            item.completed
-                              ? 'bg-slate-200/60 opacity-60'
-                              : 'bg-blue-100/90 hover:bg-blue-200/90'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex-1 min-w-0 space-y-1.5">
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-600 text-white text-[10px] font-extrabold shadow-2xs">
-                                  <BookOpen size={10} /> {item.subject}
-                                </span>
-                                <span className="text-[10px] font-bold text-blue-800 flex items-center gap-0.5">
-                                  <Calendar size={10} /> {item.time}
-                                </span>
-                              </div>
-
-                              <h4 className={`text-xs font-bold leading-snug ${item.completed ? 'line-through text-slate-400' : 'text-slate-900'}`}>
-                                {item.title}
-                              </h4>
-                            </div>
-
-                            <button
-                              onClick={() => toggleTodoItem(item.id)}
-                              title={item.completed ? 'Mark as incomplete' : 'Mark as complete'}
-                              className="shrink-0 p-1 transition-transform active:scale-90 cursor-pointer"
-                            >
-                              <CheckCircle2 size={22} className={item.completed ? 'fill-emerald-500 text-white' : 'text-blue-400/80 hover:text-emerald-500'} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-6 items-center mt-4">
-              <div className="relative group cursor-pointer" onClick={() => setIsTodoOpen(true)} title="Overdue / Cumulative (2)">
-                <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-500 flex items-center justify-center hover:bg-rose-200 transition-colors border border-rose-200">
-                  <AlertCircle size={20} />
-                </div>
-                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white">2</span>
-              </div>
-              <div className="relative group cursor-pointer" onClick={() => setIsTodoOpen(true)} title="Today (3)">
-                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-500 flex items-center justify-center hover:bg-amber-200 transition-colors border border-amber-200">
-                  <Zap size={20} />
-                </div>
-                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white">3</span>
-              </div>
-              <div className="relative group cursor-pointer" onClick={() => setIsTodoOpen(true)} title="Tomorrow (2)">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 text-sky-500 flex items-center justify-center hover:bg-blue-200 transition-colors border border-blue-200">
-                  <Sun size={20} />
-                </div>
-                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white">2</span>
-              </div>
-              <div className="relative group cursor-pointer" onClick={() => setIsTodoOpen(true)} title="Next Week (1)">
-                <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center hover:bg-purple-200 transition-colors border border-purple-200">
-                  <CalendarRange size={20} />
-                </div>
-                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-purple-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white">1</span>
-              </div>
-            </div>
+              <TodoSidebar
+                tasks={todoTasks}
+                isLoading={isTodoLoading}
+                isOpen={isTodoOpen}
+                onToggle={() => setIsTodoOpen(!isTodoOpen)}
+                language={language}
+                onTaskToggled={refreshTodo}
+              />
+            </>
           )}
-        </aside>
-        </>
-      )}
         </div>
       )}
     </div>
