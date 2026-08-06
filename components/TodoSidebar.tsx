@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CheckSquare, ChevronRight, ChevronLeft, AlertCircle, Zap, Sun, CalendarRange, BookOpen, BrainCircuit, Video, Paperclip, ClipboardList, Check, Clock } from 'lucide-react';
 import { TodoTask, toggleQuickTaskCompletion } from '@/services/todoData';
 
@@ -55,10 +55,15 @@ export function TodoSidebar({
 }) {
   const isAr = language === 'ar';
   const [filter, setFilter] = useState<'all' | TodoTask['bucket']>('all');
-  const filterScrollRef = useRef<HTMLDivElement>(null);
-  const scrollFilters = (direction: 'left' | 'right') => {
-    filterScrollRef.current?.scrollBy({ left: direction === 'left' ? -120 : 120, behavior: 'smooth' });
-  };
+  const [contentVisible, setContentVisible] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      const t = setTimeout(() => setContentVisible(true), 20);
+      return () => clearTimeout(t);
+    }
+    setContentVisible(false);
+  }, [isOpen]);
 
   const [optimisticCompleted, setOptimisticCompleted] = useState<Record<string, boolean>>({});
 
@@ -116,7 +121,7 @@ export function TodoSidebar({
           })}
         </div>
       ) : (
-        <div className="flex flex-col gap-5">
+        <div className={`flex flex-col gap-5 transition-opacity duration-200 ${contentVisible ? 'opacity-100' : 'opacity-0'}`}>
           <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3.5 shadow-sm">
             <div className="flex items-center justify-between mb-2.5">
               <span className="flex items-center gap-2 text-sm font-bold text-slate-700">
@@ -133,8 +138,7 @@ export function TodoSidebar({
           </div>
 
           <div className="flex items-center gap-1">
-            <button onClick={() => scrollFilters('left')} className="shrink-0 text-slate-400 hover:text-slate-600 p-1"><ChevronLeft size={16} /></button>
-            <div ref={filterScrollRef} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
               <button
                 onClick={() => setFilter('all')}
                 className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${filter === 'all' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
@@ -158,7 +162,6 @@ export function TodoSidebar({
                 );
               })}
             </div>
-            <button onClick={() => scrollFilters('right')} className="shrink-0 text-slate-400 hover:text-slate-600 p-1"><ChevronRight size={16} /></button>
           </div>
 
           {grouped.length === 0 ? (

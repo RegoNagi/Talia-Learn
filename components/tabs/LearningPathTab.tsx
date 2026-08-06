@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Book, ChevronDown, MoreHorizontal, PlayCircle, FileText, BrainCircuit, ShieldCheck, Shuffle, Plus, User, Sparkles, Trash2, EyeOff, Eye, Share2, Edit, Layout, Check, ClipboardCheck, X, MoreVertical, Link as LinkIcon, LayoutGrid, List, ArrowLeft } from 'lucide-react';
+import { Book, ChevronDown, MoreHorizontal, PlayCircle, FileText, BrainCircuit, Shuffle, Plus, Sparkles, Trash2, EyeOff, Eye, Share2, Edit, Layout, Check, ClipboardCheck, X, MoreVertical, Link as LinkIcon, LayoutGrid, List, ArrowLeft, Clock, CheckCircle2 } from 'lucide-react';
 
 import { LibraryDrawer } from '@/components/LearningPath/LibraryDrawer';
 import { AddLessonModal } from '@/components/LearningPath/AddLessonModal';
@@ -8,7 +8,8 @@ import { AddAssessmentModal } from '@/components/LearningPath/AddAssessmentModal
 import { StudentCompletionPopover } from '@/components/LearningPath/StudentCompletionPopover';
 import { UnitMasteryBuilder } from '@/components/UnitMasteryBuilder';
 import { BrowseLibraryTab } from '@/components/tabs/BrowseLibraryTab';
-import { getUnits, createUnit, deleteUnit, updateUnit, toggleUnitHidden, toggleUnitComplete, updateUnitSharing, getLessons, createLesson, updateLesson, deleteLesson, toggleLessonHidden, toggleLessonComplete, getLessonFileUrl } from '@/services/learningPathData';
+import { getUnits, createUnit, deleteUnit, updateUnit, toggleUnitHidden, toggleUnitComplete, updateUnitSharing, getLessons, createLesson, updateLesson, deleteLesson, toggleLessonHidden, toggleLessonComplete, getLessonFileUrl, toggleLessonCompletionForStudent, getLessonCompletionCounts, getStudentLessonCompletions } from '@/services/learningPathData';
+import { getAssignmentsForUnits } from '@/services/assignmentData';
 import { getTeacherClassNames } from '@/services/libraryData';
 
 type ContentType = 'video' | 'pdf' | 'quiz' | 'assignment' | 'project' | 'link';
@@ -49,6 +50,7 @@ export function LearningPathTab({
   language = 'en',
   onAssessmentClick = () => {},
   teacherId,
+  studentId,
   classId,
   subject,
   grade,
@@ -58,6 +60,7 @@ export function LearningPathTab({
   language?: 'ar' | 'en',
   onAssessmentClick?: (id: string) => void,
   teacherId?: string,
+  studentId?: string,
   classId?: string,
   subject?: string,
   grade?: string,
@@ -70,7 +73,16 @@ export function LearningPathTab({
     if (!learnScope) return;
     setIsLoadingUnits(true);
     getUnits(learnScope).then(async (realUnits) => {
-      const lessons = await getLessons(realUnits.map(u => u.id));
+      const unitIds = realUnits.map(u => u.id);
+      const [lessons, unitAssessments] = await Promise.all([
+        getLessons(unitIds),
+        getAssignmentsForUnits(unitIds),
+      ]);
+      const lessonIds = lessons.map((l) => l.id);
+      const [counts, myCompletions] = await Promise.all([
+        classId ? getLessonCompletionCounts(lessonIds, classId) : Promise.resolve({} as Record<string, { completed: number; total: number }>),
+        studentId ? getStudentLessonCompletions(studentId, lessonIds) : Promise.resolve(new Set<string>()),
+      ]);
       const mapped: Unit[] = realUnits.map((u) => ({
         id: u.id,
         title: u.title,
@@ -79,20 +91,38 @@ export function LearningPathTab({
         isHidden: u.isHidden,
         isComplete: u.isComplete,
         sharedWith: u.sharedWith,
-        lessons: lessons.filter(l => l.unitId === u.id).map((l) => ({
+        lessons: [
+          ...lessons.filter(l => l.unitId === u.id).map((l) => ({
           id: l.id,
           title: l.title,
           type: l.type as ContentType,
           source: 'custom' as LessonSource,
           week: l.weekLabel,
-          completedCount: 0,
-          totalCount: 0,
+          completedCount: counts[l.id]?.completed || 0,
+          totalCount: counts[l.id]?.total || 0,
           status: 'upcoming' as LessonStatus,
+          completed: myCompletions.has(l.id),
           isHidden: l.isHidden,
           isTopicComplete: l.isComplete,
           url: l.url,
           storagePath: l.storagePath,
-        })),
+          })),
+          ...unitAssessments.filter(a => a.unitId === u.id).map((a) => ({
+            id: a.id,
+            title: a.title,
+            type: a.type as ContentType,
+            source: 'custom' as LessonSource,
+            week: u.weeksLabel,
+            completedCount: 0,
+            totalCount: 0,
+            status: 'upcoming' as LessonStatus,
+            completed: false,
+            isHidden: false,
+            isTopicComplete: a.status === 'Closed',
+            url: null,
+            storagePath: null,
+          })),
+        ],
       }));
       setUnits(mapped);
       setIsLoadingUnits(false);
@@ -157,21 +187,28 @@ export function LearningPathTab({
 
   const isStudent = viewRole === 'STUDENT';
 
-  const toggleLessonCompletion = (unitId: string, lessonId: string, forceStatus?: boolean) => {
-    setUnits(prevUnits => prevUnits.map(unit => {
-      if (unit.id === unitId) {
+  const toggleLessonCompletion = async (unitId: string, lessonId: string, forceStatus?: boolean) => {
+    const unit = units.find((u) => u.id === unitId);
+    const lesson = unit?.lessons.find((l) => l.id === lessonId);
+    const nextStatus = forceStatus !== undefined ? forceStatus : !lesson?.completed;
+    // تحديث فوري في الواجهة عشان الاستجابة تبقى سريعة، وبعدين نحفظ فعليًا
+    setUnits(prevUnits => prevUnits.map(u => {
+      if (u.id === unitId) {
         return {
-          ...unit,
-          lessons: unit.lessons.map(lesson => {
-            if (lesson.id === lessonId) {
-              return { ...lesson, completed: forceStatus !== undefined ? forceStatus : !lesson.completed };
+          ...u,
+          lessons: u.lessons.map(l => {
+            if (l.id === lessonId) {
+              return { ...l, completed: nextStatus, completedCount: (l.completedCount || 0) + (nextStatus ? 1 : -1) };
             }
-            return lesson;
+            return l;
           })
         };
       }
-      return unit;
+      return u;
     }));
+    if (studentId) {
+      await toggleLessonCompletionForStudent(lessonId, studentId, nextStatus);
+    }
   };
 
   const toggleUnit = (unitId: string) => {
@@ -232,33 +269,6 @@ export function LearningPathTab({
     } else {
       alert(language === 'ar' ? `حصل خطأ أثناء إضافة الموضوع: ${error}` : `Error adding topic: ${error}`);
     }
-  };
-
-  const handleSaveAssessment = (assessmentData: { title: string; type: 'quiz' | 'assignment' | 'project'; category: string; source: 'custom' }) => {
-    if (!targetUnitId) return;
-
-    const newLesson: Lesson = {
-      id: `a${window.crypto.randomUUID()}`,
-      title: assessmentData.title,
-      type: assessmentData.type,
-      source: assessmentData.source,
-      week: 'Week 1', // Default for new items
-      completedCount: 0,
-      totalCount: 22,
-      status: 'upcoming',
-      isHidden: false,
-      isTopicComplete: false,
-    };
-
-    setUnits(prevUnits => prevUnits.map(unit => {
-      if (unit.id === targetUnitId) {
-        return {
-          ...unit,
-          lessons: [...unit.lessons, newLesson]
-        };
-      }
-      return unit;
-    }));
   };
 
   const getStatusColor = (status: LessonStatus) => {
@@ -633,147 +643,135 @@ export function LearningPathTab({
                   {lessonViewMode === 'grid' && (
                   <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 bg-slate-50/30 rounded-b-3xl">
                     {unit.lessons.map((lesson) => (
-                      <div key={lesson.id} className="group relative bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-md transition-all cursor-pointer overflow-hidden flex flex-col">
-                        {/* Thumbnail */}
-                        <div
-                          onClick={() => {
-                          if (lesson.type === 'link' && lesson.url) {
-                            window.open(lesson.url, '_blank');
-                          } else if (lesson.type === 'pdf' && lesson.storagePath) {
-                            window.open(getLessonFileUrl(lesson.storagePath), '_blank');
-                          }
-                          if (isStudent) {
-                            if ((lesson.id === 'math-quiz' || lesson.id === 'phys-lab')) {
-                              onAssessmentClick(lesson.id);
-                            } else {
-                              toggleLessonCompletion(unit.id, lesson.id, true);
-                            }
-                          }
-                        }}
-                          className={`aspect-video relative flex items-center justify-center
-                            ${lesson.type === 'video' ? 'bg-pink-50 text-pink-400' :
-                              lesson.type === 'pdf' ? 'bg-blue-50 text-blue-400' :
-                              lesson.type === 'link' ? 'bg-orange-50 text-orange-400' :
-                              lesson.type === 'quiz' ? 'bg-purple-50 text-purple-400' :
-                              ['assignment', 'project'].includes(lesson.type) ? 'bg-teal-50 text-teal-400' :
-                              'bg-slate-100 text-slate-400'
-                            }`}
-                        >
-                          {lesson.type === 'video' ? <PlayCircle size={44} /> :
-                           lesson.type === 'pdf' ? <FileText size={44} /> :
-                           lesson.type === 'link' ? <LinkIcon size={44} /> :
-                           lesson.type === 'quiz' ? <BrainCircuit size={44} /> :
-                           <ClipboardCheck size={44} />}
-
-                          {lesson.isHidden && (
-                            <span className="absolute top-2 left-2 flex items-center gap-1 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md shadow-sm">
-                              <EyeOff size={9} /> {language === 'ar' ? 'مخفي' : 'Hidden'}
-                            </span>
-                          )}
-
-                          {/* Completion indicator */}
-                          {!isStudent && (
-                            <button 
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                const ok = await toggleLessonComplete(lesson.id, !lesson.isTopicComplete);
-                                if (ok) refreshUnits();
-                              }}
-                              title={language === 'ar' ? 'وضع علامة اكتمل' : 'Mark as Complete'}
-                              className={`absolute top-2 right-2 flex items-center justify-center w-7 h-7 rounded-lg transition-all shadow-sm border ${
-                                lesson.isTopicComplete ? 'bg-emerald-500 text-white border-transparent' : 'bg-white/80 border-2 border-emerald-500 text-emerald-500 hover:bg-emerald-50'
+                      <div key={lesson.id} className="group relative bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all p-4 flex flex-col gap-3">
+                        <div className="flex items-start justify-between">
+                          <div
+                            onClick={() => {
+                              if (lesson.type === 'link' && lesson.url) {
+                                window.open(lesson.url, '_blank');
+                              } else if (lesson.type === 'pdf' && lesson.storagePath) {
+                                window.open(getLessonFileUrl(lesson.storagePath), '_blank');
+                              } else if (lesson.type === 'quiz' || lesson.type === 'assignment') {
+                                onAssessmentClick(lesson.id);
+                              }
+                            }}
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 cursor-pointer
+                              ${lesson.type === 'video' ? 'bg-pink-500 text-white' :
+                                lesson.type === 'pdf' ? 'bg-blue-500 text-white' :
+                                lesson.type === 'link' ? 'bg-orange-500 text-white' :
+                                lesson.type === 'quiz' ? 'bg-orange-500 text-white' :
+                                ['assignment', 'project'].includes(lesson.type) ? 'bg-teal-500 text-white' :
+                                'bg-slate-400 text-white'
                               }`}
-                            >
-                              <Check size={14} className="stroke-[3]" />
-                            </button>
-                          )}
-                          {isStudent && (
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if ((lesson.id === 'math-quiz' || lesson.id === 'phys-lab')) {
-                                  onAssessmentClick(lesson.id);
-                                } else {
-                                  toggleLessonCompletion(unit.id, lesson.id);
-                                }
-                              }}
-                              className={`absolute top-2 right-2 flex items-center justify-center w-7 h-7 rounded-full transition-all shadow-sm ${
-                                (lesson.completed || ['COMPLETED', 'PENDING_REVIEW'].includes(demoAssessments.find(a => a.id === lesson.id)?.status || '')) ? 'bg-emerald-500 text-white border-transparent' : 'bg-white/80 border-2 border-emerald-500 text-emerald-500 hover:bg-emerald-50'
-                              }`}
-                              title="Mark as Complete"
-                            >
-                              <Check size={14} className="stroke-[3]" />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Info */}
-                        <div className="p-3 flex-1 flex flex-col gap-1.5">
-                          <h4 className="font-medium text-slate-800 text-sm leading-snug line-clamp-2">{lesson.title}</h4>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {!isStudent && lesson.source === 'official' && (
-                              <span className="flex items-center gap-1 bg-slate-100 text-slate-500 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider border border-slate-200">
-                                <ShieldCheck size={9} /> Official
-                              </span>
-                            )}
-                            {!isStudent && lesson.source === 'custom' && (
-                              <span className="flex items-center gap-1 bg-blue-50 text-blue-600 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider border border-blue-100">
-                                <User size={9} /> Custom
-                              </span>
-                            )}
-                            {!isStudent && lesson.source === 'ai' && (
-                              <span className="flex items-center gap-1 bg-purple-50 text-purple-600 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider border border-purple-100">
-                                <Sparkles size={9} /> AI Generated
-                              </span>
-                            )}
+                          >
+                            {lesson.type === 'video' ? <PlayCircle size={18} /> :
+                             lesson.type === 'pdf' ? <FileText size={18} /> :
+                             lesson.type === 'link' ? <LinkIcon size={18} /> :
+                             lesson.type === 'quiz' ? <span className="font-black text-sm">?</span> :
+                             <ClipboardCheck size={18} />}
                           </div>
+
+                          {!isStudent && (
+                            <div className="relative shrink-0">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setActiveLessonMenuId(activeLessonMenuId === lesson.id ? null : lesson.id); }}
+                                className="p-1 text-slate-300 hover:text-slate-500 rounded-lg transition-colors"
+                              >
+                                <MoreHorizontal size={18} />
+                              </button>
+
+                              {activeLessonMenuId === lesson.id && (
+                              <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-slate-100 p-1 z-20">
+                                <button
+                                  onClick={() => { setEditingLesson({ ...lesson }); setActiveLessonMenuId(null); }}
+                                  className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
+                                >
+                                  <Edit size={14} /> {language === 'ar' ? 'تعديل الاسم' : 'Edit Name'}
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    setActiveLessonMenuId(null);
+                                    const ok = await toggleLessonHidden(lesson.id, !lesson.isHidden);
+                                    if (ok) refreshUnits();
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
+                                >
+                                  <EyeOff size={14} /> {lesson.isHidden ? (language === 'ar' ? 'إظهار للطلاب' : 'Show to Students') : (language === 'ar' ? 'إخفاء عن الطلاب' : 'Hide from Students')}
+                                </button>
+                                <div className="h-px bg-slate-100 my-1" />
+                                <button
+                                  onClick={async () => {
+                                    setActiveLessonMenuId(null);
+                                    if (window.confirm(language === 'ar' ? 'متأكد إنك عايز تمسح الموضوع ده؟' : 'Delete this topic?')) {
+                                      const { ok, error } = await deleteLesson(lesson.id);
+                                      if (ok) refreshUnits();
+                                      else alert(language === 'ar' ? `حصل خطأ أثناء الحذف: ${error}` : `Error deleting: ${error}`);
+                                    }
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2 shadow-none"
+                                >
+                                  <Trash2 size={14} /> Delete
+                                </button>
+                              </div>
+                              )}
+                            </div>
+                          )}
                         </div>
 
-                        {/* Context Menu (3-dots) for Teacher */}
-                        {!isStudent && (
-                          <div className="absolute bottom-2 right-2">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setActiveLessonMenuId(activeLessonMenuId === lesson.id ? null : lesson.id); }}
-                              className="p-1.5 text-slate-400 hover:text-teal-600 bg-white hover:bg-teal-50 rounded-lg transition-colors shadow-sm border border-slate-100"
-                            >
-                              <MoreHorizontal size={16} />
-                            </button>
+                        <h4
+                          onClick={() => {
+                            if (lesson.type === 'link' && lesson.url) {
+                              window.open(lesson.url, '_blank');
+                            } else if (lesson.type === 'pdf' && lesson.storagePath) {
+                              window.open(getLessonFileUrl(lesson.storagePath), '_blank');
+                            } else if (lesson.type === 'quiz' || lesson.type === 'assignment') {
+                              onAssessmentClick(lesson.id);
+                            }
+                          }}
+                          className="font-bold text-slate-800 text-sm leading-snug line-clamp-2 cursor-pointer hover:text-teal-600 transition-colors"
+                        >
+                          {lesson.title}
+                        </h4>
 
-                            {activeLessonMenuId === lesson.id && (
-                            <div onClick={(e) => e.stopPropagation()} className="absolute right-0 bottom-full mb-1 w-48 bg-white rounded-xl shadow-lg border border-slate-100 p-1 z-20">
+                        <div className="flex items-center justify-between gap-2 mt-auto">
+                          {(() => {
+                            const isDone = !isStudent ? lesson.isTopicComplete : (lesson.completed || ['COMPLETED', 'PENDING_REVIEW'].includes(demoAssessments.find(a => a.id === lesson.id)?.status || ''));
+                            return (
                               <button
-                                onClick={() => { setEditingLesson({ ...lesson }); setActiveLessonMenuId(null); }}
-                                className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
-                              >
-                                <Edit size={14} /> {language === 'ar' ? 'تعديل الاسم' : 'Edit Name'}
-                              </button>
-                              <button
-                                onClick={async () => {
-                                  setActiveLessonMenuId(null);
-                                  const ok = await toggleLessonHidden(lesson.id, !lesson.isHidden);
-                                  if (ok) refreshUnits();
-                                }}
-                                className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
-                              >
-                                <EyeOff size={14} /> {lesson.isHidden ? (language === 'ar' ? 'إظهار للطلاب' : 'Show to Students') : (language === 'ar' ? 'إخفاء عن الطلاب' : 'Hide from Students')}
-                              </button>
-                              <div className="h-px bg-slate-100 my-1" />
-                              <button
-                                onClick={async () => {
-                                  setActiveLessonMenuId(null);
-                                  if (window.confirm(language === 'ar' ? 'متأكد إنك عايز تمسح الموضوع ده؟' : 'Delete this topic?')) {
-                                    const { ok, error } = await deleteLesson(lesson.id);
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (!isStudent) {
+                                    const ok = await toggleLessonComplete(lesson.id, !lesson.isTopicComplete);
                                     if (ok) refreshUnits();
-                                    else alert(language === 'ar' ? `حصل خطأ أثناء الحذف: ${error}` : `Error deleting: ${error}`);
+                                  } else if ((lesson.id === 'math-quiz' || lesson.id === 'phys-lab')) {
+                                    onAssessmentClick(lesson.id);
+                                  } else {
+                                    toggleLessonCompletion(unit.id, lesson.id);
                                   }
                                 }}
-                                className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2 shadow-none"
+                                className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${isDone ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'}`}
                               >
-                                <Trash2 size={14} /> Delete
+                                {isDone ? <CheckCircle2 size={14} className="fill-emerald-100" /> : <Clock size={14} />}
+                                {isDone ? (language === 'ar' ? 'مكتمل' : 'completed') : (language === 'ar' ? 'قيد الانتظار' : 'pending')}
                               </button>
-                            </div>
-                            )}
-                          </div>
+                            );
+                          })()}
+                          <span className={`text-[9px] font-bold px-2 py-1 rounded-full uppercase tracking-wider
+                            ${lesson.source === 'ai' ? 'bg-purple-50 text-purple-600' :
+                              lesson.type === 'video' ? 'bg-pink-50 text-pink-600' :
+                              lesson.type === 'quiz' ? 'bg-amber-50 text-amber-600' :
+                              lesson.type === 'assignment' ? 'bg-teal-50 text-teal-600' :
+                              'bg-blue-50 text-blue-600'
+                            }`}
+                          >
+                            {lesson.source === 'ai' ? (language === 'ar' ? 'ذكاء اصطناعي' : 'AI') : lesson.type === 'video' ? 'VIDEO' : lesson.type === 'quiz' ? 'QUIZ' : lesson.type === 'assignment' ? 'ASSIGNMENT' : lesson.source === 'official' ? 'OFFICIAL' : 'CUSTOM'}
+                          </span>
+                        </div>
+
+                        {lesson.isHidden && (
+                          <span className="flex items-center gap-1 text-amber-600 text-[10px] font-bold">
+                            <EyeOff size={10} /> {language === 'ar' ? 'مخفي عن الطلاب' : 'Hidden from students'}
+                          </span>
                         )}
                       </div>
                     ))}
@@ -797,6 +795,9 @@ export function LearningPathTab({
                             window.open(lesson.url, '_blank');
                           } else if (lesson.type === 'pdf' && lesson.storagePath) {
                             window.open(getLessonFileUrl(lesson.storagePath), '_blank');
+                          } else if (lesson.type === 'quiz' || lesson.type === 'assignment') {
+                            onAssessmentClick(lesson.id);
+                            return;
                           }
                           if (isStudent) {
                             if ((lesson.id === 'math-quiz' || lesson.id === 'phys-lab')) {
@@ -924,7 +925,7 @@ export function LearningPathTab({
         {/* Create New Unit Button / Smart Course Planner */}
         {!isStudent && (
           !isBuildingUnit ? (
-            (lessonViewMode === 'grid' && expandedUnits.length === 0) ? null : (
+            (lessonViewMode === 'grid') ? null : (
             <button 
               onClick={() => setIsBuildingUnit(true)}
               className="w-full py-6 border-2 border-dashed border-slate-200 rounded-3xl text-slate-500 font-medium hover:border-teal-300 hover:bg-teal-50 hover:text-teal-600 transition-all flex items-center justify-center gap-2 shadow-none"
@@ -1104,7 +1105,6 @@ export function LearningPathTab({
       <AddAssessmentModal
         isOpen={isAddAssessmentOpen}
         onClose={() => setIsAddAssessmentOpen(false)}
-        onAdd={handleSaveAssessment}
         unitTitle={targetUnitTitle}
         classId={classId}
         subject={subject}
@@ -1116,8 +1116,9 @@ export function LearningPathTab({
       <StudentCompletionPopover 
         isOpen={!!activeCompletion} 
         onClose={() => setActiveCompletion(null)}
-        completedCount={units.flatMap(u => u.lessons).find(l => l.id === activeCompletion?.id)?.completedCount || 0}
-        totalCount={units.flatMap(u => u.lessons).find(l => l.id === activeCompletion?.id)?.totalCount || 0}
+        lessonId={activeCompletion?.id || null}
+        classId={classId || ''}
+        language={language}
         anchorRect={activeCompletion?.rect || null}
       />
 

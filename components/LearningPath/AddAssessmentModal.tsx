@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 interface AddAssessmentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (assessment: { title: string; type: 'quiz' | 'assignment' | 'project'; category: string; source: 'custom' }) => void;
   unitTitle: string;
   classId?: string;
   subject?: string;

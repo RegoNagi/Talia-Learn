@@ -691,8 +691,8 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-center gap-3">
-                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${theme.iconBg} shadow-xs`}>
-                                  <Folder size={28} />
+                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden ${theme.iconBg} shadow-xs`}>
+                                  <Folder size={26} />
                                 </div>
                                 <div className="min-w-0">
                                   <h3 className={`font-bold text-base ${theme.text} truncate`}>{folder.name}</h3>

@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { getRealPosts, createRealPost, getRealSchoolPosts, createRealSchoolPost, reactToRealPost, addRealComment, getActiveChallenge, createChallenge, submitToChallenge, getMyChallengeSubmission, getChallengeSubmissions, gradeChallengeSubmission, getTopChallengers, getUpcomingSchoolEvents, createSchoolEvent, getSchoolAnnouncements, createSchoolAnnouncement, RealChallenge, ChallengeSubmission, SchoolEvent, SchoolAnnouncement } from '@/services/classSpaceData';
 import { getAssignments, getSubmissionsForAssignment, getSubmissionFileUrl } from '@/services/assignmentData';
 import { getMaterialFiles } from '@/services/libraryData';
+import { getLiveSessions, RealLiveSession } from '@/services/liveSessionsData';
 
 interface Post {
   id: string;
@@ -987,16 +988,19 @@ function SpacesSidebar({ space, language = 'en', classId, subject, teacherId, au
 
   const [pendingItems, setPendingItems] = useState<{ id: string; title: string; sub: string; badge: string }[]>([]);
   const [resources, setResources] = useState<{ id: string; title: string; type: string; size: string; url: string }[]>([]);
+  const [liveSessions, setLiveSessions] = useState<RealLiveSession[]>([]);
   const [isLoadingSidebarData, setIsLoadingSidebarData] = useState(false);
 
   useEffect(() => {
     if (!isRealScope || space !== 'subject' || !classId || !subject || !teacherId) return;
     setIsLoadingSidebarData(true);
     (async () => {
-      const [assignments, files] = await Promise.all([
+      const [assignments, files, sessions] = await Promise.all([
         getAssignments({ teacherId, classId, subject }),
         getMaterialFiles({ teacherId, classId, subject }),
+        getLiveSessions(classId, subject),
       ]);
+      setLiveSessions(sessions);
       const pending: { id: string; title: string; sub: string; badge: string }[] = [];
       for (const a of assignments.filter((x) => x.status === 'Active')) {
         const subs = await getSubmissionsForAssignment(a.id, classId);
@@ -1127,9 +1131,18 @@ function SpacesSidebar({ space, language = 'en', classId, subject, teacherId, au
   }
 
   if (space === 'subject') {
+    const now = Date.now();
+    const liveNow = liveSessions.find((s) => {
+      const start = new Date(s.scheduledAt).getTime();
+      return Math.abs(now - start) < 60 * 60 * 1000 && now >= start;
+    });
+    const upcoming = liveSessions
+      .filter((s) => new Date(s.scheduledAt).getTime() > now)
+      .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())[0];
     return (
       <div className="w-80 flex-shrink-0 hidden xl:block space-y-4">
         {/* Compact Live Now Card */}
+        {liveNow && (
         <div className="bg-red-50/50 rounded-2xl border border-slate-100 border-l-[6px] border-l-red-500 shadow-md shadow-red-100/50 p-5 relative overflow-hidden group">
           <div className="flex items-center gap-2 mb-3">
             <span className="relative flex h-2 w-2">
@@ -1138,31 +1151,34 @@ function SpacesSidebar({ space, language = 'en', classId, subject, teacherId, au
             </span>
             <span className="text-xs font-bold tracking-wide text-red-600 uppercase">Live Now</span>
           </div>
-          <h4 className="text-slate-900 font-semibold mb-4 leading-tight">Matrix Transformations</h4>
+          <h4 className="text-slate-900 font-semibold mb-4 leading-tight">{liveNow.title}</h4>
           <div className="flex items-center gap-2">
-            <button className="bg-indigo-600 hover:bg-indigo-700 text-white flex-1 py-2 rounded-lg text-sm font-medium transition-colors active:scale-95 shadow-sm">
+            <a href={liveNow.joinUrl} target="_blank" rel="noopener noreferrer" className="bg-indigo-600 hover:bg-indigo-700 text-white flex-1 py-2 rounded-lg text-sm font-medium transition-colors active:scale-95 shadow-sm text-center">
               Join Session
-            </button>
-            <button className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors active:scale-95">
+            </a>
+            <button onClick={() => onNavigate?.('live-sessions')} className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors active:scale-95">
               Manage
             </button>
           </div>
         </div>
+        )}
 
         {/* Compact Next Session Card */}
+        {upcoming && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 transition-all hover:shadow-md">
           <div className="flex items-center gap-2 mb-3">
             <Calendar size={16} className="text-slate-400" />
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Next Session</span>
           </div>
-          <h4 className="text-base font-bold text-slate-800">Eigenvectors</h4>
-          <p className="text-xs font-semibold text-indigo-500 mt-1">Tomorrow, 10:00 AM</p>
+          <h4 className="text-base font-bold text-slate-800">{upcoming.title}</h4>
+          <p className="text-xs font-semibold text-indigo-500 mt-1">{new Date(upcoming.scheduledAt).toLocaleString(language === 'ar' ? 'ar-EG' : undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</p>
           <div className="flex justify-end mt-4 pt-3 border-t border-slate-50">
-            <button className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1 transition-colors group/link cursor-pointer">
+            <button onClick={() => onNavigate?.('live-sessions')} className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1 transition-colors group/link cursor-pointer">
               Open Calendar <ArrowRight size={14} className="group-hover/link:translate-x-1 transition-transform" />
             </button>
           </div>
         </div>
+        )}
 
         {/* Compact Pending Assessments */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 transition-all hover:shadow-md">

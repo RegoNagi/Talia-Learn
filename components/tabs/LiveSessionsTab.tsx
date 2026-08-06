@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { getLiveSessions, createLiveSession, updateLiveSession, deleteLiveSession, RealLiveSession } from '@/services/liveSessionsData';
 import { broadcastMessageToClass, getClassAnnouncementsForStudent, AppMessage } from '@/services/messagesData';
 import { getClassRoster } from '@/services/assignmentData';
-import { Video, Calendar, Users, Play, Sparkles, Users2, MoreVertical, MessageSquare, Clock, ChevronRight, Radio, X, FileText, Download, BarChart3, PieChart, CalendarPlus, Trash2, UploadCloud, CheckCircle2, AlertCircle, Search, Filter, RefreshCw, Book, Edit } from 'lucide-react';
+import { Video, Calendar, Users, Play, Sparkles, Users2, MoreVertical, MessageSquare, Clock, ChevronRight, Radio, X, FileText, Download, BarChart3, PieChart, CalendarPlus, Trash2, UploadCloud, CheckCircle2, AlertCircle, Search, Filter, Book, Edit } from 'lucide-react';
 
 interface Session {
   id: string;
@@ -587,13 +587,9 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
               <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between bg-white shrink-0">
                 <div className="space-y-1">
                   <h3 className="text-xl font-bold text-slate-800 tracking-tight">Class Schedule</h3>
-                  <p className="text-sm font-semibold text-slate-400">Spring Term 2026</p>
+                  <p className="text-sm font-semibold text-slate-400">{className || subject || ''}</p>
                 </div>
                 <div className="flex items-center gap-4">
-                  <button className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-100 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors shadow-none">
-                    <RefreshCw size={16} />
-                    <span className="hidden sm:inline">Sync Outlook</span>
-                  </button>
                   <button 
                     onClick={() => { setEditingSessionId(null); setNewTitle(''); setNewDate(''); setNewTime('10:00'); setNewAgenda(''); setNewJoinUrl(''); setShowScheduleFormModal(true); }}
                     className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-none shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-[0.98]"
@@ -608,79 +604,65 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
               </div>
               
               <div className="p-8 bg-white overflow-y-auto flex-1 custom-scrollbar">
-                {/* Day Selector Tabs */}
-                <div className="flex gap-2 bg-slate-50 p-1.5 rounded-full inline-flex mb-6">
-                  <button className="text-slate-500 hover:bg-white hover:text-slate-800 hover:shadow-none font-medium px-6 py-2 rounded-full transition-colors">Sun</button>
-                  <button className="bg-blue-600 text-white shadow-none font-medium px-6 py-2 rounded-full transition-colors">Mon</button>
-                  <button className="text-slate-500 hover:bg-white hover:text-slate-800 hover:shadow-none font-medium px-6 py-2 rounded-full transition-colors">Tue</button>
-                  <button className="text-slate-500 hover:bg-white hover:text-slate-800 hover:shadow-none font-medium px-6 py-2 rounded-full transition-colors">Wed</button>
-                  <button className="text-slate-500 hover:bg-white hover:text-slate-800 hover:shadow-none font-medium px-6 py-2 rounded-full transition-colors">Thu</button>
-                </div>
-                
-                {/* Schedule List */}
+                {/* Real Sessions Schedule */}
                 <div className="border border-slate-100 rounded-2xl bg-white shadow-none overflow-hidden">
                   {/* Table Headers */}
                   <div className="hidden md:grid grid-cols-12 gap-4 p-4 border-b border-slate-100 bg-slate-50/50">
-                    <div className="col-span-3 text-slate-400 text-sm font-medium uppercase tracking-wider">Time</div>
+                    <div className="col-span-3 text-slate-400 text-sm font-medium uppercase tracking-wider">Date & Time</div>
                     <div className="col-span-4 text-slate-400 text-sm font-medium uppercase tracking-wider">Session</div>
-                    <div className="col-span-2 text-slate-400 text-sm font-medium uppercase tracking-wider">Instructor</div>
+                    <div className="col-span-2 text-slate-400 text-sm font-medium uppercase tracking-wider">Host</div>
                     <div className="col-span-1 text-slate-400 text-sm font-medium uppercase tracking-wider text-center">Status</div>
                     <div className="col-span-2 text-slate-400 text-sm font-medium uppercase tracking-wider text-right">Action</div>
                   </div>
-                  
+
                   {/* Rows */}
                   <div className="divide-y divide-slate-100">
-                    {/* Row 1 - Live Now */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-4 hover:bg-slate-50 transition-colors group">
-                      <div className="col-span-3 font-semibold text-slate-800 text-sm">
-                        11:30 AM - 12:30 PM
-                      </div>
-                      <div className="col-span-4 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0 border border-indigo-100">
-                          <Book size={16} className="text-indigo-600" />
+                    {[...sessions].sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()).map((s) => {
+                      const start = new Date(s.scheduledAt).getTime();
+                      const now = Date.now();
+                      const isLive = Math.abs(now - start) < 60 * 60 * 1000 && now >= start;
+                      const isPast = !isLive && start < now;
+                      return (
+                        <div key={s.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-4 hover:bg-slate-50 transition-colors group">
+                          <div className="col-span-3 font-semibold text-slate-800 text-sm">
+                            {new Date(s.scheduledAt).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                          <div className="col-span-4 flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0 border border-indigo-100">
+                              <Book size={16} className="text-indigo-600" />
+                            </div>
+                            <span className="text-slate-800 font-medium text-sm truncate">{s.title}</span>
+                          </div>
+                          <div className="col-span-2 text-slate-600 text-sm font-medium truncate">
+                            {teacherName || '—'}
+                          </div>
+                          <div className="col-span-1 flex justify-center">
+                            <span className={`px-3 py-1 rounded-full text-[11px] font-bold tracking-wider whitespace-nowrap border ${
+                              isLive ? 'bg-red-50 text-red-600 border-red-100' : isPast ? 'bg-slate-50 text-slate-500 border-slate-100' : 'bg-amber-50 text-amber-600 border-amber-100'
+                            }`}>
+                              {isLive ? 'LIVE NOW' : isPast ? 'Ended' : 'Upcoming'}
+                            </span>
+                          </div>
+                          <div className="col-span-2 flex justify-end">
+                            {isPast ? (
+                              <span className="text-slate-300 text-sm font-medium">—</span>
+                            ) : (
+                              <a
+                                href={s.joinUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-none w-full md:w-auto text-center ${isLive ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                              >
+                                {isLive ? 'Join Class' : 'Copy Link'}
+                              </a>
+                            )}
+                          </div>
                         </div>
-                        <span className="text-slate-800 font-medium text-sm truncate">Physics - Mechanics</span>
-                      </div>
-                      <div className="col-span-2 text-slate-600 text-sm font-medium truncate">
-                        Alex Johnson
-                      </div>
-                      <div className="col-span-1 flex justify-center">
-                         <span className="bg-red-50 text-red-600 border border-red-100 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider whitespace-nowrap">
-                           LIVE NOW
-                         </span>
-                      </div>
-                      <div className="col-span-2 flex justify-end">
-                         <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-none w-full md:w-auto text-center">
-                           Join Class
-                         </button>
-                      </div>
-                    </div>
-                    
-                    {/* Row 2 - Upcoming */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-4 hover:bg-slate-50 transition-colors group">
-                      <div className="col-span-3 font-semibold text-slate-600 text-sm">
-                        01:00 PM - 02:00 PM
-                      </div>
-                      <div className="col-span-4 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0 border border-emerald-100">
-                          <Book size={16} className="text-emerald-600" />
-                        </div>
-                        <span className="text-slate-700 font-medium text-sm truncate">Mathematics - Linear Algebra</span>
-                      </div>
-                      <div className="col-span-2 text-slate-500 text-sm font-medium truncate">
-                        Alex Johnson
-                      </div>
-                      <div className="col-span-1 flex justify-center">
-                         <span className="bg-amber-50 text-amber-600 border border-amber-100 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider whitespace-nowrap">
-                           Upcoming
-                         </span>
-                      </div>
-                      <div className="col-span-2 flex justify-end">
-                         <button className="bg-slate-100 text-slate-600 hover:bg-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-none w-full md:w-auto text-center">
-                           Copy Link
-                         </button>
-                      </div>
-                    </div>
+                      );
+                    })}
+                    {sessions.length === 0 && (
+                      <p className="text-center text-sm text-slate-400 py-10">No sessions scheduled yet.</p>
+                    )}
                   </div>
                 </div>
               </div>

@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
+import { getClassRoster } from '@/services/assignmentData';
 
 export interface LearnUnit {
   id: string;
@@ -209,4 +210,64 @@ export async function getCourseProgress(scope: UnitScope): Promise<{ completed: 
     completed: visibleLessons.filter((l) => l.isComplete).length,
     total: visibleLessons.length,
   };
+}
+
+// ============ تتبّع إكمال الطلاب لكل درس — حقيقي بالكامل ============
+
+export interface LessonCompletionInfo {
+  studentId: string;
+  name: string;
+  completed: boolean;
+  completedAt: string | null;
+}
+
+// علّم/ألغِ علامة "مكتمل" لطالب معيّن في درس معيّن — كتابة حقيقية دايمة
+export async function toggleLessonCompletionForStudent(lessonId: string, studentId: string, completed: boolean): Promise<{ ok: boolean; error: string | null }> {
+  if (completed) {
+    const { error } = await supabase.from('lesson_completions').upsert({ lesson_id: lessonId, student_id: studentId, completed_at: new Date().toISOString() }, { onConflict: 'lesson_id,student_id' });
+    return { ok: !error, error: error?.message || null };
+  } else {
+    const { error } = await supabase.from('lesson_completions').delete().eq('lesson_id', lessonId).eq('student_id', studentId);
+    return { ok: !error, error: error?.message || null };
+  }
+}
+
+// عدد المكتملين الحقيقي من إجمالي طلاب الفصل، لكل درس في مجموعة دروس (استعلام واحد بدل واحد لكل درس)
+export async function getLessonCompletionCounts(lessonIds: string[], classId: string): Promise<Record<string, { completed: number; total: number }>> {
+  if (lessonIds.length === 0) return {};
+  const roster = await getClassRoster(classId);
+  const total = roster.length;
+  const { data, error } = await supabase.from('lesson_completions').select('lesson_id').in('lesson_id', lessonIds);
+  const counts: Record<string, { completed: number; total: number }> = {};
+  for (const id of lessonIds) counts[id] = { completed: 0, total };
+  if (!error && data) {
+    for (const row of data) {
+      if (counts[row.lesson_id]) counts[row.lesson_id].completed += 1;
+    }
+  }
+  return counts;
+}
+
+// قائمة كل طلاب الفصل مع حالة إكمالهم الحقيقية لدرس معيّن — لنافذة "مين خلّص"
+export async function getLessonCompletionDetails(lessonId: string, classId: string): Promise<LessonCompletionInfo[]> {
+  const roster = await getClassRoster(classId);
+  const { data, error } = await supabase.from('lesson_completions').select('student_id, completed_at').eq('lesson_id', lessonId);
+  const completedMap = new Map<string, string>();
+  if (!error && data) {
+    for (const row of data) completedMap.set(row.student_id, row.completed_at);
+  }
+  return roster.map((s) => ({
+    studentId: s.id,
+    name: s.name,
+    completed: completedMap.has(s.id),
+    completedAt: completedMap.get(s.id) || null,
+  }));
+}
+
+// هل طالب معيّن خلّص درس معيّن؟ (للعرض على مستوى الطالب نفسه)
+export async function getStudentLessonCompletions(studentId: string, lessonIds: string[]): Promise<Set<string>> {
+  if (lessonIds.length === 0) return new Set();
+  const { data, error } = await supabase.from('lesson_completions').select('lesson_id').eq('student_id', studentId).in('lesson_id', lessonIds);
+  if (error || !data) return new Set();
+  return new Set(data.map((r) => r.lesson_id));
 }

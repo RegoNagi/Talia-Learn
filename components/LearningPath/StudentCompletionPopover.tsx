@@ -1,48 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Check, X, Send } from 'lucide-react';
-import Image from 'next/image';
-
-interface Student {
-  id: string;
-  name: string;
-  avatar: string;
-  status: 'completed' | 'pending' | 'late' | 'missed';
-  lastActive?: string;
-}
+import { getLessonCompletionDetails, LessonCompletionInfo } from '@/services/learningPathData';
 
 interface StudentCompletionPopoverProps {
   isOpen: boolean;
   onClose: () => void;
-  completedCount: number;
-  totalCount: number;
+  lessonId: string | null;
+  classId: string;
+  language?: 'ar' | 'en';
   anchorRect: DOMRect | null;
 }
 
-export function StudentCompletionPopover({ isOpen, onClose, completedCount, totalCount }: StudentCompletionPopoverProps) {
+export function StudentCompletionPopover({ isOpen, onClose, lessonId, classId, language = 'en' }: StudentCompletionPopoverProps) {
+  const isAr = language === 'ar';
+  const [students, setStudents] = useState<LessonCompletionInfo[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [nudgedStudents, setNudgedStudents] = useState<Set<string>>(new Set());
   const [showToast, setShowToast] = useState<string | null>(null);
 
-  // 15 Mock students with varied statuses
-  const students: Student[] = [
-    { id: '1', name: 'Alice Johnson', avatar: 'https://picsum.photos/seed/alice/32/32', status: 'completed', lastActive: '2m ago' },
-    { id: '2', name: 'Bob Smith', avatar: 'https://picsum.photos/seed/bob/32/32', status: 'completed', lastActive: '15m ago' },
-    { id: '3', name: 'Charlie Brown', avatar: 'https://picsum.photos/seed/charlie/32/32', status: 'late', lastActive: '2d ago' },
-    { id: '4', name: 'Diana Prince', avatar: 'https://picsum.photos/seed/diana/32/32', status: 'completed', lastActive: '1h ago' },
-    { id: '5', name: 'Evan Wright', avatar: 'https://picsum.photos/seed/evan/32/32', status: 'pending', lastActive: '5m ago' },
-    { id: '6', name: 'Fiona Gallagher', avatar: 'https://picsum.photos/seed/fiona/32/32', status: 'missed', lastActive: '3d ago' },
-    { id: '7', name: 'George Harris', avatar: 'https://picsum.photos/seed/george/32/32', status: 'pending', lastActive: '1d ago' },
-    { id: '8', name: 'Hannah Lee', avatar: 'https://picsum.photos/seed/hannah/32/32', status: 'completed', lastActive: '3h ago' },
-    { id: '9', name: 'Ian Curtis', avatar: 'https://picsum.photos/seed/ian/32/32', status: 'late', lastActive: '4d ago' },
-    { id: '10', name: 'Julia Roberts', avatar: 'https://picsum.photos/seed/julia/32/32', status: 'completed', lastActive: '10m ago' },
-    { id: '11', name: 'Kevin Bacon', avatar: 'https://picsum.photos/seed/kevin/32/32', status: 'pending', lastActive: '30m ago' },
-    { id: '12', name: 'Laura Palmer', avatar: 'https://picsum.photos/seed/laura/32/32', status: 'missed', lastActive: '1w ago' },
-    { id: '13', name: 'Mike Ross', avatar: 'https://picsum.photos/seed/mike/32/32', status: 'completed', lastActive: '1h ago' },
-    { id: '14', name: 'Nina Simone', avatar: 'https://picsum.photos/seed/nina/32/32', status: 'completed', lastActive: '2h ago' },
-    { id: '15', name: 'Oscar Wilde', avatar: 'https://picsum.photos/seed/oscar/32/32', status: 'late', lastActive: '5d ago' },
-  ];
+  useEffect(() => {
+    if (!isOpen || !lessonId || !classId) return;
+    setIsLoading(true);
+    getLessonCompletionDetails(lessonId, classId).then((data) => {
+      setStudents(data);
+      setIsLoading(false);
+    });
+  }, [isOpen, lessonId, classId]);
 
   const handleNudge = (studentId: string, studentName: string) => {
     setNudgedStudents(prev => {
@@ -50,11 +36,14 @@ export function StudentCompletionPopover({ isOpen, onClose, completedCount, tota
       newSet.add(studentId);
       return newSet;
     });
-    setShowToast(`Nudge sent to ${studentName}`);
+    setShowToast(isAr ? `تم إرسال تذكير لـ ${studentName}` : `Nudge sent to ${studentName}`);
     setTimeout(() => setShowToast(null), 3000);
   };
 
   if (!isOpen) return null;
+
+  const completedCount = students.filter((s) => s.completed).length;
+  const totalCount = students.length;
 
   return (
     <>
@@ -72,15 +61,15 @@ export function StudentCompletionPopover({ isOpen, onClose, completedCount, tota
               {/* Header */}
               <div className="p-4 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
                 <div>
-                  <h4 className="font-bold text-slate-800 text-sm">Student Progress</h4>
+                  <h4 className="font-bold text-slate-800 text-sm">{isAr ? 'تقدّم الطلاب' : 'Student Progress'}</h4>
                   <div className="flex items-center gap-2 mt-1">
                     <div className="w-24 h-1.5 bg-slate-200 rounded-full overflow-hidden">
                       <div 
                         className="h-full bg-emerald-500 rounded-full transition-all duration-500" 
-                        style={{ width: `${(completedCount / totalCount) * 100}%` }}
+                        style={{ width: totalCount > 0 ? `${(completedCount / totalCount) * 100}%` : '0%' }}
                       />
                     </div>
-                    <span className="text-[10px] font-bold text-slate-500">{completedCount}/{totalCount} Completed</span>
+                    <span className="text-[10px] font-bold text-slate-500">{completedCount}/{totalCount} {isAr ? 'خلّصوا' : 'Completed'}</span>
                   </div>
                 </div>
                 <button 
@@ -93,62 +82,42 @@ export function StudentCompletionPopover({ isOpen, onClose, completedCount, tota
 
               {/* Scrollable List */}
               <div className="max-h-[350px] overflow-y-auto p-2 space-y-1 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
-                {students.map(student => (
-                  <div key={student.id} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-xl transition-colors group">
+                {isLoading ? (
+                  <p className="text-center text-xs text-slate-400 py-8">{isAr ? 'جاري التحميل...' : 'Loading...'}</p>
+                ) : students.length === 0 ? (
+                  <p className="text-center text-xs text-slate-400 py-8">{isAr ? 'مفيش طلاب في الفصل ده لسه' : 'No students in this class yet'}</p>
+                ) : students.map(student => (
+                  <div key={student.studentId} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-xl transition-colors group">
                     <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <div className="w-9 h-9 rounded-full bg-slate-100 overflow-hidden relative border border-slate-100">
-                           <Image 
-                             src={student.avatar} 
-                             alt={student.name} 
-                             fill
-                             className="object-cover"
-                             referrerPolicy="no-referrer"
-                           />
-                        </div>
-                        {/* Status Indicator Dots */}
-                        {(student.status === 'late' || student.status === 'missed') && (
-                          <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-rose-500 border-2 border-white rounded-full flex items-center justify-center">
-                            <span className="sr-only">Late</span>
-                          </div>
-                        )}
-                        {student.status === 'pending' && (
-                          <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-400 border-2 border-white rounded-full">
-                            <span className="sr-only">Pending</span>
-                          </div>
-                        )}
+                      <div className="w-9 h-9 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center font-bold text-sm border border-indigo-100">
+                        {(student.name || '?').charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <span className="block text-sm font-bold text-slate-700 leading-tight">{student.name}</span>
-                        <span className={`text-[10px] font-medium ${
-                          student.status === 'late' || student.status === 'missed' ? 'text-rose-500' : 
-                          student.status === 'pending' ? 'text-amber-500' : 'text-emerald-600'
-                        }`}>
-                          {student.status === 'late' ? 'Overdue' : 
-                           student.status === 'missed' ? 'Missed' :
-                           student.status === 'pending' ? 'In Progress' : 'Completed'}
+                        <span className="block text-sm font-bold text-slate-700 leading-tight">{student.name || (isAr ? 'طالب' : 'Student')}</span>
+                        <span className={`text-[10px] font-medium ${student.completed ? 'text-emerald-600' : 'text-amber-500'}`}>
+                          {student.completed ? (isAr ? 'خلّص' : 'Completed') : (isAr ? 'لسه' : 'In Progress')}
                         </span>
                       </div>
                     </div>
 
                     {/* Action Button */}
-                    {student.status === 'completed' ? (
+                    {student.completed ? (
                       <div className="w-8 h-8 flex items-center justify-center text-emerald-500 bg-emerald-50 rounded-full">
                         <Check size={16} strokeWidth={3} />
                       </div>
                     ) : (
                       <button 
-                        onClick={() => handleNudge(student.id, student.name)}
-                        disabled={nudgedStudents.has(student.id)}
+                        onClick={() => handleNudge(student.studentId, student.name)}
+                        disabled={nudgedStudents.has(student.studentId)}
                         className={`w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 relative overflow-hidden group/btn
-                          ${nudgedStudents.has(student.id) 
+                          ${nudgedStudents.has(student.studentId) 
                             ? 'bg-indigo-100 text-indigo-600' 
                             : 'bg-slate-100 text-slate-400 hover:bg-indigo-600 hover:text-white hover:shadow-md hover:shadow-indigo-200'
                           }`}
-                        title="Send Nudge"
+                        title={isAr ? 'إرسال تذكير' : 'Send Nudge'}
                       >
                         <AnimatePresence mode='wait'>
-                          {nudgedStudents.has(student.id) ? (
+                          {nudgedStudents.has(student.studentId) ? (
                             <motion.div 
                               key="check"
                               initial={{ scale: 0, rotate: -45 }} 
@@ -172,13 +141,6 @@ export function StudentCompletionPopover({ isOpen, onClose, completedCount, tota
                     )}
                   </div>
                 ))}
-              </div>
-              
-              {/* Footer */}
-              <div className="p-3 bg-slate-50 border-t border-slate-100 text-center">
-                <button className="text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:underline">
-                  View Full Gradebook
-                </button>
               </div>
             </motion.div>
       </div>
