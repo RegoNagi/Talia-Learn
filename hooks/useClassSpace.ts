@@ -13,6 +13,7 @@ import {
 } from '@/types/classSpace';
 
 import { getRealPosts, createRealPost, reactToRealPost, addRealComment, getRealHomeworkItems, createRealHomeworkItem, getRealQuizItems, getRealResourceItems } from '@/services/classSpaceData';
+import { getLiveSessions as getRealLiveSessionsRaw } from '@/services/liveSessionsData';
 
 export function useClassSpace(scope?: { authUser?: any; userRole?: 'teacher' | 'student' | 'parent' | 'qb_supervisor'; classId?: string; subject?: string; grade?: string; className?: string }) {
   const [filters, setFilters] = useState<ClassSpaceFilterState>({
@@ -66,86 +67,91 @@ export function useClassSpace(scope?: { authUser?: any; userRole?: 'teacher' | '
     }
   }, [scope?.authUser, scope?.userRole]);
 
+  // فصل ومادة محددين فعليًا (مش أي قيمة افتراضية فاضية) — هو الشرط الوحيد اللي بيسمح بجلب/إنشاء بيانات حقيقية.
+  // لو مش متحقق، مفيش أي احتياطي وهمي خالص — كل الأقسام بترجع فاضية وتوري رسالة "اختر فصل ومادة".
+  const hasRealScope = !!(scope?.classId && scope?.subject && scope?.authUser?.teacherId);
+
   // Fetch Posts
   const fetchPosts = useCallback(async () => {
+    if (!hasRealScope) { setPosts([]); setIsLoadingPosts(false); return; }
     setIsLoadingPosts(true);
     try {
-      if (scope?.classId && scope?.subject) {
-        const data = await getRealPosts(scope.classId, scope.subject);
-        setPosts(data);
-      } else {
-        const data = await classSpaceApi.getPosts(filters);
-        setPosts(data);
-      }
+      const data = await getRealPosts(scope!.classId!, scope!.subject!);
+      setPosts(data);
     } catch (e) {
       console.error('Failed to fetch posts', e);
     } finally {
       setIsLoadingPosts(false);
     }
-  }, [filters, scope?.classId, scope?.subject]);
+  }, [hasRealScope, scope?.classId, scope?.subject]);
 
   // Fetch Live Sessions
   const fetchLiveSessions = useCallback(async () => {
+    if (!hasRealScope) { setLiveSessions([]); setIsLoadingSessions(false); return; }
     setIsLoadingSessions(true);
     try {
-      const data = await classSpaceApi.getLiveSessions(filters);
-      setLiveSessions(data);
+      const real = await getRealLiveSessionsRaw(scope!.classId!, scope!.subject!);
+      const now = Date.now();
+      const mapped: LiveSession[] = real.map((s) => {
+        const start = new Date(s.scheduledAt).getTime();
+        const status: LiveSession['status'] = Math.abs(now - start) < 60 * 60 * 1000 ? 'live' : (start > now ? 'upcoming' : 'completed');
+        return {
+          id: s.id,
+          title: s.title,
+          subject: scope!.subject!,
+          grade: scope?.grade || '',
+          className: scope?.className || '',
+          scheduledAt: s.scheduledAt,
+          durationMinutes: 45,
+          hostName: scope?.authUser?.name || '',
+          hostAvatar: '',
+          status,
+          joinUrl: s.joinUrl,
+        } as LiveSession;
+      });
+      setLiveSessions(mapped);
     } catch (e) {
       console.error('Failed to fetch live sessions', e);
     } finally {
       setIsLoadingSessions(false);
     }
-  }, [filters]);
+  }, [hasRealScope, scope?.classId, scope?.subject]);
 
   // Fetch Homework
-  const hasRealScope = !!(scope?.classId && scope?.subject && (scope?.authUser?.teacherId));
-
   const fetchHomework = useCallback(async () => {
+    if (!hasRealScope) { setHomeworkList([]); setIsLoadingHomework(false); return; }
     setIsLoadingHomework(true);
     try {
-      if (hasRealScope) {
-        const data = await getRealHomeworkItems({ teacherId: scope!.authUser.teacherId, classId: scope!.classId!, subject: scope!.subject!, grade: scope?.grade || '', className: scope?.className || '' });
-        setHomeworkList(data);
-      } else {
-        const data = await classSpaceApi.getHomeworkList(filters);
-        setHomeworkList(data);
-      }
+      const data = await getRealHomeworkItems({ teacherId: scope!.authUser.teacherId, classId: scope!.classId!, subject: scope!.subject!, grade: scope?.grade || '', className: scope?.className || '' });
+      setHomeworkList(data);
     } catch (e) {
       console.error('Failed to fetch homework', e);
     } finally {
       setIsLoadingHomework(false);
     }
-  }, [filters, hasRealScope, scope?.classId, scope?.subject]);
+  }, [hasRealScope, scope?.classId, scope?.subject]);
 
   // Fetch Quizzes
   const fetchQuizzes = useCallback(async () => {
+    if (!hasRealScope) { setQuizzes([]); setIsLoadingQuizzes(false); return; }
     setIsLoadingQuizzes(true);
     try {
-      if (hasRealScope) {
-        const data = await getRealQuizItems({ teacherId: scope!.authUser.teacherId, classId: scope!.classId!, subject: scope!.subject!, grade: scope?.grade || '', className: scope?.className || '' });
-        setQuizzes(data);
-      } else {
-        const data = await classSpaceApi.getQuizzesList(filters);
-        setQuizzes(data);
-      }
+      const data = await getRealQuizItems({ teacherId: scope!.authUser.teacherId, classId: scope!.classId!, subject: scope!.subject!, grade: scope?.grade || '', className: scope?.className || '' });
+      setQuizzes(data);
     } catch (e) {
       console.error('Failed to fetch quizzes', e);
     } finally {
       setIsLoadingQuizzes(false);
     }
-  }, [filters, hasRealScope, scope?.classId, scope?.subject]);
+  }, [hasRealScope, scope?.classId, scope?.subject]);
 
   // Fetch Resources
   const fetchResources = useCallback(async () => {
+    if (!hasRealScope) { setResources([]); setIsLoadingResources(false); return; }
     setIsLoadingResources(true);
     try {
-      if (hasRealScope) {
-        const data = await getRealResourceItems({ teacherId: scope!.authUser.teacherId, classId: scope!.classId!, subject: scope!.subject!, grade: scope?.grade || '' });
-        setResources(data);
-      } else {
-        const data = await classSpaceApi.getResourcesList(resourceSearch, resourceCategory);
-        setResources(data);
-      }
+      const data = await getRealResourceItems({ teacherId: scope!.authUser.teacherId, classId: scope!.classId!, subject: scope!.subject!, grade: scope?.grade || '' });
+      setResources(data);
     } catch (e) {
       console.error('Failed to fetch resources', e);
     } finally {
@@ -167,23 +173,22 @@ export function useClassSpace(scope?: { authUser?: any; userRole?: 'teacher' | '
 
   // Mutations
   const createPost = async (postData: Partial<Post>) => {
+    if (!hasRealScope || !currentUser) {
+      showNotification('اختار فصل ومادة الأول عشان تقدر تنشئ');
+      return;
+    }
     try {
-      if (scope?.classId && scope?.subject && currentUser) {
-        const newPost = await createRealPost({
-          classId: scope.classId,
-          subject: scope.subject,
-          authorId: currentUser.id,
-          authorRole: currentUser.role,
-          authorName: currentUser.name,
-          content: postData.content || '',
-          topicTag: postData.topicTag,
-          media: postData.media,
-        });
-        if (newPost) setPosts(prev => [newPost, ...prev]);
-      } else {
-        const newPost = await classSpaceApi.createPost(postData);
-        setPosts(prev => [newPost, ...prev]);
-      }
+      const newPost = await createRealPost({
+        classId: scope!.classId!,
+        subject: scope!.subject!,
+        authorId: currentUser.id,
+        authorRole: currentUser.role,
+        authorName: currentUser.name,
+        content: postData.content || '',
+        topicTag: postData.topicTag,
+        media: postData.media,
+      });
+      if (newPost) setPosts(prev => [newPost, ...prev]);
       showNotification('Post published successfully to Class Space!');
     } catch (e) {
       showNotification('Failed to publish post.');
@@ -191,29 +196,21 @@ export function useClassSpace(scope?: { authUser?: any; userRole?: 'teacher' | '
   };
 
   const reactToPost = async (postId: string, reaction: keyof Post['interactions']) => {
+    if (!hasRealScope || !currentUser) return;
     try {
-      if (scope?.classId && scope?.subject && currentUser) {
-        await reactToRealPost(postId, currentUser.id, reaction);
-        setPosts(prev => prev.map(p => p.id === postId ? { ...p, interactions: { ...p.interactions, [reaction]: p.interactions[reaction] + 1 } } : p));
-      } else {
-        const updated = await classSpaceApi.reactToPost(postId, reaction);
-        setPosts(prev => prev.map(p => p.id === postId ? updated : p));
-      }
+      await reactToRealPost(postId, currentUser.id, reaction);
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, interactions: { ...p.interactions, [reaction]: p.interactions[reaction] + 1 } } : p));
     } catch (e) {
       console.error(e);
     }
   };
 
   const addComment = async (postId: string, commentText: string) => {
+    if (!hasRealScope || !currentUser) return;
     try {
-      if (scope?.classId && scope?.subject && currentUser) {
-        await addRealComment(postId, currentUser.id, currentUser.role, currentUser.name, commentText);
-        const newComment = { id: `local-${Date.now()}`, author: currentUser, content: commentText, timestamp: 'Just now' };
-        setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p));
-      } else {
-        const updated = await classSpaceApi.addComment(postId, commentText);
-        setPosts(prev => prev.map(p => p.id === postId ? updated : p));
-      }
+      await addRealComment(postId, currentUser.id, currentUser.role, currentUser.name, commentText);
+      const newComment = { id: `local-${Date.now()}`, author: currentUser, content: commentText, timestamp: 'Just now' };
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p));
       showNotification('Comment added!');
     } catch (e) {
       console.error(e);
@@ -221,6 +218,10 @@ export function useClassSpace(scope?: { authUser?: any; userRole?: 'teacher' | '
   };
 
   const scheduleLiveSession = async (data: Omit<LiveSession, 'id' | 'hostName' | 'hostAvatar' | 'status'>) => {
+    if (!hasRealScope) {
+      showNotification('اختار فصل ومادة الأول عشان تقدر تنشئ');
+      return;
+    }
     try {
       const newSession = await classSpaceApi.scheduleLiveSession(data);
       setLiveSessions(prev => [newSession, ...prev]);
@@ -231,14 +232,13 @@ export function useClassSpace(scope?: { authUser?: any; userRole?: 'teacher' | '
   };
 
   const createHomework = async (data: Omit<HomeworkItem, 'id' | 'submittedCount' | 'status'>) => {
+    if (!hasRealScope) {
+      showNotification('اختار فصل ومادة الأول عشان تقدر تنشئ');
+      return;
+    }
     try {
-      if (hasRealScope) {
-        const newHw = await createRealHomeworkItem({ teacherId: scope!.authUser.teacherId, classId: scope!.classId!, subject: scope!.subject! }, { title: data.title, dueDate: data.dueDate, instructions: data.instructions });
-        if (newHw) setHomeworkList(prev => [newHw, ...prev]);
-      } else {
-        const newHw = await classSpaceApi.createHomework(data);
-        setHomeworkList(prev => [newHw, ...prev]);
-      }
+      const newHw = await createRealHomeworkItem({ teacherId: scope!.authUser.teacherId, classId: scope!.classId!, subject: scope!.subject! }, { title: data.title, dueDate: data.dueDate, instructions: data.instructions });
+      if (newHw) setHomeworkList(prev => [newHw, ...prev]);
       showNotification('Homework assignment created!');
     } catch (e) {
       showNotification('Error creating homework.');
@@ -246,6 +246,10 @@ export function useClassSpace(scope?: { authUser?: any; userRole?: 'teacher' | '
   };
 
   const createQuiz = async (data: Omit<QuizItem, 'id' | 'submissionsCount'>) => {
+    if (!hasRealScope) {
+      showNotification('اختار فصل ومادة الأول عشان تقدر تنشئ');
+      return;
+    }
     try {
       const newQuiz = await classSpaceApi.createQuiz(data);
       setQuizzes(prev => [newQuiz, ...prev]);

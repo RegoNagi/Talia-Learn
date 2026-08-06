@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Bookmark, Search, Download, FileText, Video, BookOpen, ChevronRight } from 'lucide-react';
+import { Bookmark, Search, Download, BookOpen } from 'lucide-react';
 import { ResourceItem } from '@/types/classSpace';
 
 interface ResourcesWidgetProps {

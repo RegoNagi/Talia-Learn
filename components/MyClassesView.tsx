@@ -3,11 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { BookOpen, Users, Globe } from 'lucide-react';
+import { BookOpen, Users, Globe, Palette, X, Check } from 'lucide-react';
 import { ClassSpaceView } from '@/features/class-space/ClassSpaceView';
 import { AuthenticatedUser } from '@/services/auth';
 import { getMyClassSections, LearnClassSection } from '@/services/attendanceData';
 import { getStudentClassSection, getGradeSubjects, LearnClassInfo } from '@/services/academicData';
+import { getSubjectThemes, getThemeFor, upsertSubjectTheme, SubjectTheme, SUBJECT_COLOR_OPTIONS, SUBJECT_ICON_OPTIONS } from '@/services/subjectThemeData';
+import { getSubjectIconComponent } from '@/lib/subjectIcons';
 
 interface MyClassesViewProps {
   language: 'ar' | 'en';
@@ -86,10 +88,21 @@ export function MyClassesView({
 }: MyClassesViewProps) {
   const [activeTab, setActiveTab] = useState<'subjects' | 'space'>(defaultSubTab);
   const [activeFilter, setActiveFilter] = useState<string>('All Classes');
+  const [gradeFilter, setGradeFilter] = useState<string>('All Grades');
   const [myClasses, setMyClasses] = useState<LearnClassSection[]>([]);
   const [myClassInfo, setMyClassInfo] = useState<LearnClassInfo | null>(null);
   const [mySubjects, setMySubjects] = useState<string[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [subjectThemes, setSubjectThemes] = useState<Record<string, SubjectTheme>>({});
+  const [editingThemeSubject, setEditingThemeSubject] = useState<string | null>(null);
+
+  const refreshThemes = () => {
+    getSubjectThemes().then(setSubjectThemes);
+  };
+
+  useEffect(() => {
+    refreshThemes();
+  }, []);
 
   const t = dict[language];
 
@@ -133,6 +146,7 @@ export function MyClassesView({
         id: `${cls.id}__${encodeURIComponent(subject)}`,
         title: subject,
         className: cls.name,
+        grade: cls.gradeLevel,
         studentCount: cls.students.length,
       })))
     : myClassInfo
@@ -140,15 +154,17 @@ export function MyClassesView({
           id: `${myClassInfo!.id}__${encodeURIComponent(subject)}`,
           title: subject,
           className: myClassInfo!.name,
+          grade: myClassInfo!.gradeLevel,
           studentCount: myClassInfo!.studentCount,
         }))
       : [];
 
   const classes = ['All Classes', ...Array.from(new Set(myClasses.map((c) => c.name)))];
+  const grades = ['All Grades', ...Array.from(new Set(courses.map((c) => c.grade).filter(Boolean)))];
 
-  const filteredCourses = activeFilter === 'All Classes' 
-    ? courses 
-    : courses.filter(c => c.className === activeFilter);
+  const filteredCourses = courses
+    .filter((c) => activeFilter === 'All Classes' || c.className === activeFilter)
+    .filter((c) => gradeFilter === 'All Grades' || c.grade === gradeFilter);
 
   return (
     <div className="w-full flex flex-col space-y-4">
@@ -268,6 +284,25 @@ export function MyClassesView({
             </div>
           )}
 
+          {/* Grade Filter Bar */}
+          {userRole === 'teacher' && grades.length > 2 && (
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+              {grades.map(g => (
+                <button
+                  key={g}
+                  onClick={() => setGradeFilter(g)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
+                    gradeFilter === g 
+                      ? 'bg-indigo-600 text-white shadow-sm' 
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  {g === 'All Grades' ? (language === 'ar' ? 'كل الصفوف' : 'All Grades') : g}
+                </button>
+              ))}
+            </div>
+          )}
+
           <section>
             <div className="flex justify-between items-end mb-6">
               <h2 className="text-xl font-bold text-slate-800">{t.yourCourses}</h2>
@@ -277,17 +312,34 @@ export function MyClassesView({
               <p className="text-center text-slate-400 py-16">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                {filteredCourses.map((course) => (
+                {filteredCourses.map((course) => {
+                  const theme = getThemeFor(subjectThemes, course.title);
+                  const SubjectIcon = getSubjectIconComponent(theme.icon);
+                  return (
                   <Link href={`/courses/${course.id}`} key={course.id} className="group block h-[200px]">
                   <div className="bg-white rounded-3xl border border-slate-100 hover:bg-gray-50 transition-all overflow-hidden h-full flex flex-col relative w-full">
-                    <div className="h-[55%] relative overflow-hidden bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center">
-                      <BookOpen size={40} className="text-white/90" />
+                    <div className={`h-[55%] relative overflow-hidden ${theme.color} flex items-center justify-center`}>
+                      <SubjectIcon size={40} className="text-white/90" />
                       {userRole === 'teacher' && (
-                        <div className="absolute top-4 left-4 z-20">
+                        <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5">
                           <span className="bg-black/30 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider border border-white/10">
                             {course.className}
                           </span>
+                          {course.grade && (
+                            <span className="bg-white/25 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider border border-white/10">
+                              {course.grade}
+                            </span>
+                          )}
                         </div>
+                      )}
+                      {userRole === 'teacher' && (
+                        <button
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingThemeSubject(course.title); }}
+                          className="absolute top-4 right-4 z-20 w-7 h-7 rounded-lg bg-black/30 backdrop-blur-md text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/50"
+                          title={language === 'ar' ? 'تخصيص شكل المادة' : 'Customize subject theme'}
+                        >
+                          <Palette size={14} />
+                        </button>
                       )}
                       <div className="absolute bottom-4 left-4 right-4 z-20">
                         <h3 className="text-white font-bold text-lg leading-tight drop-shadow-md">
@@ -303,7 +355,8 @@ export function MyClassesView({
                     </div>
                   </div>
                   </Link>
-                ))}
+                  );
+                })}
                 {filteredCourses.length === 0 && (
                   <p className="col-span-full text-center text-slate-400 py-16">
                     {language === 'ar' ? 'مفيش فصول أو مواد مرتبطة بحسابك لسه.' : 'No classes or subjects linked to your account yet.'}
@@ -330,6 +383,87 @@ export function MyClassesView({
           />
         </div>
       )}
+
+      {editingThemeSubject && (
+        <SubjectThemeModal
+          subjectName={editingThemeSubject}
+          currentTheme={getThemeFor(subjectThemes, editingThemeSubject)}
+          language={language}
+          onClose={() => setEditingThemeSubject(null)}
+          onSaved={() => { setEditingThemeSubject(null); refreshThemes(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function SubjectThemeModal({ subjectName, currentTheme, language, onClose, onSaved }: { subjectName: string; currentTheme: SubjectTheme; language: 'ar' | 'en'; onClose: () => void; onSaved: () => void }) {
+  const [selectedColor, setSelectedColor] = useState(currentTheme.color);
+  const [selectedIcon, setSelectedIcon] = useState(currentTheme.icon);
+  const [isSaving, setIsSaving] = useState(false);
+  const PreviewIcon = getSubjectIconComponent(selectedIcon);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    await upsertSubjectTheme(subjectName, { color: selectedColor, icon: selectedIcon });
+    setIsSaving(false);
+    onSaved();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className={`${selectedColor} p-5 text-white flex justify-between items-center transition-colors`}>
+          <div className="flex items-center gap-2">
+            <PreviewIcon size={20} />
+            <h3 className="font-extrabold text-sm">{subjectName}</h3>
+          </div>
+          <button onClick={onClose} className="text-white/80 hover:text-white">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-2">{language === 'ar' ? 'اللون' : 'Color'}</label>
+            <div className="flex flex-wrap gap-2">
+              {SUBJECT_COLOR_OPTIONS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setSelectedColor(c)}
+                  className={`w-8 h-8 rounded-full ${c} flex items-center justify-center transition-transform ${selectedColor === c ? 'ring-2 ring-offset-2 ring-slate-800 scale-110' : ''}`}
+                >
+                  {selectedColor === c && <Check size={14} className="text-white" />}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-2">{language === 'ar' ? 'الأيقونة' : 'Icon'}</label>
+            <div className="grid grid-cols-6 gap-2">
+              {SUBJECT_ICON_OPTIONS.map((iconName) => {
+                const IconComp = getSubjectIconComponent(iconName);
+                return (
+                  <button
+                    key={iconName}
+                    onClick={() => setSelectedIcon(iconName)}
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-colors ${selectedIcon === iconName ? `${selectedColor} text-white border-transparent` : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`}
+                  >
+                    <IconComp size={16} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl">
+              {language === 'ar' ? 'إلغاء' : 'Cancel'}
+            </button>
+            <button onClick={handleSave} disabled={isSaving} className="px-5 py-2 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs">
+              {isSaving ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...') : (language === 'ar' ? 'حفظ' : 'Save')}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

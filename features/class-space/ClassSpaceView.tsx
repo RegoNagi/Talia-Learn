@@ -44,9 +44,23 @@ export function ClassSpaceView({ authUser, userRole, classId: initialClassId, su
   const [activeGrade, setActiveGrade] = useState(initialGrade);
   const [activeClassName, setActiveClassName] = useState(initialClassName);
 
+  const hasSelection = !!(activeClassId && activeSubject);
+  const SELECT_FIRST_MSG = 'اختار فصل ومادة الأول عشان تقدر تنشئ';
+
   const goToCreateAssignment = () => {
+    if (!hasSelection) { showNotification(SELECT_FIRST_MSG); return; }
     const from = typeof window !== 'undefined' ? encodeURIComponent(window.location.pathname + window.location.search) : '';
     router.push(`/assessment-builder?type=assignment&classId=${activeClassId || ''}&subject=${encodeURIComponent(activeSubject || '')}&grade=${encodeURIComponent(activeGrade || '')}&from=${from}`);
+  };
+
+  const goToLiveSessions = () => {
+    if (!hasSelection) { showNotification(SELECT_FIRST_MSG); return; }
+    router.push(`/courses/${activeClassId}__${encodeURIComponent(activeSubject || '')}?tab=live-sessions`);
+  };
+
+  const goToCourseContent = () => {
+    if (!hasSelection) { showNotification(SELECT_FIRST_MSG); return; }
+    router.push(`/courses/${activeClassId}__${encodeURIComponent(activeSubject || '')}?tab=learning-path`);
   };
 
   useEffect(() => {
@@ -67,7 +81,6 @@ export function ClassSpaceView({ authUser, userRole, classId: initialClassId, su
     addComment,
     liveSessions,
     isLoadingSessions,
-    scheduleLiveSession,
     homeworkList,
     isLoadingHomework,
     quizzes,
@@ -79,7 +92,8 @@ export function ClassSpaceView({ authUser, userRole, classId: initialClassId, su
     setResourceSearch,
     resourceCategory,
     setResourceCategory,
-    toastMessage
+    toastMessage,
+    showNotification
   } = useClassSpace({ authUser, userRole, classId: activeClassId, subject: activeSubject, grade: activeGrade, className: activeClassName });
 
   const [activeTab, setActiveTab] = useState<'wall' | 'assessments' | 'resources'>('wall');
@@ -325,7 +339,7 @@ export function ClassSpaceView({ authUser, userRole, classId: initialClassId, su
                   <LiveSessionsWidget
                     sessions={liveSessions}
                     isLoading={isLoadingSessions}
-                    onScheduleSession={scheduleLiveSession}
+                    onAddClick={goToLiveSessions}
                   />
                 </div>
 
@@ -344,6 +358,7 @@ export function ClassSpaceView({ authUser, userRole, classId: initialClassId, su
                     onCreateQuiz={createQuiz}
                     classId={activeClassId}
                     subject={activeSubject}
+                    onRequireSelection={() => showNotification(SELECT_FIRST_MSG)}
                   />
                 </div>
               </div>
@@ -387,7 +402,7 @@ export function ClassSpaceView({ authUser, userRole, classId: initialClassId, su
                     onSearchChange={setResourceSearch}
                     selectedCategory={resourceCategory}
                     onCategoryChange={setResourceCategory}
-                    onGoToLibrary={() => setActiveTab('resources')}
+                    onGoToLibrary={goToCourseContent}
                   />
                 </div>
 
@@ -413,6 +428,7 @@ export function ClassSpaceView({ authUser, userRole, classId: initialClassId, su
               onCreateQuiz={createQuiz}
               classId={activeClassId}
               subject={activeSubject}
+              onRequireSelection={() => showNotification(SELECT_FIRST_MSG)}
             />
           </div>
         )}

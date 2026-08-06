@@ -11,6 +11,7 @@ interface QuizzesWidgetProps {
   onCreateQuiz: (data: Omit<QuizItem, 'id' | 'submissionsCount'>) => void;
   classId?: string;
   subject?: string;
+  onRequireSelection?: () => void;
 }
 
 export function QuizzesWidget({
@@ -18,10 +19,12 @@ export function QuizzesWidget({
   isLoading,
   classId,
   subject,
+  onRequireSelection,
 }: QuizzesWidgetProps) {
   const router = useRouter();
 
   const goToQuizBuilder = () => {
+    if (!classId || !subject) { onRequireSelection?.(); return; }
     const from = typeof window !== 'undefined' ? encodeURIComponent(window.location.pathname + window.location.search) : '';
     router.push(`/assessment-builder?type=quiz&classId=${classId || ''}&subject=${encodeURIComponent(subject || '')}&from=${from}`);
   };
