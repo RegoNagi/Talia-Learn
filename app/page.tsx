@@ -309,7 +309,7 @@ export default function Dashboard() {
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
                     isTodoOpen ? 'bg-white/20 text-white' : 'bg-indigo-200/80 text-indigo-900'
                   }`}>
-                    {todoItems.filter(i => !i.completed).length}
+                    {todoTasks.filter(t => t.type !== 'quick_task' || !t.isCompleted).length}
                   </span>
                 </button>
               </div>
