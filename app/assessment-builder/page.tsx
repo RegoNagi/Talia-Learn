@@ -43,7 +43,7 @@ interface Question {
   hotspots?: { xPercent: number; yPercent: number; label: string; isCorrect: boolean }[];
   audioUrl?: string;
   passageText?: string;
-  subQuestions?: { id: string; title: string; type: 'اختيار من متعدد' | 'صح أم خطأ' | 'إجابة قصيرة'; points: number; options?: { id: string; text: string; isCorrect: boolean }[] }[];
+  subQuestions?: { id: string; title: string; type: string; points: number; options?: { id: string; text: string; isCorrect: boolean }[] }[];
 }
 
 interface QuizSection {
