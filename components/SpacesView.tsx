@@ -967,7 +967,7 @@ function CreateAnnouncementPanel({ isOpen, onClose, creatorId, creatorRole, onSa
   );
 }
 
-function SpacesSidebar({ space, language = 'en', classId, subject, teacherId, authUser, isRealScope, topChallengers = [], hasActiveChallenge }: { space: 'school' | 'class' | 'subject', language?: 'ar' | 'en', classId?: string, subject?: string, teacherId?: string, authUser?: any, isRealScope?: boolean, topChallengers?: ChallengeSubmission[], hasActiveChallenge?: boolean }) {
+function SpacesSidebar({ space, language = 'en', classId, subject, teacherId, authUser, isRealScope, topChallengers = [], hasActiveChallenge, onNavigate }: { space: 'school' | 'class' | 'subject', language?: 'ar' | 'en', classId?: string, subject?: string, teacherId?: string, authUser?: any, isRealScope?: boolean, topChallengers?: ChallengeSubmission[], hasActiveChallenge?: boolean, onNavigate?: (tab: string) => void }) {
   const creatorId = authUser?.teacherId || authUser?.userId || '';
   const creatorRole = authUser?.role === 'teacher' ? 'teacher' : 'admin';
 
@@ -1508,7 +1508,7 @@ export function SpacesView({ space, language = 'en', classId, subject, authUser,
           </div>
         </div>
 
-        <SpacesSidebar space={space} language={language} classId={classId} subject={subject} teacherId={authUser?.teacherId} authUser={authUser} isRealScope={isRealScope} topChallengers={topChallengers} hasActiveChallenge={!!activeChallenge} />
+        <SpacesSidebar space={space} language={language} classId={classId} subject={subject} teacherId={authUser?.teacherId} authUser={authUser} isRealScope={isRealScope} topChallengers={topChallengers} hasActiveChallenge={!!activeChallenge} onNavigate={onNavigate} />
       </div>
 
       <AnimatePresence>
