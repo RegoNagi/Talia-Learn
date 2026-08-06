@@ -197,3 +197,16 @@ export async function deleteLesson(id: string): Promise<{ ok: boolean; error: st
   if (error) console.error('Error deleting lesson:', error);
   return { ok: !error, error: error?.message || null };
 }
+
+// نسبة الإنجاز الحقيقية لفصل ومادة معيّنين — عدد الدروس المكتملة من إجمالي الدروس في كل وحداتهم (مش مخفية)
+export async function getCourseProgress(scope: UnitScope): Promise<{ completed: number; total: number }> {
+  const units = await getUnits(scope);
+  const visibleUnits = units.filter((u) => !u.isHidden);
+  if (visibleUnits.length === 0) return { completed: 0, total: 0 };
+  const lessons = await getLessons(visibleUnits.map((u) => u.id));
+  const visibleLessons = lessons.filter((l) => !l.isHidden);
+  return {
+    completed: visibleLessons.filter((l) => l.isComplete).length,
+    total: visibleLessons.length,
+  };
+}

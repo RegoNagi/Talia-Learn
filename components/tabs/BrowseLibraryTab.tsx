@@ -687,20 +687,20 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
                           <div
                             key={folder.id}
                             onClick={() => setCurrentFolderId(folder.id)}
-                            className={`group relative p-4 rounded-2xl border ${theme.border} ${theme.bg} transition-all duration-200 shadow-2xs hover:shadow-md cursor-pointer flex flex-col justify-between h-[135px]`}
+                            className={`group relative p-5 rounded-2xl border ${theme.border} ${theme.bg} transition-all duration-200 shadow-2xs hover:shadow-md cursor-pointer flex flex-col justify-between h-[180px]`}
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-center gap-3">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${theme.iconBg} shadow-xs`}>
-                                  <Folder size={20} />
+                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${theme.iconBg} shadow-xs`}>
+                                  <Folder size={28} />
                                 </div>
                                 <div className="min-w-0">
-                                  <h3 className={`font-bold text-sm ${theme.text} truncate`}>{folder.name}</h3>
-                                  <p className="text-[11px] text-slate-400 font-medium">{folderFilesCount} items</p>
+                                  <h3 className={`font-bold text-base ${theme.text} truncate`}>{folder.name}</h3>
+                                  <p className="text-xs text-slate-400 font-medium mt-0.5">{folderFilesCount} items</p>
                                 </div>
                               </div>
                             </div>
-                            <div className="pt-3 border-t border-black/5 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+                            <div className="pt-4 border-t border-black/5 flex items-center justify-between text-[11px] text-slate-500 font-medium">
                               <div className="flex items-center gap-1.5">
                                 <button onClick={(e) => toggleFolderPrivacy(folder.id, e)} className="p-1 rounded-md transition-colors bg-slate-200/80 hover:bg-slate-300">
                                   {folder.isPublic ? <Globe size={12} /> : <Lock size={12} />}
@@ -799,6 +799,32 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                  {currentFolders.map((folder) => {
+                    const folderFilesCount = files.filter(f => f.folderId === folder.id).length;
+                    return (
+                    <tr key={folder.id} onClick={() => setCurrentFolderId(folder.id)} className="hover:bg-slate-50/80 transition-colors group cursor-pointer">
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                            <Folder size={16} />
+                          </div>
+                          <span className="font-bold text-slate-800">{folder.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-500 uppercase hidden sm:table-cell">{isRtl ? `${folderFilesCount} عنصر` : `${folderFilesCount} items`}</td>
+                      <td className="px-5 py-3.5 text-slate-500 hidden md:table-cell">{folder.createdAt}</td>
+                      <td className="px-5 py-3.5">
+                        <span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold">{folder.isPublic ? 'Public' : 'Private'}</span>
+                      </td>
+                      <td className="px-5 py-3.5 text-end" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={(e) => openShareModal(folder, true, e)} className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg"><Share2 size={14} /></button>
+                          <button onClick={(e) => deleteFolder(folder.id, e)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg"><Trash2 size={14} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                    );
+                  })}
                   {currentFiles.map((file) => (
                     <tr key={file.id} className="hover:bg-slate-50/80 transition-colors group">
                       <td className="px-5 py-3.5">

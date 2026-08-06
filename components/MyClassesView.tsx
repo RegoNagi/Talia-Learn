@@ -10,6 +10,7 @@ import { getMyClassSections, LearnClassSection } from '@/services/attendanceData
 import { getStudentClassSection, getGradeSubjects, LearnClassInfo } from '@/services/academicData';
 import { getSubjectThemes, getThemeFor, upsertSubjectTheme, SubjectTheme, SUBJECT_COLOR_OPTIONS, SUBJECT_ICON_OPTIONS } from '@/services/subjectThemeData';
 import { getSubjectIconComponent } from '@/lib/subjectIcons';
+import { getCourseProgress } from '@/services/learningPathData';
 
 interface MyClassesViewProps {
   language: 'ar' | 'en';
@@ -162,6 +163,20 @@ export function MyClassesView({
   const classes = ['All Classes', ...Array.from(new Set(myClasses.map((c) => c.name)))];
   const grades = ['All Grades', ...Array.from(new Set(courses.map((c) => c.grade).filter(Boolean)))];
 
+  const [courseProgress, setCourseProgress] = useState<Record<string, { completed: number; total: number }>>({});
+
+  useEffect(() => {
+    if (courses.length === 0) return;
+    Promise.all(
+      courses.map((c) =>
+        getCourseProgress({ teacherId: authUser.teacherId, classId: c.id.split('__')[0], subject: c.title }).then((p) => [c.id, p] as const)
+      )
+    ).then((results) => {
+      setCourseProgress(Object.fromEntries(results));
+    });
+  }, [myClasses, myClassInfo, mySubjects, authUser.teacherId]);
+
+
   const filteredCourses = courses
     .filter((c) => activeFilter === 'All Classes' || c.className === activeFilter)
     .filter((c) => gradeFilter === 'All Grades' || c.grade === gradeFilter);
@@ -265,25 +280,9 @@ export function MyClassesView({
             </div>
           </header>
 
-          {/* Class + Grade Filter Bar (side by side) */}
+          {/* Grade + Class Filter Bar (side by side, grade first) */}
           {userRole === 'teacher' && (
-            <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
-              <div className="flex gap-2 shrink-0">
-                {classes.map(cls => (
-                  <button
-                    key={cls}
-                    onClick={() => setActiveFilter(cls)}
-                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
-                      activeFilter === cls 
-                        ? 'bg-slate-800 text-white shadow-sm' 
-                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-                    }`}
-                  >
-                    {cls === 'All Classes' ? t.allClasses : cls}
-                  </button>
-                ))}
-              </div>
-              <div className="w-px h-6 bg-slate-200 shrink-0" />
+            <div className="flex items-center gap-6 overflow-x-auto pb-2 scrollbar-hide">
               <div className="flex gap-2 shrink-0">
                 {grades.map(g => (
                   <button
@@ -296,6 +295,22 @@ export function MyClassesView({
                     }`}
                   >
                     {g === 'All Grades' ? (language === 'ar' ? 'كل الصفوف' : 'All Grades') : g}
+                  </button>
+                ))}
+              </div>
+              <div className="w-px h-6 bg-slate-200 shrink-0" />
+              <div className="flex gap-2 shrink-0">
+                {classes.map(cls => (
+                  <button
+                    key={cls}
+                    onClick={() => setActiveFilter(cls)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
+                      activeFilter === cls 
+                        ? 'bg-slate-800 text-white shadow-sm' 
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    {cls === 'All Classes' ? t.allClasses : cls}
                   </button>
                 ))}
               </div>
@@ -317,7 +332,7 @@ export function MyClassesView({
                   return (
                   <Link href={`/courses/${course.id}`} key={course.id} className="group block h-[220px]">
                   <div className="bg-white rounded-3xl border border-slate-100 hover:bg-gray-50 transition-all overflow-hidden h-full flex flex-col relative w-full">
-                    <div className={`h-[78%] relative overflow-hidden ${theme.color} flex items-center justify-center`}>
+                    <div className={`flex-[2] relative overflow-hidden ${theme.color} flex items-center justify-center`}>
                       <SubjectIcon size={40} className="text-white/90" />
                       {userRole === 'teacher' && (
                         <div className="absolute top-3 left-3 z-20 flex items-center gap-1">
@@ -346,11 +361,24 @@ export function MyClassesView({
                         </h3>
                       </div>
                     </div>
-                    <div className="px-4 py-2.5 flex items-center bg-white z-20">
+                    <div className="flex-1 px-4 py-2 flex flex-col justify-center gap-1.5 bg-white z-20">
                       <div className="flex items-center gap-2 text-sm text-slate-500">
                         <Users size={14} className="shrink-0" />
                         <span>{course.studentCount} {language === 'ar' ? 'طالب' : 'students'}</span>
                       </div>
+                      {(() => {
+                        const prog = courseProgress[course.id];
+                        if (!prog || prog.total === 0) return null;
+                        const pct = Math.round((prog.completed / prog.total) * 100);
+                        return (
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${theme.color}`} style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-400 shrink-0">{pct}%</span>
+                          </div>
+                        );
+                      })()}                      </div>
                     </div>
                   </div>
                   </Link>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Book, ChevronDown, MoreHorizontal, PlayCircle, FileText, BrainCircuit, ShieldCheck, Shuffle, Plus, User, Sparkles, Trash2, EyeOff, Eye, Share2, Edit, Layout, Check, ClipboardCheck, X, MoreVertical, Link as LinkIcon } from 'lucide-react';
 
@@ -489,10 +489,11 @@ export function LearningPathTab({
                     </div>
                   )}
 
-                  <div className="p-2 space-y-1 bg-slate-50/30 rounded-b-3xl">
+                  <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 bg-slate-50/30 rounded-b-3xl">
                     {unit.lessons.map((lesson) => (
-                      <React.Fragment key={lesson.id}>
-                        <div 
+                      <div key={lesson.id} className="group relative bg-white rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-md transition-all cursor-pointer overflow-hidden flex flex-col">
+                        {/* Thumbnail */}
+                        <div
                           onClick={() => {
                           if (lesson.type === 'link' && lesson.url) {
                             window.open(lesson.url, '_blank');
@@ -507,59 +508,28 @@ export function LearningPathTab({
                             }
                           }
                         }}
-                        className="flex items-center justify-between p-3 rounded-2xl bg-white hover:bg-slate-50 border border-transparent hover:border-slate-100 group transition-colors mx-4 relative cursor-pointer shadow-none"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0
-                            ${lesson.type === 'video' ? 'bg-pink-50 text-pink-500' :
-                              lesson.type === 'pdf' ? 'bg-blue-50 text-blue-500' :
-                              lesson.type === 'link' ? 'bg-orange-50 text-orange-500' :
-                              lesson.type === 'quiz' ? 'bg-purple-50 text-purple-500' :
-                              ['assignment', 'project'].includes(lesson.type) ? 'bg-teal-50 text-teal-500' :
-                              'bg-slate-50 text-slate-500'
+                          className={`aspect-video relative flex items-center justify-center
+                            ${lesson.type === 'video' ? 'bg-pink-50 text-pink-400' :
+                              lesson.type === 'pdf' ? 'bg-blue-50 text-blue-400' :
+                              lesson.type === 'link' ? 'bg-orange-50 text-orange-400' :
+                              lesson.type === 'quiz' ? 'bg-purple-50 text-purple-400' :
+                              ['assignment', 'project'].includes(lesson.type) ? 'bg-teal-50 text-teal-400' :
+                              'bg-slate-100 text-slate-400'
                             }`}
-                          >
-                            {lesson.type === 'video' ? <PlayCircle size={20} /> :
-                             lesson.type === 'pdf' ? <FileText size={20} /> :
-                             lesson.type === 'link' ? <LinkIcon size={20} /> :
-                             lesson.type === 'quiz' ? <BrainCircuit size={20} /> :
-                             <ClipboardCheck size={20} />}
-                          </div>
-                          
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-medium text-slate-800 text-sm">{lesson.title}</h4>
-                              {lesson.isHidden && (
-                                <span className="flex items-center gap-1 bg-amber-50 text-amber-700 text-[9px] font-bold px-1.5 py-0.5 rounded-md border border-amber-200">
-                                  <EyeOff size={9} /> {language === 'ar' ? 'مخفي' : 'Hidden'}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              {/* Badges */}
-                              {!isStudent && lesson.source === 'official' && (
-                                <span className="flex items-center gap-1 bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border border-slate-200">
-                                  <ShieldCheck size={10} /> Official
-                                </span>
-                              )}
-                              {!isStudent && lesson.source === 'custom' && (
-                                <span className="flex items-center gap-1 bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border border-blue-100">
-                                  <User size={10} /> Custom
-                                </span>
-                              )}
-                              {!isStudent && lesson.source === 'ai' && (
-                                <span className="flex items-center gap-1 bg-purple-50 text-purple-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border border-purple-100">
-                                  <Sparkles size={10} /> AI Generated
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                        >
+                          {lesson.type === 'video' ? <PlayCircle size={44} /> :
+                           lesson.type === 'pdf' ? <FileText size={44} /> :
+                           lesson.type === 'link' ? <LinkIcon size={44} /> :
+                           lesson.type === 'quiz' ? <BrainCircuit size={44} /> :
+                           <ClipboardCheck size={44} />}
 
-                        {/* Right Side Controls */}
-                        <div className="flex items-center gap-2">
-                          
-                          {/* Mark as Complete (Teacher) */}
+                          {lesson.isHidden && (
+                            <span className="absolute top-2 left-2 flex items-center gap-1 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md shadow-sm">
+                              <EyeOff size={9} /> {language === 'ar' ? 'مخفي' : 'Hidden'}
+                            </span>
+                          )}
+
+                          {/* Completion indicator */}
                           {!isStudent && (
                             <button 
                               onClick={async (e) => {
@@ -568,89 +538,104 @@ export function LearningPathTab({
                                 if (ok) refreshUnits();
                               }}
                               title={language === 'ar' ? 'وضع علامة اكتمل' : 'Mark as Complete'}
-                              className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all shadow-none border ${
-                                lesson.isTopicComplete ? 'bg-emerald-500 text-white border-transparent' : 'border-slate-200 text-slate-300 hover:border-slate-300 hover:text-slate-400'
+                              className={`absolute top-2 right-2 flex items-center justify-center w-7 h-7 rounded-lg transition-all shadow-sm border ${
+                                lesson.isTopicComplete ? 'bg-emerald-500 text-white border-transparent' : 'bg-white/80 border-white/50 text-slate-300 hover:text-slate-400'
                               }`}
                             >
-                              <Check size={16} className="stroke-[3]" />
+                              <Check size={14} className="stroke-[3]" />
                             </button>
                           )}
-
                           {isStudent && (
-                            <div className="flex items-center gap-3">
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if ((lesson.id === 'math-quiz' || lesson.id === 'phys-lab')) {
-                                    onAssessmentClick(lesson.id);
-                                  } else {
-                                    toggleLessonCompletion(unit.id, lesson.id);
-                                  }
-                                }}
-                                className={`flex items-center justify-center w-6 h-6 rounded-full transition-all shadow-none ${
-                                  (lesson.completed || ['COMPLETED', 'PENDING_REVIEW'].includes(demoAssessments.find(a => a.id === lesson.id)?.status || '')) ? 'bg-emerald-500 text-white border-transparent' : 'border border-slate-200 text-slate-200 hover:border-slate-300 hover:text-slate-300'
-                                }`}
-                                title="Mark as Complete"
-                              >
-                                <Check size={14} className="stroke-[3]" />
-                              </button>
-                            </div>
-                          )}
-
-                          {/* Context Menu (3-dots) for Teacher */}
-                          {!isStudent && (
-                            <div className="flex items-center gap-2">
-                              <div className="relative">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setActiveLessonMenuId(activeLessonMenuId === lesson.id ? null : lesson.id); }}
-                                  className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors shadow-none"
-                                >
-                                  <MoreHorizontal size={20} />
-                                </button>
-
-                              {activeLessonMenuId === lesson.id && (
-                              <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-slate-100 p-1 z-20">
-                                <button
-                                  onClick={() => { setEditingLesson({ ...lesson }); setActiveLessonMenuId(null); }}
-                                  className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
-                                >
-                                  <Edit size={14} /> {language === 'ar' ? 'تعديل الاسم' : 'Edit Name'}
-                                </button>
-                                <button
-                                  onClick={async () => {
-                                    setActiveLessonMenuId(null);
-                                    const ok = await toggleLessonHidden(lesson.id, !lesson.isHidden);
-                                    if (ok) refreshUnits();
-                                  }}
-                                  className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
-                                >
-                                  <EyeOff size={14} /> {lesson.isHidden ? (language === 'ar' ? 'إظهار للطلاب' : 'Show to Students') : (language === 'ar' ? 'إخفاء عن الطلاب' : 'Hide from Students')}
-                                </button>
-                                <div className="h-px bg-slate-100 my-1" />
-                                <button
-                                  onClick={async () => {
-                                    setActiveLessonMenuId(null);
-                                    if (window.confirm(language === 'ar' ? 'متأكد إنك عايز تمسح الموضوع ده؟' : 'Delete this topic?')) {
-                                      const { ok, error } = await deleteLesson(lesson.id);
-                                      if (ok) refreshUnits();
-                                      else alert(language === 'ar' ? `حصل خطأ أثناء الحذف: ${error}` : `Error deleting: ${error}`);
-                                    }
-                                  }}
-                                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2 shadow-none"
-                                >
-                                  <Trash2 size={14} /> Delete
-                                </button>
-                              </div>
-                              )}
-                              </div>
-                            </div>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if ((lesson.id === 'math-quiz' || lesson.id === 'phys-lab')) {
+                                  onAssessmentClick(lesson.id);
+                                } else {
+                                  toggleLessonCompletion(unit.id, lesson.id);
+                                }
+                              }}
+                              className={`absolute top-2 right-2 flex items-center justify-center w-7 h-7 rounded-full transition-all shadow-sm ${
+                                (lesson.completed || ['COMPLETED', 'PENDING_REVIEW'].includes(demoAssessments.find(a => a.id === lesson.id)?.status || '')) ? 'bg-emerald-500 text-white border-transparent' : 'bg-white/80 border border-slate-200 text-slate-300 hover:text-slate-400'
+                              }`}
+                              title="Mark as Complete"
+                            >
+                              <Check size={14} className="stroke-[3]" />
+                            </button>
                           )}
                         </div>
+
+                        {/* Info */}
+                        <div className="p-3 flex-1 flex flex-col gap-1.5">
+                          <h4 className="font-medium text-slate-800 text-sm leading-snug line-clamp-2">{lesson.title}</h4>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {!isStudent && lesson.source === 'official' && (
+                              <span className="flex items-center gap-1 bg-slate-100 text-slate-500 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider border border-slate-200">
+                                <ShieldCheck size={9} /> Official
+                              </span>
+                            )}
+                            {!isStudent && lesson.source === 'custom' && (
+                              <span className="flex items-center gap-1 bg-blue-50 text-blue-600 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider border border-blue-100">
+                                <User size={9} /> Custom
+                              </span>
+                            )}
+                            {!isStudent && lesson.source === 'ai' && (
+                              <span className="flex items-center gap-1 bg-purple-50 text-purple-600 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider border border-purple-100">
+                                <Sparkles size={9} /> AI Generated
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Context Menu (3-dots) for Teacher */}
+                        {!isStudent && (
+                          <div className="absolute bottom-2 right-2">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setActiveLessonMenuId(activeLessonMenuId === lesson.id ? null : lesson.id); }}
+                              className="p-1.5 text-slate-400 hover:text-teal-600 bg-white hover:bg-teal-50 rounded-lg transition-colors shadow-sm border border-slate-100"
+                            >
+                              <MoreHorizontal size={16} />
+                            </button>
+
+                            {activeLessonMenuId === lesson.id && (
+                            <div onClick={(e) => e.stopPropagation()} className="absolute right-0 bottom-full mb-1 w-48 bg-white rounded-xl shadow-lg border border-slate-100 p-1 z-20">
+                              <button
+                                onClick={() => { setEditingLesson({ ...lesson }); setActiveLessonMenuId(null); }}
+                                className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
+                              >
+                                <Edit size={14} /> {language === 'ar' ? 'تعديل الاسم' : 'Edit Name'}
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  setActiveLessonMenuId(null);
+                                  const ok = await toggleLessonHidden(lesson.id, !lesson.isHidden);
+                                  if (ok) refreshUnits();
+                                }}
+                                className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
+                              >
+                                <EyeOff size={14} /> {lesson.isHidden ? (language === 'ar' ? 'إظهار للطلاب' : 'Show to Students') : (language === 'ar' ? 'إخفاء عن الطلاب' : 'Hide from Students')}
+                              </button>
+                              <div className="h-px bg-slate-100 my-1" />
+                              <button
+                                onClick={async () => {
+                                  setActiveLessonMenuId(null);
+                                  if (window.confirm(language === 'ar' ? 'متأكد إنك عايز تمسح الموضوع ده؟' : 'Delete this topic?')) {
+                                    const { ok, error } = await deleteLesson(lesson.id);
+                                    if (ok) refreshUnits();
+                                    else alert(language === 'ar' ? `حصل خطأ أثناء الحذف: ${error}` : `Error deleting: ${error}`);
+                                  }
+                                }}
+                                className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2 shadow-none"
+                              >
+                                <Trash2 size={14} /> Delete
+                              </button>
+                            </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      
-                      {/* No more inline MasteryPathInlinePanel */}
-                    </React.Fragment>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </motion.div>
               )}
