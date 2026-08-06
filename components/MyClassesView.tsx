@@ -265,41 +265,40 @@ export function MyClassesView({
             </div>
           </header>
 
-          {/* Class Filter Bar */}
+          {/* Class + Grade Filter Bar (side by side) */}
           {userRole === 'teacher' && (
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              {classes.map(cls => (
-                <button
-                  key={cls}
-                  onClick={() => setActiveFilter(cls)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
-                    activeFilter === cls 
-                      ? 'bg-slate-800 text-white shadow-sm' 
-                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-                  }`}
-                >
-                  {cls === 'All Classes' ? t.allClasses : cls}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Grade Filter Bar */}
-          {userRole === 'teacher' && grades.length > 2 && (
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              {grades.map(g => (
-                <button
-                  key={g}
-                  onClick={() => setGradeFilter(g)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
-                    gradeFilter === g 
-                      ? 'bg-indigo-600 text-white shadow-sm' 
-                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-                  }`}
-                >
-                  {g === 'All Grades' ? (language === 'ar' ? 'كل الصفوف' : 'All Grades') : g}
-                </button>
-              ))}
+            <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
+              <div className="flex gap-2 shrink-0">
+                {classes.map(cls => (
+                  <button
+                    key={cls}
+                    onClick={() => setActiveFilter(cls)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
+                      activeFilter === cls 
+                        ? 'bg-slate-800 text-white shadow-sm' 
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    {cls === 'All Classes' ? t.allClasses : cls}
+                  </button>
+                ))}
+              </div>
+              <div className="w-px h-6 bg-slate-200 shrink-0" />
+              <div className="flex gap-2 shrink-0">
+                {grades.map(g => (
+                  <button
+                    key={g}
+                    onClick={() => setGradeFilter(g)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
+                      gradeFilter === g 
+                        ? 'bg-indigo-600 text-white shadow-sm' 
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    {g === 'All Grades' ? (language === 'ar' ? 'كل الصفوف' : 'All Grades') : g}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -316,17 +315,17 @@ export function MyClassesView({
                   const theme = getThemeFor(subjectThemes, course.title);
                   const SubjectIcon = getSubjectIconComponent(theme.icon);
                   return (
-                  <Link href={`/courses/${course.id}`} key={course.id} className="group block h-[200px]">
+                  <Link href={`/courses/${course.id}`} key={course.id} className="group block h-[220px]">
                   <div className="bg-white rounded-3xl border border-slate-100 hover:bg-gray-50 transition-all overflow-hidden h-full flex flex-col relative w-full">
-                    <div className={`h-[55%] relative overflow-hidden ${theme.color} flex items-center justify-center`}>
+                    <div className={`h-[78%] relative overflow-hidden ${theme.color} flex items-center justify-center`}>
                       <SubjectIcon size={40} className="text-white/90" />
                       {userRole === 'teacher' && (
-                        <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5">
-                          <span className="bg-black/30 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider border border-white/10">
+                        <div className="absolute top-3 left-3 z-20 flex items-center gap-1">
+                          <span className="bg-black/30 backdrop-blur-md text-white text-[8px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider border border-white/10">
                             {course.className}
                           </span>
                           {course.grade && (
-                            <span className="bg-white/25 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider border border-white/10">
+                            <span className="bg-white/25 backdrop-blur-md text-white text-[8px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider border border-white/10">
                               {course.grade}
                             </span>
                           )}
@@ -335,19 +334,19 @@ export function MyClassesView({
                       {userRole === 'teacher' && (
                         <button
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingThemeSubject(course.title); }}
-                          className="absolute top-4 right-4 z-20 w-7 h-7 rounded-lg bg-black/30 backdrop-blur-md text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/50"
+                          className="absolute top-3 right-3 z-20 w-7 h-7 rounded-lg bg-black/30 backdrop-blur-md text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/50"
                           title={language === 'ar' ? 'تخصيص شكل المادة' : 'Customize subject theme'}
                         >
                           <Palette size={14} />
                         </button>
                       )}
-                      <div className="absolute bottom-4 left-4 right-4 z-20">
+                      <div className="absolute bottom-3 left-4 right-4 z-20">
                         <h3 className="text-white font-bold text-lg leading-tight drop-shadow-md">
                           {course.title}
                         </h3>
                       </div>
                     </div>
-                    <div className="p-5 flex-1 flex flex-col justify-center bg-white z-20">
+                    <div className="px-4 py-2.5 flex items-center bg-white z-20">
                       <div className="flex items-center gap-2 text-sm text-slate-500">
                         <Users size={14} className="shrink-0" />
                         <span>{course.studentCount} {language === 'ar' ? 'طالب' : 'students'}</span>
