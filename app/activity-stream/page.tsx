@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { BookOpen, Clock, Video, CheckCircle2, Globe, ChevronDown, BrainCircuit, ClipboardList, Paperclip, Plus, Upload, X } from 'lucide-react';
+import { BookOpen, Clock, Video, CheckCircle2, Globe, ChevronDown, BrainCircuit, ClipboardList, Paperclip, Plus, Upload, X, Trash2, Edit, RotateCcw, Check, ArrowLeft } from 'lucide-react';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getMyClassSections } from '@/services/attendanceData';
-import { getRealTodoTasksMulti, createQuickTask, getQuickTaskAttachmentUrl, TodoTask } from '@/services/todoData';
+import { getRealTodoTasksMulti, createQuickTask, getQuickTaskAttachmentUrl, TodoTask, updateQuickTask, deleteQuickTask, restoreQuickTask, permanentlyDeleteQuickTask, getDeletedQuickTasks, emptyQuickTasksTrash, toggleQuickTaskCompletion, purgeOldTrash, DeletedQuickTask } from '@/services/todoData';
 
 function FlatDropdown({ options, value, onChange, placeholder }: { options: {id: string, label: string}[], value: string, onChange: (val: string) => void, placeholder: string }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -113,6 +113,7 @@ export default function ActivityStreamPage() {
 
   useEffect(() => {
     refresh();
+    refreshTrash();
   }, [authUser?.teacherId, authUser?.subjects]);
 
   const gradeOptions = Array.from(new Set(sections.map((s) => s.gradeLevel))).map((g) => ({ id: g, label: isRtl ? `الصف ${g}` : `Grade ${g}` }));
@@ -132,6 +133,7 @@ export default function ActivityStreamPage() {
 
   // ============ Create Task Modal ============
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newClassId, setNewClassId] = useState('');
   const [newSubject, setNewSubject] = useState('');
@@ -141,13 +143,70 @@ export default function ActivityStreamPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [createError, setCreateError] = useState('');
 
+  const [activeView, setActiveView] = useState<'tasks' | 'trash'>('tasks');
+  const [deletedTasks, setDeletedTasks] = useState<DeletedQuickTask[]>([]);
+  const [isLoadingTrash, setIsLoadingTrash] = useState(false);
+  const [undoToast, setUndoToast] = useState<{ id: string; title: string } | null>(null);
+
+  const refreshTrash = () => {
+    if (!authUser?.teacherId) return;
+    setIsLoadingTrash(true);
+    purgeOldTrash(authUser.teacherId).then(() => {
+      getDeletedQuickTasks(authUser.teacherId!).then((data) => {
+        setDeletedTasks(data);
+        setIsLoadingTrash(false);
+      });
+    });
+  };
+
+  useEffect(() => {
+    if (activeView === 'trash') refreshTrash();
+  }, [activeView, authUser?.teacherId]);
+
   const openCreateModal = () => {
+    setEditingTaskId(null);
+    setNewTitle('');
+    setNewDate('');
+    setNewTime('09:00');
+    setNewFile(null);
     setNewClassId(sections[0]?.id || '');
     setNewSubject((authUser?.subjects || [])[0] || '');
     setIsCreateOpen(true);
   };
 
+  const openEditModal = (task: TodoTask) => {
+    setEditingTaskId(task.id);
+    setNewTitle(task.title);
+    const [d, t] = task.dueDate.split('T');
+    setNewDate(d);
+    setNewTime(t?.slice(0, 5) || '09:00');
+    setNewClassId(task.classId);
+    setNewSubject(task.subject);
+    setIsCreateOpen(true);
+  };
+
   const handleCreateTask = async () => {
+    if (editingTaskId) {
+      if (!newTitle.trim() || !newDate) return;
+      setIsSaving(true);
+      setCreateError('');
+      const { ok, error } = await updateQuickTask(editingTaskId, {
+        title: newTitle.trim(),
+        dueDate: `${newDate}T${newTime || '09:00'}`,
+      });
+      setIsSaving(false);
+      if (ok) {
+        setIsCreateOpen(false);
+        setEditingTaskId(null);
+        setNewTitle('');
+        setNewDate('');
+        setNewTime('09:00');
+        refresh();
+      } else {
+        setCreateError(error || 'Unknown error');
+      }
+      return;
+    }
     if (!authUser?.teacherId || !newClassId || !newSubject || !newTitle.trim() || !newDate) return;
     setIsSaving(true);
     setCreateError('');
@@ -172,6 +231,45 @@ export default function ActivityStreamPage() {
     }
   };
 
+  const handleDeleteTask = async (id: string, title: string) => {
+    await deleteQuickTask(id);
+    refresh();
+    setUndoToast({ id, title });
+    setTimeout(() => setUndoToast((prev) => (prev?.id === id ? null : prev)), 5000);
+  };
+
+  const handleUndoDelete = async () => {
+    if (!undoToast) return;
+    await restoreQuickTask(undoToast.id);
+    setUndoToast(null);
+    refresh();
+  };
+
+  const handleRestoreTask = async (id: string) => {
+    await restoreQuickTask(id);
+    refreshTrash();
+    refresh();
+  };
+
+  const handlePermanentDelete = async (id: string) => {
+    if (!window.confirm(isRtl ? 'حذف نهائي؟ مش هينفع ترجعها تاني.' : 'Delete permanently? This cannot be undone.')) return;
+    await permanentlyDeleteQuickTask(id);
+    refreshTrash();
+  };
+
+  const handleEmptyTrash = async () => {
+    if (!authUser?.teacherId) return;
+    if (!window.confirm(isRtl ? 'متأكد إنك عايز تفضّي السلة؟ كل المهام هتتمسح نهائي.' : 'Empty the trash? All tasks will be permanently deleted.')) return;
+    await emptyQuickTasksTrash(authUser.teacherId);
+    refreshTrash();
+  };
+
+  const handleToggleTaskComplete = async (task: TodoTask, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await toggleQuickTaskCompletion(task.id, !task.isCompleted);
+    refresh();
+  };
+
   return (
     <div className="flex h-screen w-full bg-white overflow-hidden" dir={isRtl ? "rtl" : "ltr"} style={{ fontFamily: "'Cairo', sans-serif" }}>
       <GlobalSidebar 
@@ -194,11 +292,23 @@ export default function ActivityStreamPage() {
             </div>
             <div className="flex items-center gap-2">
               <button 
+                onClick={() => setActiveView(activeView === 'trash' ? 'tasks' : 'trash')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors shadow-none border ${activeView === 'trash' ? 'bg-slate-800 text-white border-transparent' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+              >
+                {activeView === 'trash' ? <ArrowLeft size={16} /> : <Trash2 size={16} />}
+                {activeView === 'trash' ? (isRtl ? 'رجوع للمهام' : 'Back to Tasks') : (isRtl ? 'السلة' : 'Trash')}
+                {activeView !== 'trash' && deletedTasks.length > 0 && (
+                  <span className="bg-rose-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{deletedTasks.length}</span>
+                )}
+              </button>
+              {activeView === 'tasks' && (
+              <button 
                 onClick={openCreateModal}
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-colors shadow-none"
               >
                 <Plus size={16} /> {isRtl ? 'إضافة مهمة' : 'Add Task'}
               </button>
+              )}
               <button 
                 onClick={() => setLanguage(language === 'ar' ? 'en' : 'ar')}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors w-fit shrink-0"
@@ -210,6 +320,7 @@ export default function ActivityStreamPage() {
             </div>
           </header>
 
+          {activeView === 'tasks' && (<>
           {/* Top Filter Bar */}
           <div className="flex flex-col sm:flex-row items-center gap-4 mb-10 pb-6 border-b border-gray-100 relative z-20">
              <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -261,10 +372,11 @@ export default function ActivityStreamPage() {
                       }
 
                       return (
-                        <button
+                        <div
                           key={task.id}
                           onClick={() => setActiveTask(task)}
-                          className={`flex items-start sm:items-center justify-between p-5 rounded-2xl transition-colors text-start hover:bg-gray-50/50 bg-white border border-gray-100 shadow-none border-s-4 ${borderLeftColor}`}
+                          role="button"
+                          className={`flex items-start sm:items-center justify-between p-5 rounded-2xl transition-colors text-start hover:bg-gray-50/50 bg-white border border-gray-100 shadow-none border-s-4 cursor-pointer ${borderLeftColor}`}
                         >
                           <div className="flex items-start sm:items-center gap-4 flex-col sm:flex-row w-full sm:w-auto">
                             <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-none ${iconBoxStyles}`}>
@@ -272,7 +384,7 @@ export default function ActivityStreamPage() {
                             </div>
                             <div>
                               <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                                <h3 className="text-base font-bold text-gray-900 leading-tight m-0">{task.title}</h3>
+                                <h3 className={`text-base font-bold text-gray-900 leading-tight m-0 ${task.type === 'quick_task' && task.isCompleted ? 'line-through text-gray-400' : ''}`}>{task.title}</h3>
                                 <span className="px-2 py-1 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold shadow-none leading-none tracking-wider whitespace-nowrap">
                                   {sec?.name || task.subject}
                                 </span>
@@ -290,12 +402,95 @@ export default function ActivityStreamPage() {
                               </div>
                             </div>
                           </div>
-                        </button>
+
+                          {task.type === 'quick_task' && (
+                            <div className="flex items-center gap-1 shrink-0 self-start sm:self-center">
+                              <button
+                                onClick={(e) => handleToggleTaskComplete(task, e)}
+                                title={isRtl ? 'وضع علامة اكتمل' : 'Mark as complete'}
+                                className={`w-8 h-8 flex items-center justify-center rounded-full border-2 transition-colors ${task.isCompleted ? 'bg-emerald-500 border-transparent text-white' : 'bg-white border-emerald-500 text-emerald-500 hover:bg-emerald-50'}`}
+                              >
+                                <Check size={14} className="stroke-[3]" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openEditModal(task); }}
+                                title={isRtl ? 'تعديل' : 'Edit'}
+                                className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id, task.title); }}
+                                title={isRtl ? 'حذف' : 'Delete'}
+                                className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
                 </section>
               ))}
+            </div>
+          )}
+          </>)}
+
+          {activeView === 'trash' && (
+            <div>
+              <div className="flex items-center justify-between mb-6 pb-6 border-b border-gray-100">
+                <p className="text-sm text-gray-500">{isRtl ? 'المهام المحذوفة بتفضل هنا لحد ما تسترجعها أو تفضّي السلة.' : 'Deleted tasks stay here until you restore them or empty the trash.'}</p>
+                {deletedTasks.length > 0 && (
+                  <button
+                    onClick={handleEmptyTrash}
+                    className="flex items-center gap-2 px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-sm font-bold transition-colors shrink-0"
+                  >
+                    <Trash2 size={16} /> {isRtl ? 'تفضية السلة' : 'Empty Trash'}
+                  </button>
+                )}
+              </div>
+
+              {isLoadingTrash ? (
+                <p className="text-gray-400 text-center py-10">{isRtl ? 'جاري التحميل...' : 'Loading...'}</p>
+              ) : deletedTasks.length === 0 ? (
+                <div className="bg-white p-10 rounded-2xl border border-gray-100 text-center text-gray-400">
+                  {isRtl ? 'السلة فاضية.' : 'Trash is empty.'}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {deletedTasks.map((task) => {
+                    const sec = sections.find((s) => s.id === task.classId);
+                    return (
+                      <div key={task.id} className="flex items-center justify-between p-4 rounded-2xl bg-white border border-gray-100 shadow-none">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-sm font-bold text-gray-700 truncate">{task.title}</h3>
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-bold shrink-0">{sec?.name || task.subject}</span>
+                          </div>
+                          <p className="text-xs text-gray-400">{isRtl ? 'اتحذفت في' : 'Deleted'} {new Date(task.deletedAt).toLocaleString()}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => handleRestoreTask(task.id)}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg text-xs font-bold transition-colors"
+                          >
+                            <RotateCcw size={14} /> {isRtl ? 'استرجاع' : 'Restore'}
+                          </button>
+                          <button
+                            onClick={() => handlePermanentDelete(task.id)}
+                            className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                            title={isRtl ? 'حذف نهائي' : 'Delete permanently'}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -329,20 +524,21 @@ export default function ActivityStreamPage() {
       <AnimatePresence>
         {isCreateOpen && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsCreateOpen(false)} className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-[100]" />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setIsCreateOpen(false); setEditingTaskId(null); }} className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-[100]" />
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} className="fixed inset-0 z-[101] flex items-center justify-center p-6">
               <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative">
-                <button onClick={() => setIsCreateOpen(false)} className="absolute top-6 end-6 text-slate-400 hover:text-slate-600"><X size={20} /></button>
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-5 bg-amber-100 text-amber-600">
-                  <Plus size={26} />
+                <button onClick={() => { setIsCreateOpen(false); setEditingTaskId(null); }} className="absolute top-6 end-6 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-5 ${editingTaskId ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-600'}`}>
+                  {editingTaskId ? <Edit size={24} /> : <Plus size={26} />}
                 </div>
-                <h3 className="text-xl font-bold text-slate-800 mb-6">{isRtl ? 'إضافة مهمة جديدة' : 'Add New Task'}</h3>
+                <h3 className="text-xl font-bold text-slate-800 mb-6">{editingTaskId ? (isRtl ? 'تعديل المهمة' : 'Edit Task') : (isRtl ? 'إضافة مهمة جديدة' : 'Add New Task')}</h3>
 
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">{isRtl ? 'الاسم' : 'Name'}</label>
                     <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder={isRtl ? 'اكتب اسم المهمة' : 'Task name'} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
                   </div>
+                  {!editingTaskId && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">{isRtl ? 'الفصل' : 'Class'}</label>
@@ -357,6 +553,7 @@ export default function ActivityStreamPage() {
                       </select>
                     </div>
                   </div>
+                  )}
                   <div className="flex gap-3">
                     <div className="flex-1">
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">{isRtl ? 'التاريخ' : 'Date'}</label>
@@ -367,6 +564,7 @@ export default function ActivityStreamPage() {
                       <input type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
                     </div>
                   </div>
+                  {!editingTaskId && (
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">{isRtl ? 'مرفق (اختياري)' : 'Attachment (optional)'}</label>
                     <label className="w-full border-2 border-dashed border-slate-200 rounded-xl p-4 flex items-center gap-2 text-slate-500 hover:bg-slate-50 cursor-pointer">
@@ -375,18 +573,35 @@ export default function ActivityStreamPage() {
                       <input type="file" className="hidden" onChange={(e) => setNewFile(e.target.files?.[0] || null)} />
                     </label>
                   </div>
+                  )}
                   {createError && <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">{createError}</p>}
                   <button
                     onClick={handleCreateTask}
-                    disabled={!newTitle.trim() || !newDate || !newClassId || !newSubject || isSaving}
+                    disabled={!newTitle.trim() || !newDate || (!editingTaskId && (!newClassId || !newSubject)) || isSaving}
                     className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl font-bold transition-all"
                   >
-                    {isSaving ? (isRtl ? 'جاري الحفظ...' : 'Saving...') : (isRtl ? 'إضافة' : 'Add Task')}
+                    {isSaving ? (isRtl ? 'جاري الحفظ...' : 'Saving...') : editingTaskId ? (isRtl ? 'حفظ التعديلات' : 'Save Changes') : (isRtl ? 'إضافة' : 'Add Task')}
                   </button>
                 </div>
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {undoToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 20, x: '-50%' }}
+            className="fixed bottom-8 start-1/2 z-[110] bg-slate-800 text-white pl-3 pr-4 py-3 rounded-2xl text-sm font-medium shadow-xl flex items-center gap-3"
+          >
+            <span>{isRtl ? `اتحذفت "${undoToast.title}"` : `Deleted "${undoToast.title}"`}</span>
+            <button onClick={handleUndoDelete} className="font-bold text-indigo-300 hover:text-indigo-200 transition-colors">
+              {isRtl ? 'تراجع' : 'Undo'}
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

@@ -69,7 +69,8 @@ export async function getQuickTasks(classId: string, subject: string): Promise<T
     .from('quick_tasks')
     .select('id, title, due_date, attachment_path, is_completed')
     .eq('class_id', classId)
-    .eq('subject', subject);
+    .eq('subject', subject)
+    .is('deleted_at', null);
   if (error || !data) return [];
   return data.map((row: any) => ({
     id: row.id,
@@ -170,4 +171,73 @@ export async function getRealTodoTasks(scope: { teacherId?: string; classId: str
 export async function getRealTodoTasksMulti(scopes: { teacherId?: string; classId: string; subject: string; grade?: string }[]): Promise<TodoTask[]> {
   const results = await Promise.all(scopes.map((s) => getRealTodoTasks(s)));
   return results.flat().sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+}
+
+// ============ سلة مهملات المهام السريعة ============
+
+export interface DeletedQuickTask {
+  id: string;
+  title: string;
+  dueDate: string;
+  classId: string;
+  subject: string;
+  deletedAt: string;
+}
+
+// تعديل عنوان أو موعد مهمة سريعة موجودة
+export async function updateQuickTask(id: string, input: { title?: string; dueDate?: string }): Promise<{ ok: boolean; error: string | null }> {
+  const patch: Record<string, any> = {};
+  if (input.title !== undefined) patch.title = input.title;
+  if (input.dueDate !== undefined) patch.due_date = input.dueDate;
+  const { error } = await supabase.from('quick_tasks').update(patch).eq('id', id);
+  return { ok: !error, error: error?.message || null };
+}
+
+// حذف ناعم — بتتحوّل لسلة المهملات، مش بتتمسح فورًا
+export async function deleteQuickTask(id: string): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await supabase.from('quick_tasks').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  return { ok: !error, error: error?.message || null };
+}
+
+// استرجاع مهمة من سلة المهملات
+export async function restoreQuickTask(id: string): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await supabase.from('quick_tasks').update({ deleted_at: null }).eq('id', id);
+  return { ok: !error, error: error?.message || null };
+}
+
+// حذف نهائي لمهمة واحدة من السلة
+export async function permanentlyDeleteQuickTask(id: string): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await supabase.from('quick_tasks').delete().eq('id', id);
+  return { ok: !error, error: error?.message || null };
+}
+
+// كل المهام السريعة المحذوفة (في السلة) لمعلم معيّن عبر كل فصوله
+export async function getDeletedQuickTasks(teacherId: string): Promise<DeletedQuickTask[]> {
+  const { data, error } = await supabase
+    .from('quick_tasks')
+    .select('id, title, due_date, class_id, subject, deleted_at')
+    .eq('teacher_id', teacherId)
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false });
+  if (error || !data) return [];
+  return data.map((row: any) => ({
+    id: row.id,
+    title: row.title,
+    dueDate: row.due_date,
+    classId: row.class_id,
+    subject: row.subject,
+    deletedAt: row.deleted_at,
+  }));
+}
+
+// تفضية السلة بالكامل — حذف نهائي لكل المهام المحذوفة لمعلم معيّن
+export async function emptyQuickTasksTrash(teacherId: string): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await supabase.from('quick_tasks').delete().eq('teacher_id', teacherId).not('deleted_at', 'is', null);
+  return { ok: !error, error: error?.message || null };
+}
+
+// تفضية تلقائية: أي مهمة في السلة أكتر من ٣٠ يوم بتتمسح نهائي لوحدها
+export async function purgeOldTrash(teacherId: string): Promise<void> {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  await supabase.from('quick_tasks').delete().eq('teacher_id', teacherId).not('deleted_at', 'is', null).lt('deleted_at', cutoff);
 }

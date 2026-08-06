@@ -181,7 +181,6 @@ export function LearningPathTab({
   // Smart Course Planner State
   const [isBuildingUnit, setIsBuildingUnit] = useState(false);
   const [newUnitTitle, setNewUnitTitle] = useState('');
-  const [newUnitMode, setNewUnitMode] = useState<'manual' | null>(null);
 
   const [contentView, setContentView] = useState<'path' | 'material' | 'my-library'>('path');
 
@@ -431,7 +430,22 @@ export function LearningPathTab({
               </div>
 
               {!isStudent && (
-                <div className="relative">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => { const ok = await toggleUnitComplete(unit.id, !unit.isComplete); if (ok) refreshUnits(); }}
+                    title={unit.isComplete ? (language === 'ar' ? 'إلغاء الاكتمال' : 'Unmark Complete') : (language === 'ar' ? 'وضع علامة اكتمل' : 'Mark as Complete')}
+                    className={`w-10 h-10 flex items-center justify-center rounded-xl border-2 transition-colors ${unit.isComplete ? 'bg-emerald-500 border-transparent text-white' : 'bg-white border-emerald-500 text-emerald-500 hover:bg-emerald-50'}`}
+                  >
+                    <Check size={18} className="stroke-[3]" />
+                  </button>
+                  <button
+                    onClick={() => handleAddClick(unit.id)}
+                    title={language === 'ar' ? 'إضافة محتوى' : 'Add Material'}
+                    className={`w-10 h-10 flex items-center justify-center rounded-xl border transition-colors ${activeUnitForAdd === unit.id ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-500 hover:bg-teal-50 hover:text-teal-600 hover:border-teal-200'}`}
+                  >
+                    <Plus size={18} />
+                  </button>
+                  <div className="relative">
                   <button
                     onClick={() => setActiveUnitMenuId(activeUnitMenuId === unit.id ? null : unit.id)}
                     className="w-10 h-10 flex items-center justify-center border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors"
@@ -441,10 +455,10 @@ export function LearningPathTab({
                   {activeUnitMenuId === unit.id && (
                     <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-full mt-1 w-56 bg-white rounded-xl shadow-lg border border-slate-100 p-1 z-30">
                       <button
-                        onClick={async () => { setActiveUnitMenuId(null); const ok = await toggleUnitComplete(unit.id, !unit.isComplete); if (ok) refreshUnits(); }}
+                        onClick={() => { setEditingUnit({ ...unit }); setActiveUnitMenuId(null); }}
                         className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
                       >
-                        <Check size={14} /> {unit.isComplete ? (language === 'ar' ? 'إلغاء الاكتمال' : 'Unmark Complete') : (language === 'ar' ? 'وضع علامة اكتمل' : 'Mark as Complete')}
+                        <Edit size={14} /> {language === 'ar' ? 'تعديل الاسم' : 'Edit Name'}
                       </button>
                       <button
                         onClick={async () => { setActiveUnitMenuId(null); const ok = await toggleUnitHidden(unit.id, !unit.isHidden); if (ok) refreshUnits(); }}
@@ -457,12 +471,6 @@ export function LearningPathTab({
                         className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
                       >
                         <Share2 size={14} /> {language === 'ar' ? 'مشاركة مع فصول تانية' : 'Share with other classes'}
-                      </button>
-                      <button
-                        onClick={() => { setActiveUnitMenuId(null); handleAddClick(unit.id); }}
-                        className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
-                      >
-                        <Plus size={14} /> {language === 'ar' ? 'إضافة محتوى' : 'Add Material'}
                       </button>
                       <div className="h-px bg-slate-100 my-1" />
                       <button
@@ -480,6 +488,7 @@ export function LearningPathTab({
                       </button>
                     </div>
                   )}
+                  </div>
                 </div>
               )}
             </div>
@@ -749,7 +758,7 @@ export function LearningPathTab({
                                     toggleLessonCompletion(unit.id, lesson.id);
                                   }
                                 }}
-                                className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${isDone ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                className={`flex items-center gap-1.5 text-xs font-bold transition-colors px-2.5 py-1.5 rounded-lg border ${isDone ? 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50'}`}
                               >
                                 {isDone ? <CheckCircle2 size={14} className="fill-emerald-100" /> : <Clock size={14} />}
                                 {isDone ? (language === 'ar' ? 'مكتمل' : 'completed') : (language === 'ar' ? 'قيد الانتظار' : 'pending')}
@@ -935,25 +944,20 @@ export function LearningPathTab({
             </button>
             )
           ) : (
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-none p-6">
+            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={() => { setIsBuildingUnit(false); setNewUnitTitle(''); }}>
+              <div className="bg-white rounded-3xl border border-slate-100 shadow-none p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-slate-800">Set Up New Module</h3>
-                <button onClick={() => { setIsBuildingUnit(false); setNewUnitMode(null); setNewUnitTitle(''); }} className="text-slate-400 hover:text-slate-600 shadow-none">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+                    <Book size={18} />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800">{language === 'ar' ? 'موديول جديد' : 'New Module'}</h3>
+                </div>
+                <button onClick={() => { setIsBuildingUnit(false); setNewUnitTitle(''); }} className="text-slate-400 hover:text-slate-600 shadow-none">
                   <X size={20} />
                 </button>
               </div>
-              
-              {!newUnitMode ? (
-                <div className="flex gap-3">
-                  <button 
-                    onClick={() => setNewUnitMode('manual')}
-                    className="flex-1 flex items-center justify-center gap-2 py-4 border border-slate-200 rounded-2xl hover:border-teal-300 hover:bg-teal-50 transition-all shadow-none"
-                  >
-                    <Layout size={18} className="text-teal-600" />
-                    <span className="font-bold text-slate-700 text-sm">{language === 'ar' ? 'إنشاء يدوي' : 'Manual Build'}</span>
-                  </button>
-                </div>
-              ) : (
+
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">{language === 'ar' ? 'اسم الوحدة' : 'Module Title'}</label>
                   <input 
@@ -962,33 +966,38 @@ export function LearningPathTab({
                     value={newUnitTitle}
                     onChange={(e) => setNewUnitTitle(e.target.value)}
                     placeholder="e.g.: Algebraic Expressions"
+                    onKeyDown={async (e) => {
+                      if (e.key !== 'Enter' || !learnScope || !newUnitTitle.trim()) return;
+                      const { id, error } = await createUnit(learnScope, { title: newUnitTitle, weeksLabel: '' });
+                      if (id) {
+                        refreshUnits();
+                        setIsBuildingUnit(false);
+                        setNewUnitTitle('');
+                      } else {
+                        alert(language === 'ar' ? `حصل خطأ أثناء إنشاء الوحدة: ${error}` : `Error creating module: ${error}`);
+                      }
+                    }}
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-none mb-4"
                   />
-                  <div className="flex gap-3">
-                    <button onClick={() => setNewUnitMode(null)} className="px-5 py-2.5 text-slate-600 hover:bg-slate-50 rounded-xl font-medium transition-colors shadow-none">
-                      {language === 'ar' ? 'رجوع' : 'Back'}
-                    </button>
-                    <button 
-                      onClick={async () => {
-                        if (!learnScope || !newUnitTitle.trim()) return;
-                        const { id, error } = await createUnit(learnScope, { title: newUnitTitle, weeksLabel: '' });
-                        if (id) {
-                          refreshUnits();
-                          setIsBuildingUnit(false);
-                          setNewUnitMode(null);
-                          setNewUnitTitle('');
-                        } else {
-                          alert(language === 'ar' ? `حصل خطأ أثناء إنشاء الوحدة: ${error}` : `Error creating module: ${error}`);
-                        }
-                      }}
-                      disabled={!newUnitTitle.trim()}
-                      className="flex-1 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl font-medium transition-colors shadow-none"
-                    >
-                      {language === 'ar' ? 'إضافة' : 'Add'}
-                    </button>
-                  </div>
+                  <button 
+                    onClick={async () => {
+                      if (!learnScope || !newUnitTitle.trim()) return;
+                      const { id, error } = await createUnit(learnScope, { title: newUnitTitle, weeksLabel: '' });
+                      if (id) {
+                        refreshUnits();
+                        setIsBuildingUnit(false);
+                        setNewUnitTitle('');
+                      } else {
+                        alert(language === 'ar' ? `حصل خطأ أثناء إنشاء الوحدة: ${error}` : `Error creating module: ${error}`);
+                      }
+                    }}
+                    disabled={!newUnitTitle.trim()}
+                    className="w-full px-5 py-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl font-bold transition-colors shadow-none"
+                  >
+                    {language === 'ar' ? 'إضافة الموديول' : 'Add Module'}
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
           )
         )}

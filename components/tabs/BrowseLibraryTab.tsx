@@ -679,7 +679,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
                       })}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {currentFolders.map((folder) => {
                         const theme = colorThemeMap[folder.color] || colorThemeMap.indigo;
                         const folderFilesCount = files.filter(f => f.folderId === folder.id).length;
