@@ -560,7 +560,7 @@ export default function QuestionBank() {
     setSaveQuestionError('');
     const payload = {
       createdBy: authUser?.teacherId || null,
-      createdByRole: isSupervisor ? 'supervisor' : 'teacher',
+      createdByRole: (isSupervisor ? 'supervisor' : 'teacher') as 'teacher' | 'supervisor',
       scope: scopeFromLabel(targetBank),
       subject: activeSubject.subject,
       grade: activeSubject.grade,
