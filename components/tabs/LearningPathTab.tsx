@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Book, ChevronDown, MoreHorizontal, PlayCircle, FileText, BrainCircuit, ShieldCheck, Shuffle, Plus, User, Sparkles, Trash2, EyeOff, Eye, Share2, Edit, Layout, Check, ClipboardCheck, X, MoreVertical, Link as LinkIcon, LayoutGrid, List } from 'lucide-react';
+import { Book, ChevronDown, MoreHorizontal, PlayCircle, FileText, BrainCircuit, ShieldCheck, Shuffle, Plus, User, Sparkles, Trash2, EyeOff, Eye, Share2, Edit, Layout, Check, ClipboardCheck, X, MoreVertical, Link as LinkIcon, LayoutGrid, List, ArrowLeft } from 'lucide-react';
 
 import { LibraryDrawer } from '@/components/LearningPath/LibraryDrawer';
 import { AddLessonModal } from '@/components/LearningPath/AddLessonModal';
@@ -350,7 +350,46 @@ export function LearningPathTab({
           <div className="space-y-6 pb-20 w-full">
         {isLoadingUnits ? (
           <p className="text-center text-sm text-slate-400 py-10">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
-        ) : units.map((unit) => (
+        ) : lessonViewMode === 'grid' && expandedUnits.length === 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {units.map((unit) => (
+              <div
+                key={unit.id}
+                onClick={() => setExpandedUnits([unit.id])}
+                className="group bg-white rounded-2xl border border-slate-100 hover:border-teal-200 hover:shadow-md transition-all cursor-pointer p-5 flex flex-col gap-3"
+              >
+                <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-500 flex items-center justify-center group-hover:bg-teal-100 transition-colors">
+                  <Book size={28} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-slate-800 text-sm leading-snug">{unit.title}</h3>
+                    {unit.isHidden && <EyeOff size={12} className="text-amber-500 shrink-0" />}
+                  </div>
+                  <p className="text-xs text-slate-400 font-medium mt-1">
+                    {unit.lessons.length} {language === 'ar' ? 'عنصر' : 'items'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 mt-auto pt-2">
+                  <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-teal-500 rounded-full transition-all duration-500" style={{ width: `${unit.progress}%` }} />
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-bold shrink-0">{unit.progress}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+        <>
+        {lessonViewMode === 'grid' && (
+          <button
+            onClick={() => setExpandedUnits([])}
+            className="flex items-center gap-1.5 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors mb-2"
+          >
+            <ArrowLeft size={16} /> {language === 'ar' ? 'رجوع للموديولات' : 'Back to Modules'}
+          </button>
+        )}
+        {(lessonViewMode === 'grid' ? units.filter((u) => expandedUnits.includes(u.id)) : units).map((unit) => (
           <div key={unit.id} className="bg-white rounded-3xl border border-slate-100 shadow-none overflow-visible relative z-0">
             {/* Unit Header */}
             <div className="p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors rounded-t-3xl border-b border-slate-50">
@@ -557,7 +596,7 @@ export function LearningPathTab({
                               }}
                               title={language === 'ar' ? 'وضع علامة اكتمل' : 'Mark as Complete'}
                               className={`absolute top-2 right-2 flex items-center justify-center w-7 h-7 rounded-lg transition-all shadow-sm border ${
-                                lesson.isTopicComplete ? 'bg-emerald-500 text-white border-transparent' : 'bg-white/80 border-white/50 text-slate-300 hover:text-slate-400'
+                                lesson.isTopicComplete ? 'bg-emerald-500 text-white border-transparent' : 'bg-white/80 border-2 border-emerald-500 text-emerald-500 hover:bg-emerald-50'
                               }`}
                             >
                               <Check size={14} className="stroke-[3]" />
@@ -574,7 +613,7 @@ export function LearningPathTab({
                                 }
                               }}
                               className={`absolute top-2 right-2 flex items-center justify-center w-7 h-7 rounded-full transition-all shadow-sm ${
-                                (lesson.completed || ['COMPLETED', 'PENDING_REVIEW'].includes(demoAssessments.find(a => a.id === lesson.id)?.status || '')) ? 'bg-emerald-500 text-white border-transparent' : 'bg-white/80 border border-slate-200 text-slate-300 hover:text-slate-400'
+                                (lesson.completed || ['COMPLETED', 'PENDING_REVIEW'].includes(demoAssessments.find(a => a.id === lesson.id)?.status || '')) ? 'bg-emerald-500 text-white border-transparent' : 'bg-white/80 border-2 border-emerald-500 text-emerald-500 hover:bg-emerald-50'
                               }`}
                               title="Mark as Complete"
                             >
@@ -682,10 +721,10 @@ export function LearningPathTab({
                             }
                           }
                         }}
-                        className="group flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer"
+                        className="group flex items-center gap-4 px-4 py-3.5 hover:bg-slate-50 transition-colors cursor-pointer"
                       >
-                        <span className="w-5 text-center text-xs font-bold text-slate-300 shrink-0">{idx + 1}</span>
-                        <div className={`relative w-20 h-12 rounded-lg overflow-hidden shrink-0 flex items-center justify-center
+                        <span className="w-6 text-center text-sm font-bold text-slate-300 shrink-0">{idx + 1}</span>
+                        <div className={`relative w-32 h-20 rounded-xl overflow-hidden shrink-0 flex items-center justify-center
                           ${lesson.type === 'video' ? 'bg-pink-50 text-pink-400' :
                             lesson.type === 'pdf' ? 'bg-blue-50 text-blue-400' :
                             lesson.type === 'link' ? 'bg-orange-50 text-orange-400' :
@@ -693,10 +732,10 @@ export function LearningPathTab({
                             'bg-teal-50 text-teal-400'
                           }`}
                         >
-                          <ListTypeIcon size={22} />
+                          <ListTypeIcon size={32} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h4 className="font-medium text-slate-800 text-sm truncate">{lesson.title}</h4>
+                          <h4 className="font-bold text-slate-800 text-base truncate">{lesson.title}</h4>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             {lesson.isHidden && (
                               <span className="flex items-center gap-1 text-amber-600 text-[10px] font-bold">
@@ -718,7 +757,7 @@ export function LearningPathTab({
                               if (ok) refreshUnits();
                             }}
                             className={`shrink-0 flex items-center justify-center w-7 h-7 rounded-lg transition-all border ${
-                              isDone ? 'bg-emerald-500 text-white border-transparent' : 'border-slate-200 text-slate-300 hover:border-slate-300 hover:text-slate-400'
+                              isDone ? 'bg-emerald-500 text-white border-transparent' : 'border-2 border-emerald-500 text-emerald-500 hover:bg-emerald-50'
                             }`}
                           >
                             <Check size={14} className="stroke-[3]" />
@@ -735,7 +774,7 @@ export function LearningPathTab({
                               }
                             }}
                             className={`shrink-0 flex items-center justify-center w-6 h-6 rounded-full transition-all ${
-                              isDone ? 'bg-emerald-500 text-white border-transparent' : 'border border-slate-200 text-slate-200 hover:border-slate-300 hover:text-slate-300'
+                              isDone ? 'bg-emerald-500 text-white border-transparent' : 'border-2 border-emerald-500 text-emerald-500 hover:bg-emerald-50'
                             }`}
                           >
                             <Check size={13} className="stroke-[3]" />
@@ -795,6 +834,8 @@ export function LearningPathTab({
             </AnimatePresence>
           </div>
         ))}
+        </>
+        )}
 
         {/* Create New Unit Button / Smart Course Planner */}
         {!isStudent && (

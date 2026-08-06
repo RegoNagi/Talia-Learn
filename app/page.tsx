@@ -50,9 +50,9 @@ export default function Dashboard() {
   const { authUser, isLoggedIn, isAuthLoading, login, logout } = useAuth();
   const router = useRouter();
 
-  const refreshTodo = () => {
+  const refreshTodo = (silent = false) => {
     if (!authUser?.teacherId) { setIsTodoLoading(false); return; }
-    setIsTodoLoading(true);
+    if (!silent) setIsTodoLoading(true);
     getMyClassSections(authUser.teacherId).then((secs) => {
       const scopes = secs.flatMap((sec) =>
         (authUser.subjects || []).map((subject: string) => ({ teacherId: authUser.teacherId, classId: sec.id, subject, grade: sec.gradeLevel }))
@@ -107,7 +107,7 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen w-full bg-white overflow-hidden" dir={language === 'ar' ? 'rtl' : 'ltr'} style={{ fontFamily: "'Cairo', sans-serif" }}>
-      {isAuthLoading ? (
+      {isAuthLoading || (isLoggedIn && authUser?.role === 'qb_supervisor') ? (
         <div className="w-full h-full flex items-center justify-center text-gray-400">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</div>
       ) : !isLoggedIn ? (
         // --- LOGIN PAGE ---
@@ -371,7 +371,7 @@ export default function Dashboard() {
                 isOpen={isTodoOpen}
                 onToggle={() => setIsTodoOpen(!isTodoOpen)}
                 language={language}
-                onTaskToggled={refreshTodo}
+                onTaskToggled={() => refreshTodo(true)}
               />
             </>
           )}

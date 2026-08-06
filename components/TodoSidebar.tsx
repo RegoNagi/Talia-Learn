@@ -60,18 +60,23 @@ export function TodoSidebar({
     filterScrollRef.current?.scrollBy({ left: direction === 'left' ? -120 : 120, behavior: 'smooth' });
   };
 
-  const filteredTasks = filter === 'all' ? tasks : tasks.filter((t) => t.bucket === filter);
+  const [optimisticCompleted, setOptimisticCompleted] = useState<Record<string, boolean>>({});
+
+  const filteredTasks = (filter === 'all' ? tasks : tasks.filter((t) => t.bucket === filter))
+    .map((t) => (t.id in optimisticCompleted ? { ...t, isCompleted: optimisticCompleted[t.id] } : t));
   const grouped = BUCKET_ORDER.map((bucket) => ({
     bucket,
     tasks: filteredTasks.filter((t) => t.bucket === bucket),
   })).filter((g) => g.tasks.length > 0);
 
   const dueTodayTasks = tasks.filter((t) => t.bucket === 'today' || t.bucket === 'overdue');
-  const dueTodayCompleted = dueTodayTasks.filter((t) => t.type === 'quick_task' && t.isCompleted).length;
+  const dueTodayCompleted = dueTodayTasks.filter((t) => t.type === 'quick_task' && (t.id in optimisticCompleted ? optimisticCompleted[t.id] : t.isCompleted)).length;
 
   const handleToggleComplete = async (task: TodoTask) => {
     if (task.type !== 'quick_task') return;
-    await toggleQuickTaskCompletion(task.id, !task.isCompleted);
+    const next = !task.isCompleted;
+    setOptimisticCompleted((prev) => ({ ...prev, [task.id]: next }));
+    await toggleQuickTaskCompletion(task.id, next);
     onTaskToggled?.();
   };
 
@@ -195,7 +200,7 @@ export function TodoSidebar({
                             {isQuickTask && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleToggleComplete(task); }}
-                                className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${task.isCompleted ? `${meta.bg} border-transparent text-white` : `bg-white ${meta.border} ${meta.text} hover:bg-white/80`}`}
+                                className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${task.isCompleted ? 'bg-emerald-500 border-transparent text-white' : 'bg-white border-emerald-500 text-emerald-500 hover:bg-emerald-50'}`}
                                 title={isAr ? 'علّم كمكتملة' : 'Mark complete'}
                               >
                                 <Check size={16} />

@@ -94,9 +94,9 @@ function CourseWorkspaceContent() {
     if (realClassId) getClassSectionById(realClassId).then(setRealClassInfo);
   }, [realClassId]);
 
-  const refreshTodo = () => {
+  const refreshTodo = (silent = false) => {
     if (!realClassId || !realSubject) { setIsTodoLoading(false); return; }
-    setIsTodoLoading(true);
+    if (!silent) setIsTodoLoading(true);
     getRealTodoTasks({ teacherId: authUser?.teacherId, classId: realClassId, subject: realSubject, grade: realClassInfo?.gradeLevel }).then((tasks) => {
       setTodoTasks(tasks);
       setIsTodoLoading(false);
@@ -184,6 +184,10 @@ function CourseWorkspaceContent() {
       { icon: <PenTool size={20} />, label: "Create Post", color: "bg-emerald-500" },
     ];
   };
+
+  if (isAuthLoading || !authUser) {
+    return <div className="w-full h-screen flex items-center justify-center text-slate-400">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</div>;
+  }
 
   return (
     <div className="flex h-screen w-full bg-white overflow-hidden" dir={language === 'ar' ? 'rtl' : 'ltr'}>
@@ -329,7 +333,7 @@ function CourseWorkspaceContent() {
         isOpen={isTodoOpen}
         onToggle={() => setIsTodoOpen(!isTodoOpen)}
         language={language}
-        onTaskToggled={refreshTodo}
+        onTaskToggled={() => refreshTodo(true)}
       />
 
       <ScheduleSessionPopup 
