@@ -166,10 +166,10 @@ export function MyClassesView({
   const [courseProgress, setCourseProgress] = useState<Record<string, { completed: number; total: number }>>({});
 
   useEffect(() => {
-    if (courses.length === 0) return;
+    if (courses.length === 0 || !authUser.teacherId) return;
     Promise.all(
       courses.map((c) =>
-        getCourseProgress({ teacherId: authUser.teacherId, classId: c.id.split('__')[0], subject: c.title }).then((p) => [c.id, p] as const)
+        getCourseProgress({ teacherId: authUser.teacherId!, classId: c.id.split('__')[0], subject: c.title }).then((p) => [c.id, p] as const)
       )
     ).then((results) => {
       setCourseProgress(Object.fromEntries(results));
