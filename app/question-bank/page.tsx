@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
 import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
-import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCircuit, LayoutTemplate, Edit2, Trash2, BookOpen, ListChecks, CheckCircle2, AlignRight, Type, Mic, Copy, Eye, Search, ChevronDown, ChevronUp, MessageSquare, Layers, BarChart, FileText, LayoutGrid, Signal, Award, Play, X, Paperclip, Globe, Monitor, Flag, Check, Loader2, MousePointerClick, Settings2, RefreshCw, ShieldCheck, Calendar, Clock, Sigma, Calculator, GitMerge, ListOrdered, Move, Map } from 'lucide-react';
+import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCircuit, LayoutTemplate, Edit2, Trash2, BookOpen, ListChecks, CheckCircle2, AlignRight, Type, Mic, Copy, Eye, Search, ChevronDown, ChevronUp, MessageSquare, Layers, BarChart, FileText, LayoutGrid, Signal, Award, Play, X, Globe, Monitor, Flag, Check, Loader2, MousePointerClick, Settings2, RefreshCw, ShieldCheck, Calendar, Clock, Sigma, Calculator, GitMerge, ListOrdered, Move, Map, ImagePlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ApprovalHub } from '@/components/ApprovalHub';
 import { useAuth } from '@/contexts/AuthContext';
@@ -492,6 +492,8 @@ export default function QuestionBank() {
   ]);
   const [newQImageUrl, setNewQImageUrl] = useState('');
   const [isUploadingQImage, setIsUploadingQImage] = useState(false);
+  const [newQQuestionImageUrl, setNewQQuestionImageUrl] = useState('');
+  const [isUploadingQuestionImage, setIsUploadingQuestionImage] = useState(false);
   const [newQHotspots, setNewQHotspots] = useState<{ id: string; xPercent: number; yPercent: number; label: string; isCorrect: boolean }[]>([]);
   const [newQAudioUrl, setNewQAudioUrl] = useState('');
   const [isUploadingQAudio, setIsUploadingQAudio] = useState(false);
@@ -507,10 +509,10 @@ export default function QuestionBank() {
   const [qStandard, setQStandard] = useState('');
   const [qTime, setQTime] = useState('5');
   const [newQOptions, setNewQOptions] = useState<any[]>([
-    { id: '1', text: '', isCorrect: true, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
-    { id: '2', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
-    { id: '3', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
-    { id: '4', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null }
+    { id: '1', text: '', isCorrect: true, imageUrl: null },
+    { id: '2', text: '', isCorrect: false, imageUrl: null },
+    { id: '3', text: '', isCorrect: false, imageUrl: null },
+    { id: '4', text: '', isCorrect: false, imageUrl: null }
   ]);
   const [newQCorrectOption, setNewQCorrectOption] = useState<number>(0);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
@@ -569,6 +571,7 @@ export default function QuestionBank() {
       type: newQType,
       question: { 
         title: newQTitle, 
+        questionImageUrl: newQQuestionImageUrl || undefined,
         options: newQOptions, 
         correctOption: newQCorrectOption, 
         standard: qStandard || undefined,
@@ -628,11 +631,12 @@ export default function QuestionBank() {
 
     // Clear only text entry inputs to allow continuous fluid flow
     setNewQTitle('');
+    setNewQQuestionImageUrl('');
     setNewQOptions([
-      { id: '1', text: '', isCorrect: true, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
-      { id: '2', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
-      { id: '3', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
-      { id: '4', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null }
+      { id: '1', text: '', isCorrect: true, imageUrl: null },
+      { id: '2', text: '', isCorrect: false, imageUrl: null },
+      { id: '3', text: '', isCorrect: false, imageUrl: null },
+      { id: '4', text: '', isCorrect: false, imageUrl: null }
     ]);
     setNewQCorrectOption(0);
     setNewQImageUrl('');
@@ -665,10 +669,11 @@ export default function QuestionBank() {
     setNewQDiff(q.difficulty);
     setNewQType(q.type);
     setNewQTitle(q.question?.title || '');
+    setNewQQuestionImageUrl((q.question as any)?.questionImageUrl || '');
     setQStandard(q.question?.standard || '');
-    setNewQOptions(q.question?.options?.length ? q.question.options.map((o: any) => ({ ...o, mediaFile: null, mediaType: null, mediaPreviewUrl: o.imageUrl || null })) : [
-      { id: crypto.randomUUID(), text: '', isCorrect: true, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
-      { id: crypto.randomUUID(), text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
+    setNewQOptions(q.question?.options?.length ? q.question.options.map((o: any) => ({ ...o })) : [
+      { id: crypto.randomUUID(), text: '', isCorrect: true, imageUrl: null },
+      { id: crypto.randomUUID(), text: '', isCorrect: false, imageUrl: null },
     ]);
     setNewQCorrectOption(q.question?.correctOption ?? 0);
     setNewQNumericAnswer(q.question?.numericAnswer != null ? String(q.question.numericAnswer) : '');
@@ -1552,10 +1557,10 @@ export default function QuestionBank() {
                                 <div className="flex items-center gap-2 text-slate-400">
                                   <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center hover:text-violet-600 transition-colors" aria-label={language === 'ar' ? 'نسخ' : 'Copy'}><Copy size={16} /></button>
                                   <button onClick={() => { setNewQTitle(''); setNewQOptions([
-                                    { id: '1', text: '', isCorrect: true, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
-                                    { id: '2', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
-                                    { id: '3', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
-                                    { id: '4', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null }
+                                    { id: '1', text: '', isCorrect: true, imageUrl: null },
+                                    { id: '2', text: '', isCorrect: false, imageUrl: null },
+                                    { id: '3', text: '', isCorrect: false, imageUrl: null },
+                                    { id: '4', text: '', isCorrect: false, imageUrl: null }
                                   ]); setNewQCorrectOption(0); }} className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center hover:text-red-600 hover:border-red-200 transition-colors" aria-label={language === 'ar' ? 'مسح المسودة' : 'Clear draft'}><Trash2 size={16} /></button>
                                 </div>
                              </div>
@@ -1586,6 +1591,39 @@ export default function QuestionBank() {
                                 className="w-full p-4 text-xl font-bold text-slate-800 bg-transparent resize-y outline-none placeholder:text-slate-300 min-h-[140px]"
                                 rows={5}
                               />
+                           </div>
+
+                           {/* Question Image — متاحة لكل أنواع الأسئلة */}
+                           <div className="mb-6">
+                             {!newQQuestionImageUrl ? (
+                               <label className="border-2 border-dashed border-slate-200 rounded-2xl p-4 flex items-center justify-center gap-2 text-slate-400 hover:bg-slate-50 hover:border-violet-300 cursor-pointer transition-colors">
+                                 <ImagePlus size={18} />
+                                 <span className="text-xs font-bold">{isUploadingQuestionImage ? (language === 'ar' ? 'جاري الرفع...' : 'Uploading...') : (language === 'ar' ? 'إضافة صورة للسؤال (اختياري)' : 'Add an image to the question (optional)')}</span>
+                                 <input
+                                   type="file"
+                                   accept="image/*"
+                                   className="hidden"
+                                   onChange={async (e) => {
+                                     const file = e.target.files?.[0];
+                                     if (!file) return;
+                                     setIsUploadingQuestionImage(true);
+                                     const result = await uploadQuestionImage(file);
+                                     setIsUploadingQuestionImage(false);
+                                     if (result) setNewQQuestionImageUrl(result.url);
+                                   }}
+                                 />
+                               </label>
+                             ) : (
+                               <div className="relative inline-block">
+                                 <img src={newQQuestionImageUrl} alt="" className="max-h-56 rounded-2xl border border-slate-200" />
+                                 <button
+                                   onClick={() => setNewQQuestionImageUrl('')}
+                                   className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-white border border-slate-200 shadow-sm text-slate-500 hover:text-red-600 flex items-center justify-center"
+                                 >
+                                   <X size={14} />
+                                 </button>
+                               </div>
+                             )}
                            </div>
 
                            {/* Audio Prompt (for Audio Clip questions) */}
@@ -1657,22 +1695,14 @@ export default function QuestionBank() {
                                              className="flex-1 w-full bg-transparent text-slate-800 text-sm font-bold focus:outline-none placeholder:font-normal placeholder:text-slate-400"
                                           />
                                           
-                                          {opt.mediaPreviewUrl && (
+                                          {opt.imageUrl && (
                                             <div className="relative shrink-0 flex items-center justify-center mr-2">
-                                               {opt.mediaType?.startsWith('image/') ? (
-                                                  <img src={opt.mediaPreviewUrl} alt="preview" className="h-8 w-8 object-cover rounded-md border border-slate-200" />
-                                               ) : (
-                                                  <div className="h-8 w-8 bg-slate-800 rounded-md flex items-center justify-center border border-slate-700">
-                                                     <Play size={14} className="text-white fill-white" />
-                                                  </div>
-                                               )}
+                                               <img src={opt.imageUrl} alt="preview" className="h-8 w-8 object-cover rounded-md border border-slate-200" />
                                                <button
                                                   onClick={(e) => {
                                                      e.stopPropagation();
                                                      const newOpts = [...newQOptions];
-                                                     newOpts[idx].mediaFile = null;
-                                                     newOpts[idx].mediaType = null;
-                                                     newOpts[idx].mediaPreviewUrl = null;
+                                                     newOpts[idx].imageUrl = null;
                                                      setNewQOptions(newOpts);
                                                   }}
                                                   className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 shadow-sm"
@@ -1683,26 +1713,26 @@ export default function QuestionBank() {
                                           )}
 
                                           <label
-                                            className={`cursor-pointer shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${opt.mediaFile ? 'text-violet-600 bg-violet-50' : 'text-slate-400 hover:text-violet-600 hover:bg-slate-50'}`}
-                                            title={language === 'ar' ? 'إضافة وسائط (صورة/فيديو)' : 'Add media (image/video)'}
+                                            className={`cursor-pointer shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${opt.imageUrl ? 'text-violet-600 bg-violet-50' : 'text-slate-400 hover:text-violet-600 hover:bg-slate-50'}`}
+                                            title={language === 'ar' ? 'إضافة صورة' : 'Add image'}
                                           >
                                             <input 
                                                type="file" 
-                                               accept="image/*,video/*" 
+                                               accept="image/*" 
                                                className="hidden" 
-                                               onChange={(e) => {
+                                               onChange={async (e) => {
                                                   const file = e.target.files?.[0];
-                                                  if (file) {
+                                                  e.target.value = '';
+                                                  if (!file) return;
+                                                  const result = await uploadQuestionImage(file);
+                                                  if (result) {
                                                      const newOpts = [...newQOptions];
-                                                     newOpts[idx].mediaFile = file;
-                                                     newOpts[idx].mediaType = file.type;
-                                                     newOpts[idx].mediaPreviewUrl = URL.createObjectURL(file);
+                                                     newOpts[idx].imageUrl = result.url;
                                                      setNewQOptions(newOpts);
                                                   }
-                                                  e.target.value = '';
                                                }} 
                                             />
-                                            <Paperclip size={16} />
+                                            <ImagePlus size={16} />
                                           </label>
                                           {isSelected ? (
                                             <div className="shrink-0 text-emerald-500 pl-2">
@@ -2279,7 +2309,7 @@ export default function QuestionBank() {
                                     <button 
                                       onClick={() => {
                                         if (newQOptions.length < 6) {
-                                          setNewQOptions([...newQOptions, { id: Date.now().toString(), text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null }]);
+                                          setNewQOptions([...newQOptions, { id: crypto.randomUUID(), text: '', isCorrect: false, imageUrl: null }]);
                                         }
                                       }}
                                       disabled={newQOptions.length >= 6}
@@ -3560,6 +3590,9 @@ export default function QuestionBank() {
               </div>
 
               <div className="space-y-3">
+                {(viewingQuestion.question as any)?.questionImageUrl && (
+                  <img src={(viewingQuestion.question as any).questionImageUrl} alt="" className="max-h-56 rounded-2xl border border-slate-200" />
+                )}
                 {viewingQuestion.question?.passageText && (
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm text-slate-700 whitespace-pre-wrap">{viewingQuestion.question.passageText}</div>
                 )}
@@ -3568,6 +3601,7 @@ export default function QuestionBank() {
                   <div className="space-y-2">
                     {viewingQuestion.question.options.map((opt: any) => (
                       <div key={opt.id} className={`flex items-center gap-2 p-2.5 rounded-xl border text-sm ${opt.isCorrect ? 'border-emerald-300 bg-emerald-50 text-emerald-800 font-bold' : 'border-slate-200 text-slate-600'}`}>
+                        {opt.imageUrl && <img src={opt.imageUrl} alt="" className="w-8 h-8 object-cover rounded-md border border-slate-200 shrink-0" />}
                         {opt.isCorrect ? <CheckCircle2 size={16} className="text-emerald-500 shrink-0" /> : <div className="w-4 h-4 rounded-full border border-slate-300 shrink-0" />}
                         {opt.text}
                       </div>

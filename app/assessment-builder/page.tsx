@@ -10,7 +10,8 @@ import {
   UploadCloud, Scale,
   CheckSquare, Layout, Save, ArrowLeft, Pencil, Book,
   AlertCircle,
-  Search, Check, Copy, Minus, Home, Loader2
+  Search, Check, Copy, Minus, Home, Loader2,
+  Calculator, GitMerge, ListOrdered, Layers, Move, MousePointerClick, Mic, AlignLeft, PenLine, ArrowRight
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -19,7 +20,7 @@ import { FloatingPortal } from '@floating-ui/react';
 import { AssessmentSidebar } from '@/components/AssessmentSidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { createAssignment, createQuiz, uploadAssignmentAttachment, getSubmissionFileUrl, getUnitsForAssignment, getAssignmentById, getQuizById, updateAssignment, updateQuiz, getTeacherOtherClasses, getClassRoster } from '@/services/assignmentData';
-import { getVisibleQuestions, convertBankQuestionToQuizQuestion, BankQuestion } from '@/services/questionBankData';
+import { getVisibleQuestions, convertBankQuestionToQuizQuestion, uploadQuestionImage, BankQuestion } from '@/services/questionBankData';
 import { getGradebookCategories } from '@/services/academicData';
 
 interface Question {
@@ -30,6 +31,19 @@ interface Question {
   imageUrl?: string;
   options?: { id: string; text: string; isCorrect: boolean; imageUrl?: string }[];
   sectionId?: string | null;
+  numericAnswer?: number | null;
+  numericTolerance?: number;
+  numericUnit?: string;
+  pairs?: { id: string; left: string; right: string }[];
+  orderItems?: string[];
+  categories?: string[];
+  classifyItems?: { text: string; category: string }[];
+  zones?: string[];
+  dragItems?: { text: string; zone: string }[];
+  hotspots?: { xPercent: number; yPercent: number; label: string; isCorrect: boolean }[];
+  audioUrl?: string;
+  passageText?: string;
+  subQuestions?: { id: string; title: string; type: 'اختيار من متعدد' | 'صح أم خطأ' | 'إجابة قصيرة'; points: number; options?: { id: string; text: string; isCorrect: boolean }[] }[];
 }
 
 interface QuizSection {
@@ -482,7 +496,7 @@ function AssessmentBuilderContent() {
     setSections(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
   };
 
-  const addQuestion = (type: Question['type']) => {
+  const addQuestion = (type: Question['type'], extra?: Partial<Question>) => {
     const newQuestionId = `q-${window.crypto.randomUUID()}`;
     const newQuestion: Question = {
       id: newQuestionId,
@@ -496,7 +510,21 @@ function AssessmentBuilderContent() {
       ] : type === 'true_false' ? [
         { id: `opt-${window.crypto.randomUUID()}`, text: 'True', isCorrect: false },
         { id: `opt-${window.crypto.randomUUID()}`, text: 'False', isCorrect: false }
-      ] : undefined
+      ] : undefined,
+      numericAnswer: type === 'numeric_answer' ? null : undefined,
+      numericTolerance: type === 'numeric_answer' ? 0 : undefined,
+      pairs: type === 'matching' ? [
+        { id: `p-${window.crypto.randomUUID()}`, left: '', right: '' },
+        { id: `p-${window.crypto.randomUUID()}`, left: '', right: '' },
+      ] : undefined,
+      orderItems: type === 'ordering' ? ['', ''] : undefined,
+      categories: type === 'classification' ? ['', ''] : undefined,
+      classifyItems: type === 'classification' ? [{ text: '', category: '' }] : undefined,
+      zones: type === 'drag_and_drop' ? ['', ''] : undefined,
+      dragItems: type === 'drag_and_drop' ? [{ text: '', zone: '' }] : undefined,
+      hotspots: type === 'hotspot' ? [] : undefined,
+      subQuestions: type === 'passage' ? [] : undefined,
+      ...extra,
     };
     setQuestions(prev => {
       if (!activeSectionId) {
@@ -739,6 +767,52 @@ function AssessmentBuilderContent() {
                           <UploadCloud size={20} /> File upload
                         </div>
                       )}
+                      {q.type === 'numeric_answer' && (
+                        <p className="text-sm text-slate-500 bg-slate-50 rounded-xl p-3">Correct answer: <span className="font-bold text-slate-700">{q.numericAnswer}</span> {q.numericUnit || ''} (± {q.numericTolerance || 0})</p>
+                      )}
+                      {q.type === 'matching' && Array.isArray(q.pairs) && (
+                        <div className="space-y-1.5">
+                          {q.pairs.map((p: any) => (
+                            <div key={p.id} className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 rounded-lg p-2">
+                              <span className="font-medium">{p.left}</span> <ArrowRight size={12} className="text-slate-400" /> <span>{p.right}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {q.type === 'ordering' && Array.isArray(q.orderItems) && (
+                        <ol className="list-decimal pr-5 space-y-1 text-sm text-slate-600">
+                          {q.orderItems.map((it: string, i: number) => <li key={i}>{it}</li>)}
+                        </ol>
+                      )}
+                      {q.type === 'classification' && Array.isArray(q.classifyItems) && (
+                        <div className="space-y-1.5">
+                          {q.classifyItems.map((it: any, i: number) => (
+                            <div key={i} className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 rounded-lg p-2">
+                              <span>{it.text}</span> <ArrowRight size={12} className="text-slate-400" /> <span className="font-bold">{it.category}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {q.type === 'drag_and_drop' && Array.isArray(q.dragItems) && (
+                        <div className="space-y-1.5">
+                          {q.dragItems.map((it: any, i: number) => (
+                            <div key={i} className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 rounded-lg p-2">
+                              <span>{it.text}</span> <ArrowRight size={12} className="text-slate-400" /> <span className="font-bold">{it.zone}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {q.type === 'hotspot' && q.imageUrl && (
+                        <div className="text-xs text-slate-400 bg-slate-50 rounded-xl p-3">Interactive image question — {(q.hotspots || []).length} hotspot(s) marked</div>
+                      )}
+                      {q.type === 'passage' && (
+                        <div className="space-y-3">
+                          {q.passageText && <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600 whitespace-pre-wrap">{q.passageText}</div>}
+                          {Array.isArray(q.subQuestions) && q.subQuestions.map((sq: any, i: number) => (
+                            <p key={sq.id || i} className="text-xs text-slate-500">{i + 1}. {sq.title} <span className="text-slate-400">({sq.points} pts)</span></p>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </Fragment>
                   );
@@ -793,11 +867,21 @@ function AssessmentBuilderContent() {
                   { type: 'multiple_choice', icon: ListChecks, label: 'Multiple Choice' },
                   { type: 'true_false', icon: CheckSquare, label: 'True/False' },
                   { type: 'short_answer', icon: Type, label: 'Short Answer' },
+                  { type: 'short_answer', icon: AlignLeft, label: 'Fill in the Blank' },
+                  { type: 'short_answer', icon: PenLine, label: 'Essay' },
+                  { type: 'numeric_answer', icon: Calculator, label: 'Numeric Answer' },
+                  { type: 'matching', icon: GitMerge, label: 'Matching' },
+                  { type: 'ordering', icon: ListOrdered, label: 'Ordering' },
+                  { type: 'classification', icon: Layers, label: 'Classification' },
+                  { type: 'drag_and_drop', icon: Move, label: 'Drag & Drop' },
+                  { type: 'hotspot', icon: MousePointerClick, label: 'Hotspot' },
+                  { type: 'multiple_choice', icon: Mic, label: 'Audio Clip', extra: { audioUrl: '' } },
+                  { type: 'passage', icon: Book, label: 'Passage' },
                   { type: 'file_upload', icon: UploadCloud, label: 'File Upload' }
-                ].map((item) => (
+                ].map((item: any, itemIdx) => (
                   <button 
-                    key={item.type}
-                    onClick={() => addQuestion(item.type as any)}
+                    key={`${item.type}-${itemIdx}`}
+                    onClick={() => addQuestion(item.type as any, item.extra)}
                     className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
                   >
                     <item.icon size={16} />
@@ -951,20 +1035,42 @@ function AssessmentBuilderContent() {
                             value={q.type}
                             onChange={(e) => {
                               const newType = e.target.value as Question['type'];
-                              const newOptions = newType === 'multiple_choice' ? [
-                                { id: `opt-${window.crypto.randomUUID()}`, text: 'Option 1', isCorrect: false },
-                                { id: `opt-${window.crypto.randomUUID()}`, text: 'Option 2', isCorrect: false }
-                              ] : newType === 'true_false' ? [
-                                { id: `opt-${window.crypto.randomUUID()}`, text: 'True', isCorrect: false },
-                                { id: `opt-${window.crypto.randomUUID()}`, text: 'False', isCorrect: false }
-                              ] : undefined;
-                              updateQuestion(q.id, { type: newType, options: newOptions });
+                              updateQuestion(q.id, {
+                                type: newType,
+                                options: newType === 'multiple_choice' ? [
+                                  { id: `opt-${window.crypto.randomUUID()}`, text: 'Option 1', isCorrect: false },
+                                  { id: `opt-${window.crypto.randomUUID()}`, text: 'Option 2', isCorrect: false }
+                                ] : newType === 'true_false' ? [
+                                  { id: `opt-${window.crypto.randomUUID()}`, text: 'True', isCorrect: false },
+                                  { id: `opt-${window.crypto.randomUUID()}`, text: 'False', isCorrect: false }
+                                ] : undefined,
+                                numericAnswer: newType === 'numeric_answer' ? null : undefined,
+                                numericTolerance: newType === 'numeric_answer' ? 0 : undefined,
+                                pairs: newType === 'matching' ? [
+                                  { id: `p-${window.crypto.randomUUID()}`, left: '', right: '' },
+                                  { id: `p-${window.crypto.randomUUID()}`, left: '', right: '' },
+                                ] : undefined,
+                                orderItems: newType === 'ordering' ? ['', ''] : undefined,
+                                categories: newType === 'classification' ? ['', ''] : undefined,
+                                classifyItems: newType === 'classification' ? [{ text: '', category: '' }] : undefined,
+                                zones: newType === 'drag_and_drop' ? ['', ''] : undefined,
+                                dragItems: newType === 'drag_and_drop' ? [{ text: '', zone: '' }] : undefined,
+                                hotspots: newType === 'hotspot' ? [] : undefined,
+                                subQuestions: newType === 'passage' ? [] : undefined,
+                              });
                             }}
                             className="bg-blue-50 border-none rounded-lg text-xs font-bold uppercase text-blue-600 py-0.5 px-2 outline-none focus:ring-2 focus:ring-blue-200 cursor-pointer"
                           >
                             <option value="multiple_choice">Multiple Choice</option>
                             <option value="true_false">True/False</option>
                             <option value="short_answer">Short Answer</option>
+                            <option value="numeric_answer">Numeric Answer</option>
+                            <option value="matching">Matching</option>
+                            <option value="ordering">Ordering</option>
+                            <option value="classification">Classification</option>
+                            <option value="drag_and_drop">Drag & Drop</option>
+                            <option value="hotspot">Hotspot</option>
+                            <option value="passage">Passage</option>
                             <option value="file_upload">File Upload</option>
                           </select>
                         </div>
@@ -1140,6 +1246,314 @@ function AssessmentBuilderContent() {
                         <div className="bg-slate-50 rounded-2xl border border-slate-100 p-6 flex items-center gap-4 text-slate-400 text-sm mb-8">
                           <UploadCloud size={20} />
                           <span>Students will be prompted to upload a file (PDF, Image, or Doc).</span>
+                        </div>
+                      )}
+
+                      {(q.type === 'numeric_answer' || q.type === 'matching' || q.type === 'ordering' || q.type === 'classification' || q.type === 'drag_and_drop' || q.type === 'hotspot' || q.type === 'passage') && (
+                        <div className="mb-8">
+                          {q.type === 'numeric_answer' && (
+                            <div className="grid grid-cols-3 gap-3">
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1.5 block">Correct Answer</label>
+                                <input type="number" value={q.numericAnswer ?? ''} onChange={(e) => updateQuestion(q.id, { numericAnswer: e.target.value === '' ? null : Number(e.target.value) })} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-100" />
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1.5 block">Tolerance (±)</label>
+                                <input type="number" value={q.numericTolerance ?? 0} onChange={(e) => updateQuestion(q.id, { numericTolerance: Number(e.target.value) || 0 })} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-100" />
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1.5 block">Unit (optional)</label>
+                                <input type="text" value={q.numericUnit || ''} onChange={(e) => updateQuestion(q.id, { numericUnit: e.target.value })} placeholder="e.g. cm, kg" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-100" />
+                              </div>
+                            </div>
+                          )}
+
+                          {q.type === 'matching' && (
+                            <div className="space-y-2">
+                              {(q.pairs || []).map((p, pIdx) => (
+                                <div key={p.id} className="flex items-center gap-2">
+                                  <input value={p.left} onChange={(e) => { const pairs = [...(q.pairs || [])]; pairs[pIdx] = { ...pairs[pIdx], left: e.target.value }; updateQuestion(q.id, { pairs }); }} placeholder="Left item" className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-100" />
+                                  <ArrowRight size={16} className="text-slate-300 shrink-0" />
+                                  <input value={p.right} onChange={(e) => { const pairs = [...(q.pairs || [])]; pairs[pIdx] = { ...pairs[pIdx], right: e.target.value }; updateQuestion(q.id, { pairs }); }} placeholder="Matches with" className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-100" />
+                                  {(q.pairs || []).length > 2 && (
+                                    <button onClick={() => updateQuestion(q.id, { pairs: (q.pairs || []).filter((_, i) => i !== pIdx) })} className="text-slate-300 hover:text-red-500 transition-colors shrink-0"><Trash2 size={16} /></button>
+                                  )}
+                                </div>
+                              ))}
+                              <button onClick={() => updateQuestion(q.id, { pairs: [...(q.pairs || []), { id: `p-${window.crypto.randomUUID()}`, left: '', right: '' }] })} className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700"><Plus size={14} /> Add pair</button>
+                            </div>
+                          )}
+
+                          {q.type === 'ordering' && (
+                            <div className="space-y-2">
+                              {(q.orderItems || []).map((it, iIdx) => (
+                                <div key={iIdx} className="flex items-center gap-2">
+                                  <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-bold shrink-0">{iIdx + 1}</span>
+                                  <input value={it} onChange={(e) => { const items = [...(q.orderItems || [])]; items[iIdx] = e.target.value; updateQuestion(q.id, { orderItems: items }); }} placeholder={`Step ${iIdx + 1}`} className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-100" />
+                                  {(q.orderItems || []).length > 2 && (
+                                    <button onClick={() => updateQuestion(q.id, { orderItems: (q.orderItems || []).filter((_, i) => i !== iIdx) })} className="text-slate-300 hover:text-red-500 transition-colors shrink-0"><Trash2 size={16} /></button>
+                                  )}
+                                </div>
+                              ))}
+                              <button onClick={() => updateQuestion(q.id, { orderItems: [...(q.orderItems || []), ''] })} className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700"><Plus size={14} /> Add step</button>
+                              <p className="text-xs text-slate-400">Enter items in the correct order — students will see them shuffled.</p>
+                            </div>
+                          )}
+
+                          {q.type === 'classification' && (
+                            <div className="space-y-4">
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1.5 block">Categories</label>
+                                <div className="flex flex-wrap gap-2 items-center">
+                                  {(q.categories || []).map((cat, cIdx) => (
+                                    <div key={cIdx} className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg pl-2">
+                                      <input value={cat} onChange={(e) => { const cats = [...(q.categories || [])]; const oldName = cats[cIdx]; cats[cIdx] = e.target.value; const items = (q.classifyItems || []).map(it => it.category === oldName ? { ...it, category: e.target.value } : it); updateQuestion(q.id, { categories: cats, classifyItems: items }); }} placeholder="Category" className="bg-transparent px-1 py-1.5 text-sm outline-none w-28" />
+                                      {(q.categories || []).length > 2 && (
+                                        <button onClick={() => updateQuestion(q.id, { categories: (q.categories || []).filter((_, i) => i !== cIdx) })} className="text-slate-300 hover:text-red-500 px-1"><X size={12} /></button>
+                                      )}
+                                    </div>
+                                  ))}
+                                  <button onClick={() => updateQuestion(q.id, { categories: [...(q.categories || []), ''] })} className="flex items-center gap-1 text-xs font-bold text-indigo-600 px-2"><Plus size={13} /> Add category</button>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1.5 block">Items to classify</label>
+                                <div className="space-y-2">
+                                  {(q.classifyItems || []).map((it, iIdx) => (
+                                    <div key={iIdx} className="flex items-center gap-2">
+                                      <input value={it.text} onChange={(e) => { const items = [...(q.classifyItems || [])]; items[iIdx] = { ...items[iIdx], text: e.target.value }; updateQuestion(q.id, { classifyItems: items }); }} placeholder="Item" className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-100" />
+                                      <select value={it.category} onChange={(e) => { const items = [...(q.classifyItems || [])]; items[iIdx] = { ...items[iIdx], category: e.target.value }; updateQuestion(q.id, { classifyItems: items }); }} className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none">
+                                        <option value="">Choose category</option>
+                                        {(q.categories || []).map((cat, ci) => <option key={ci} value={cat}>{cat}</option>)}
+                                      </select>
+                                      {(q.classifyItems || []).length > 1 && (
+                                        <button onClick={() => updateQuestion(q.id, { classifyItems: (q.classifyItems || []).filter((_, i) => i !== iIdx) })} className="text-slate-300 hover:text-red-500 shrink-0"><Trash2 size={16} /></button>
+                                      )}
+                                    </div>
+                                  ))}
+                                  <button onClick={() => updateQuestion(q.id, { classifyItems: [...(q.classifyItems || []), { text: '', category: '' }] })} className="flex items-center gap-1.5 text-xs font-bold text-indigo-600"><Plus size={14} /> Add item</button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {q.type === 'drag_and_drop' && (
+                            <div className="space-y-4">
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1.5 block">Drop Zones</label>
+                                <div className="flex flex-wrap gap-2 items-center">
+                                  {(q.zones || []).map((zone, zIdx) => (
+                                    <div key={zIdx} className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg pl-2">
+                                      <input value={zone} onChange={(e) => { const zones = [...(q.zones || [])]; const oldName = zones[zIdx]; zones[zIdx] = e.target.value; const items = (q.dragItems || []).map(it => it.zone === oldName ? { ...it, zone: e.target.value } : it); updateQuestion(q.id, { zones, dragItems: items }); }} placeholder="Zone" className="bg-transparent px-1 py-1.5 text-sm outline-none w-28" />
+                                      {(q.zones || []).length > 2 && (
+                                        <button onClick={() => updateQuestion(q.id, { zones: (q.zones || []).filter((_, i) => i !== zIdx) })} className="text-slate-300 hover:text-red-500 px-1"><X size={12} /></button>
+                                      )}
+                                    </div>
+                                  ))}
+                                  <button onClick={() => updateQuestion(q.id, { zones: [...(q.zones || []), ''] })} className="flex items-center gap-1 text-xs font-bold text-indigo-600 px-2"><Plus size={13} /> Add zone</button>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1.5 block">Draggable Items</label>
+                                <div className="space-y-2">
+                                  {(q.dragItems || []).map((it, iIdx) => (
+                                    <div key={iIdx} className="flex items-center gap-2">
+                                      <input value={it.text} onChange={(e) => { const items = [...(q.dragItems || [])]; items[iIdx] = { ...items[iIdx], text: e.target.value }; updateQuestion(q.id, { dragItems: items }); }} placeholder="Item" className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-100" />
+                                      <select value={it.zone} onChange={(e) => { const items = [...(q.dragItems || [])]; items[iIdx] = { ...items[iIdx], zone: e.target.value }; updateQuestion(q.id, { dragItems: items }); }} className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none">
+                                        <option value="">Choose zone</option>
+                                        {(q.zones || []).map((zone, zi) => <option key={zi} value={zone}>{zone}</option>)}
+                                      </select>
+                                      {(q.dragItems || []).length > 1 && (
+                                        <button onClick={() => updateQuestion(q.id, { dragItems: (q.dragItems || []).filter((_, i) => i !== iIdx) })} className="text-slate-300 hover:text-red-500 shrink-0"><Trash2 size={16} /></button>
+                                      )}
+                                    </div>
+                                  ))}
+                                  <button onClick={() => updateQuestion(q.id, { dragItems: [...(q.dragItems || []), { text: '', zone: '' }] })} className="flex items-center gap-1.5 text-xs font-bold text-indigo-600"><Plus size={14} /> Add item</button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {q.type === 'hotspot' && (
+                            <div className="space-y-3">
+                              {!q.imageUrl ? (
+                                <label className="border-2 border-dashed border-slate-200 rounded-2xl p-8 flex flex-col items-center gap-2 text-slate-400 hover:bg-slate-50 cursor-pointer transition-colors">
+                                  <UploadCloud size={24} />
+                                  <span className="text-sm font-bold">{isUploadingQImage === q.id ? 'Uploading...' : 'Upload question image'}</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      setIsUploadingQImage(q.id);
+                                      const result = await uploadQuestionImage(file);
+                                      setIsUploadingQImage(null);
+                                      if (result) updateQuestion(q.id, { imageUrl: result.url });
+                                    }}
+                                  />
+                                </label>
+                              ) : (
+                                <div>
+                                  <p className="text-xs font-semibold text-slate-400 mb-2">Click on the image to place a new hotspot marker</p>
+                                  <div
+                                    className="relative inline-block border border-slate-200 rounded-xl overflow-hidden cursor-crosshair"
+                                    onClick={(e) => {
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
+                                      const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
+                                      const hotspots = [...(q.hotspots || []), { xPercent, yPercent, label: `${(q.hotspots || []).length + 1}`, isCorrect: (q.hotspots || []).length === 0 }];
+                                      updateQuestion(q.id, { hotspots });
+                                    }}
+                                  >
+                                    <img src={q.imageUrl} alt="" className="max-w-full max-h-96 block" />
+                                    {(q.hotspots || []).map((hs, hsIdx) => (
+                                      <div
+                                        key={hsIdx}
+                                        style={{ left: `${hs.xPercent}%`, top: `${hs.yPercent}%` }}
+                                        className={`absolute -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold ${hs.isCorrect ? 'bg-emerald-500 border-white text-white' : 'bg-white border-slate-400 text-slate-600'}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {hs.label}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <button onClick={() => updateQuestion(q.id, { imageUrl: undefined, hotspots: [] })} className="text-xs font-bold text-red-500 hover:text-red-600 mt-2 block">
+                                    Remove image and start over
+                                  </button>
+                                </div>
+                              )}
+                              {(q.hotspots || []).length > 0 && (
+                                <div className="space-y-2">
+                                  {(q.hotspots || []).map((hs, hsIdx) => (
+                                    <div key={hsIdx} className="flex items-center gap-3">
+                                      <span className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-xs font-bold shrink-0">{hs.label}</span>
+                                      <button
+                                        onClick={() => updateQuestion(q.id, { hotspots: (q.hotspots || []).map((h, i) => ({ ...h, isCorrect: i === hsIdx })) })}
+                                        className={`flex-1 text-left px-4 py-2 rounded-xl text-sm font-bold transition-colors ${hs.isCorrect ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-50 text-slate-500 border border-slate-200 hover:bg-slate-100'}`}
+                                      >
+                                        {hs.isCorrect ? 'Correct Answer' : 'Click to mark correct'}
+                                      </button>
+                                      <button
+                                        onClick={() => updateQuestion(q.id, { hotspots: (q.hotspots || []).filter((_, i) => i !== hsIdx) })}
+                                        className="w-9 h-9 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 flex items-center justify-center transition-colors"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {q.type === 'passage' && (
+                            <div className="space-y-4">
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1.5 block">Passage Text</label>
+                                <textarea
+                                  value={q.passageText || ''}
+                                  onChange={(e) => updateQuestion(q.id, { passageText: e.target.value })}
+                                  rows={4}
+                                  placeholder="Write the passage text here..."
+                                  className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-100 resize-y"
+                                />
+                              </div>
+                              <div className="space-y-3">
+                                {(q.subQuestions || []).map((sq, sqIdx) => (
+                                  <div key={sq.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-7 h-7 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-bold shrink-0">{sqIdx + 1}</span>
+                                      <input
+                                        value={sq.title}
+                                        onChange={(e) => { const subs = [...(q.subQuestions || [])]; subs[sqIdx] = { ...subs[sqIdx], title: e.target.value }; updateQuestion(q.id, { subQuestions: subs }); }}
+                                        placeholder={`Sub-question ${sqIdx + 1} text`}
+                                        className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-violet-400"
+                                      />
+                                      <select
+                                        value={sq.type}
+                                        onChange={(e) => {
+                                          const newType = e.target.value as 'اختيار من متعدد' | 'صح أم خطأ' | 'إجابة قصيرة';
+                                          const subs = [...(q.subQuestions || [])];
+                                          let options = subs[sqIdx].options;
+                                          if (newType === 'صح أم خطأ') {
+                                            options = [{ id: `o-${window.crypto.randomUUID()}`, text: 'True', isCorrect: true }, { id: `o-${window.crypto.randomUUID()}`, text: 'False', isCorrect: false }];
+                                          } else if (newType === 'اختيار من متعدد' && subs[sqIdx].type !== 'اختيار من متعدد') {
+                                            options = [{ id: `o-${window.crypto.randomUUID()}`, text: '', isCorrect: true }, { id: `o-${window.crypto.randomUUID()}`, text: '', isCorrect: false }];
+                                          }
+                                          subs[sqIdx] = { ...subs[sqIdx], type: newType, options };
+                                          updateQuestion(q.id, { subQuestions: subs });
+                                        }}
+                                        className="w-36 bg-white border border-slate-200 rounded-lg px-2 py-2 text-xs font-bold text-slate-700 outline-none"
+                                      >
+                                        <option value="اختيار من متعدد">Multiple Choice</option>
+                                        <option value="صح أم خطأ">True/False</option>
+                                        <option value="إجابة قصيرة">Short Answer</option>
+                                      </select>
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={sq.points}
+                                        onChange={(e) => { const subs = [...(q.subQuestions || [])]; subs[sqIdx] = { ...subs[sqIdx], points: Number(e.target.value) }; updateQuestion(q.id, { subQuestions: subs }); }}
+                                        className="w-14 bg-white border border-slate-200 rounded-lg px-2 py-2 text-xs font-bold text-center outline-none"
+                                      />
+                                      <button onClick={() => updateQuestion(q.id, { subQuestions: (q.subQuestions || []).filter((_, i) => i !== sqIdx) })} className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-600 flex items-center justify-center shrink-0"><Trash2 size={13} /></button>
+                                    </div>
+                                    {sq.type === 'اختيار من متعدد' && (
+                                      <div className="space-y-2 pr-9">
+                                        {(sq.options || []).map((opt, oIdx) => (
+                                          <div key={opt.id} className="flex items-center gap-2">
+                                            <button
+                                              onClick={() => { const subs = [...(q.subQuestions || [])]; subs[sqIdx] = { ...subs[sqIdx], options: (subs[sqIdx].options || []).map(o => ({ ...o, isCorrect: o.id === opt.id })) }; updateQuestion(q.id, { subQuestions: subs }); }}
+                                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${opt.isCorrect ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-white'}`}
+                                            >
+                                              {opt.isCorrect && <Check size={12} className="text-white" />}
+                                            </button>
+                                            <input
+                                              value={opt.text}
+                                              onChange={(e) => { const subs = [...(q.subQuestions || [])]; const opts = [...(subs[sqIdx].options || [])]; opts[oIdx] = { ...opts[oIdx], text: e.target.value }; subs[sqIdx] = { ...subs[sqIdx], options: opts }; updateQuestion(q.id, { subQuestions: subs }); }}
+                                              placeholder="Option text"
+                                              className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-violet-400"
+                                            />
+                                            {(sq.options || []).length > 2 && (
+                                              <button onClick={() => { const subs = [...(q.subQuestions || [])]; subs[sqIdx] = { ...subs[sqIdx], options: (subs[sqIdx].options || []).filter(o => o.id !== opt.id) }; updateQuestion(q.id, { subQuestions: subs }); }} className="text-slate-300 hover:text-red-500 shrink-0"><Trash2 size={14} /></button>
+                                            )}
+                                          </div>
+                                        ))}
+                                        {(sq.options || []).length < 6 && (
+                                          <button onClick={() => { const subs = [...(q.subQuestions || [])]; subs[sqIdx] = { ...subs[sqIdx], options: [...(subs[sqIdx].options || []), { id: `o-${window.crypto.randomUUID()}`, text: '', isCorrect: false }] }; updateQuestion(q.id, { subQuestions: subs }); }} className="flex items-center gap-1.5 text-xs font-bold text-violet-600"><Plus size={13} /> Add option</button>
+                                        )}
+                                      </div>
+                                    )}
+                                    {sq.type === 'صح أم خطأ' && (
+                                      <div className="space-y-2 pr-9">
+                                        {(sq.options || []).map((opt) => (
+                                          <div key={opt.id} className="flex items-center gap-2">
+                                            <button
+                                              onClick={() => { const subs = [...(q.subQuestions || [])]; subs[sqIdx] = { ...subs[sqIdx], options: (subs[sqIdx].options || []).map(o => ({ ...o, isCorrect: o.id === opt.id })) }; updateQuestion(q.id, { subQuestions: subs }); }}
+                                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${opt.isCorrect ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-white'}`}
+                                            >
+                                              {opt.isCorrect && <Check size={12} className="text-white" />}
+                                            </button>
+                                            <span className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700">{opt.text}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                                <button
+                                  onClick={() => updateQuestion(q.id, { subQuestions: [...(q.subQuestions || []), { id: `sq-${window.crypto.randomUUID()}`, title: '', type: 'اختيار من متعدد' as const, points: 1, options: [{ id: `o-${window.crypto.randomUUID()}`, text: '', isCorrect: true }, { id: `o-${window.crypto.randomUUID()}`, text: '', isCorrect: false }] }] })}
+                                  disabled={(q.subQuestions || []).length >= 10}
+                                  className="flex items-center gap-2 text-sm font-bold text-violet-600 hover:text-violet-700 disabled:opacity-40"
+                                >
+                                  <Plus size={16} /> Add Sub-Question
+                                </button>
+                                <p className="text-xs font-semibold text-slate-400">Total passage points: {(q.subQuestions || []).reduce((s, sq) => s + (sq.points || 0), 0)}</p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
 

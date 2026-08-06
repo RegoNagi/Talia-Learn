@@ -8,6 +8,7 @@ export type BankStatus = 'approved' | 'pending' | 'rejected';
 // نفس فلسفة QuizQuestion في assignmentData.ts — حقول اختيارية بدل any، مفيش تغيير في أي سلوك قائم.
 export interface BankQuestionContent {
   title: string;
+  questionImageUrl?: string;
   options?: { id: string; text: string; isCorrect: boolean; imageUrl?: string }[];
   correctOption?: number;
   standard?: string;
@@ -473,7 +474,7 @@ export function convertBankQuestionToQuizQuestion(bq: BankQuestion, pointsPerQue
     classifyItems: bq.question?.classifyItems ?? undefined,
     zones: bq.question?.zones ?? undefined,
     dragItems: bq.question?.dragItems ?? undefined,
-    imageUrl: bq.question?.imageUrl ?? undefined,
+    imageUrl: bq.question?.imageUrl ?? (bq.question as any)?.questionImageUrl ?? undefined,
     hotspots: bq.question?.hotspots ?? undefined,
     audioUrl: bq.question?.audioUrl ?? undefined,
     passageText: bq.question?.passageText ?? undefined,
