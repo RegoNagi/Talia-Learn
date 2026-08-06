@@ -296,6 +296,9 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
   const renderTeacherFlow = () => {
     if (view === 'quiz-grading-student' && activeQuizForGrading && activeQuizAttemptForGrading) {
       const manualQuestions = (activeQuizForGrading.questions || []).filter((q: any) => q.type === 'short_answer' || q.type === 'file_upload');
+      const passageManualSubQuestions = (activeQuizForGrading.questions || [])
+        .filter((q: any) => q.type === 'passage' && Array.isArray(q.subQuestions))
+        .flatMap((q: any) => q.subQuestions.filter((sq: any) => sq.type === 'إجابة قصيرة').map((sq: any) => ({ ...sq, __parentId: q.id, __parentText: q.text })));
       return (
         <div className="p-8 max-w-4xl mx-auto flex flex-col gap-6 w-full">
           <button onClick={() => setView('quiz-grading-list')} className="w-fit text-slate-400 hover:text-slate-600 flex items-center gap-1 text-sm font-bold transition-colors">
@@ -325,6 +328,26 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
                 max={q.points}
                 value={manualReviewScores[q.id] || ''}
                 onChange={(e) => setManualReviewScores((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                className="w-32 border border-slate-200 rounded-xl px-3 py-2 text-lg font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+            </div>
+          ))}
+          {passageManualSubQuestions.map((sq: any) => (
+            <div key={sq.id} className="bg-white rounded-2xl border border-slate-100 p-6">
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex-1">
+                  <p className="text-[11px] font-bold text-violet-500 uppercase tracking-wider mb-1">From passage: {sq.__parentText}</p>
+                  <p className="font-bold text-slate-800">{sq.title}</p>
+                </div>
+                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full shrink-0">{sq.points} pts max</span>
+              </div>
+              <p className="text-slate-600 bg-slate-50 rounded-xl p-4 mb-4">{(activeQuizAttemptForGrading.answers[sq.__parentId] || {})[sq.id] || '(No answer)'}</p>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5">Award points (out of {sq.points})</label>
+              <input
+                type="number"
+                max={sq.points}
+                value={manualReviewScores[sq.id] || ''}
+                onChange={(e) => setManualReviewScores((prev) => ({ ...prev, [sq.id]: e.target.value }))}
                 className="w-32 border border-slate-200 rounded-xl px-3 py-2 text-lg font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>

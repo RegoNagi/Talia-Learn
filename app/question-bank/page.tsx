@@ -8,7 +8,7 @@ import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCi
 import { motion, AnimatePresence } from 'motion/react';
 import { ApprovalHub } from '@/components/ApprovalHub';
 import { useAuth } from '@/contexts/AuthContext';
-import { getVisibleQuestions, createQuestion, deleteQuestion, linkQuestionsToQuiz, unlinkAllQuestionsFromQuiz, generateBlueprintQuestions, getBlueprintAssessments, getQuestionsForQuiz, convertBankQuestionToQuizQuestion, uploadQuestionImage, uploadQuestionAudio, BankQuestion } from '@/services/questionBankData';
+import { getVisibleQuestions, createQuestion, updateQuestion, deleteQuestion, linkQuestionsToQuiz, unlinkAllQuestionsFromQuiz, generateBlueprintQuestions, getBlueprintAssessments, getQuestionsForQuiz, convertBankQuestionToQuizQuestion, uploadQuestionImage, uploadQuestionAudio, BankQuestion } from '@/services/questionBankData';
 import { getQuizById, updateQuiz, createQuiz, getClassRoster } from '@/services/assignmentData';
 import { getSubjectGradeCombos, getAllClassSections } from '@/services/academicData';
 import { getMyClassSections } from '@/services/attendanceData';
@@ -513,6 +513,8 @@ export default function QuestionBank() {
     { id: '4', text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null }
   ]);
   const [newQCorrectOption, setNewQCorrectOption] = useState<number>(0);
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [viewingQuestion, setViewingQuestion] = useState<BankQuestion | null>(null);
   const [isVaultOpen, setIsVaultOpen] = useState(false);
   const [vaultSearch, setVaultSearch] = useState('');
   const [vaultFilterType, setVaultFilterType] = useState('الكل');
@@ -554,7 +556,7 @@ export default function QuestionBank() {
     if (!newQTitle || !activeSubject) return;
     setIsSavingQuestion(true);
     setSaveQuestionError('');
-    const { id, error } = await createQuestion({
+    const payload = {
       createdBy: authUser?.teacherId || null,
       createdByRole: isSupervisor ? 'supervisor' : 'teacher',
       scope: scopeFromLabel(targetBank),
@@ -613,7 +615,10 @@ export default function QuestionBank() {
           })),
         } : {}),
       },
-    });
+    };
+    const { id, error } = editingQuestionId
+      ? await updateQuestion(editingQuestionId, payload).then((r) => ({ id: r.ok ? editingQuestionId : null, error: r.error }))
+      : await createQuestion(payload);
     setIsSavingQuestion(false);
     if (!id) {
       setSaveQuestionError(error || (language === 'ar' ? 'حصل خطأ أثناء الحفظ' : 'An error occurred while saving'));
@@ -635,9 +640,11 @@ export default function QuestionBank() {
     setNewQAudioUrl('');
     setNewQPassageText('');
     setNewQSubQuestions([]);
+    const wasEditing = !!editingQuestionId;
+    setEditingQuestionId(null);
     // CRITICAL: We explicitly do NOT clear newQType, newQUnit, newQBloom, or newQDiff.
     
-    if (!stayInEditor) {
+    if (!stayInEditor || wasEditing) {
       setMgtStep('WORKSPACE');
     }
   };
@@ -645,6 +652,61 @@ export default function QuestionBank() {
   // بوابة الصلاحية الحقيقية — إما مشرف بنك الأسئلة (وصول كامل) أو معلم عنده صلاحية "إضافة أسئلة" بس
   const isSupervisor = authUser?.role === 'qb_supervisor';
   const canContribute = isSupervisor || (authUser?.role === 'teacher' && !!authUser?.canUseQuestionBank);
+
+  // بيحمّل سؤال حقيقي موجود جوه نفس نموذج الإنشاء عشان نقدر نعدّله فعليًا (نفس الحقول بالظبط لكل الأنواع الـ١٣)
+  const openEditQuestion = (q: BankQuestion) => {
+    const scopeLabel = q.scope === 'central' ? 'بنك مركزي (الوزارة)' : q.scope === 'shared' ? 'بنك مشترك (المدرسة)' : 'بنك خاص (أنا بس)';
+    setEditingQuestionId(q.id);
+    setActiveSubject({ subject: q.subject, grade: q.grade });
+    setTargetBank(scopeLabel);
+    setNewQUnit(q.unit || '');
+    setNewQLesson(q.lesson || '');
+    setNewQBloom(q.bloomLevel);
+    setNewQDiff(q.difficulty);
+    setNewQType(q.type);
+    setNewQTitle(q.question?.title || '');
+    setQStandard(q.question?.standard || '');
+    setNewQOptions(q.question?.options?.length ? q.question.options.map((o: any) => ({ ...o, mediaFile: null, mediaType: null, mediaPreviewUrl: o.imageUrl || null })) : [
+      { id: crypto.randomUUID(), text: '', isCorrect: true, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
+      { id: crypto.randomUUID(), text: '', isCorrect: false, mediaFile: null, mediaType: null, mediaPreviewUrl: null },
+    ]);
+    setNewQCorrectOption(q.question?.correctOption ?? 0);
+    setNewQNumericAnswer(q.question?.numericAnswer != null ? String(q.question.numericAnswer) : '');
+    setNewQNumericTolerance(q.question?.numericTolerance != null ? String(q.question.numericTolerance) : '0');
+    setNewQNumericUnit(q.question?.numericUnit || '');
+    setNewQPairs(q.question?.pairs?.length ? q.question.pairs.map((p: any) => ({ ...p })) : [
+      { id: crypto.randomUUID(), left: '', right: '' },
+      { id: crypto.randomUUID(), left: '', right: '' },
+    ]);
+    setNewQOrderItems(q.question?.orderItems?.length ? q.question.orderItems.map((text: string) => ({ id: crypto.randomUUID(), text })) : [
+      { id: crypto.randomUUID(), text: '' },
+      { id: crypto.randomUUID(), text: '' },
+    ]);
+    const loadedCategories = (q.question?.categories || []).map((name: string) => ({ id: crypto.randomUUID(), name }));
+    setNewQCategories(loadedCategories.length ? loadedCategories : [{ id: crypto.randomUUID(), name: '' }, { id: crypto.randomUUID(), name: '' }]);
+    setNewQClassifyItems((q.question?.classifyItems || []).map((it: any) => ({
+      id: crypto.randomUUID(),
+      text: it.text,
+      categoryId: loadedCategories.find((c) => c.name === it.category)?.id || '',
+    })));
+    const loadedZones = (q.question?.zones || []).map((name: string) => ({ id: crypto.randomUUID(), name }));
+    setNewQZones(loadedZones.length ? loadedZones : [{ id: crypto.randomUUID(), name: '' }, { id: crypto.randomUUID(), name: '' }]);
+    setNewQDragItems((q.question?.dragItems || []).map((it: any) => ({
+      id: crypto.randomUUID(),
+      text: it.text,
+      zoneId: loadedZones.find((z) => z.name === it.zone)?.id || '',
+    })));
+    setNewQImageUrl(q.question?.imageUrl || '');
+    setNewQHotspots((q.question?.hotspots || []).map((hs: any) => ({ ...hs, id: crypto.randomUUID() })));
+    setNewQAudioUrl(q.question?.audioUrl || '');
+    setNewQPassageText(q.question?.passageText || '');
+    setNewQSubQuestions((q.question?.subQuestions || []).map((sq: any) => ({
+      ...sq,
+      id: crypto.randomUUID(),
+      options: (sq.options || []).map((o: any) => ({ ...o, id: crypto.randomUUID() })),
+    })));
+    setMgtStep('FACTORY');
+  };
 
   useEffect(() => {
     if (assessmentView === 'LIBRARY' && canContribute) {
@@ -1205,10 +1267,10 @@ export default function QuestionBank() {
                                 </td>
                                 <td className="px-6 py-4">
                                   <div className="flex items-center justify-center gap-2">
-                                    <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-400 hover:text-violet-600 hover:border-violet-300 hover:bg-violet-50 transition-colors flex items-center justify-center" aria-label="معاينة">
+                                    <button onClick={() => setViewingQuestion(q)} className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-400 hover:text-violet-600 hover:border-violet-300 hover:bg-violet-50 transition-colors flex items-center justify-center" aria-label="معاينة">
                                       <Eye size={14} />
                                     </button>
-                                    <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-400 hover:text-violet-600 hover:border-violet-300 hover:bg-violet-50 transition-colors flex items-center justify-center" aria-label="تعديل">
+                                    <button onClick={() => openEditQuestion(q)} className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-400 hover:text-violet-600 hover:border-violet-300 hover:bg-violet-50 transition-colors flex items-center justify-center" aria-label="تعديل">
                                       <Edit2 size={14} />
                                     </button>
                                     <button onClick={async () => { if (confirm(language === 'ar' ? 'تأكيد حذف السؤال؟' : 'Confirm deleting this question?')) { await deleteQuestion(q.id); refreshQuestions(); } }} className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors flex items-center justify-center" aria-label={language === 'ar' ? 'حذف' : 'Delete'}>
@@ -1314,7 +1376,7 @@ export default function QuestionBank() {
                                className="bg-white p-4 rounded-2xl border border-slate-100 hover:border-violet-100 group transition-all relative overflow-hidden"
                              >
                                <div className="absolute left-3 top-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                 <button className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-violet-600 hover:bg-violet-50 flex items-center justify-center transition-colors shadow-none"><Edit2 size={14} /></button>
+                                 <button onClick={(e) => { e.stopPropagation(); openEditQuestion(q); }} className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-violet-600 hover:bg-violet-50 flex items-center justify-center transition-colors shadow-none"><Edit2 size={14} /></button>
                                  <button onClick={async (e) => { e.stopPropagation(); if (confirm(language === 'ar' ? 'تأكيد حذف السؤال؟' : 'Confirm deleting this question?')) { await deleteQuestion(q.id); refreshQuestions(); } }} className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors shadow-none"><Trash2 size={14} /></button>
                                </div>
                                <div className="flex items-center gap-2 mb-3">
@@ -2094,7 +2156,25 @@ export default function QuestionBank() {
                                             />
                                             <select
                                               value={sq.type}
-                                              onChange={(e) => setNewQSubQuestions(prev => prev.map(q => q.id === sq.id ? { ...q, type: e.target.value as any } : q))}
+                                              onChange={(e) => {
+                                                const newType = e.target.value as 'اختيار من متعدد' | 'صح أم خطأ' | 'إجابة قصيرة';
+                                                setNewQSubQuestions(prev => prev.map(q => {
+                                                  if (q.id !== sq.id) return q;
+                                                  let options = q.options;
+                                                  if (newType === 'صح أم خطأ') {
+                                                    options = [
+                                                      { id: crypto.randomUUID(), text: language === 'ar' ? 'صح' : 'True', isCorrect: true },
+                                                      { id: crypto.randomUUID(), text: language === 'ar' ? 'خطأ' : 'False', isCorrect: false },
+                                                    ];
+                                                  } else if (newType === 'اختيار من متعدد' && q.type !== 'اختيار من متعدد') {
+                                                    options = [
+                                                      { id: crypto.randomUUID(), text: '', isCorrect: true },
+                                                      { id: crypto.randomUUID(), text: '', isCorrect: false },
+                                                    ];
+                                                  }
+                                                  return { ...q, type: newType, options };
+                                                }));
+                                              }}
                                               className="w-40 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-violet-400"
                                             >
                                               <option value="اختيار من متعدد">{language === 'ar' ? 'اختيار من متعدد' : 'Multiple Choice'}</option>
@@ -2116,7 +2196,7 @@ export default function QuestionBank() {
                                               <Trash2 size={14} />
                                             </button>
                                           </div>
-                                          {(sq.type === 'اختيار من متعدد' || sq.type === 'صح أم خطأ') && (
+                                          {sq.type === 'اختيار من متعدد' && (
                                             <div className="space-y-2 pr-10">
                                               {sq.options.map((opt) => (
                                                 <div key={opt.id} className="flex items-center gap-2">
@@ -2133,6 +2213,37 @@ export default function QuestionBank() {
                                                     placeholder={language === 'ar' ? 'نص الاختيار' : 'Option text'}
                                                     className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-violet-400"
                                                   />
+                                                  {sq.options.length > 2 && (
+                                                    <button
+                                                      onClick={() => setNewQSubQuestions(prev => prev.map(q => q.id === sq.id ? { ...q, options: q.options.filter(o => o.id !== opt.id) } : q))}
+                                                      className="shrink-0 text-slate-300 hover:text-red-500 transition-colors"
+                                                    >
+                                                      <Trash2 size={14} />
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              ))}
+                                              {sq.options.length < 6 && (
+                                                <button
+                                                  onClick={() => setNewQSubQuestions(prev => prev.map(q => q.id === sq.id ? { ...q, options: [...q.options, { id: crypto.randomUUID(), text: '', isCorrect: false }] } : q))}
+                                                  className="flex items-center gap-1.5 text-xs font-bold text-violet-600 hover:text-violet-700 px-1"
+                                                >
+                                                  <Plus size={13} /> {language === 'ar' ? 'إضافة اختيار' : 'Add option'}
+                                                </button>
+                                              )}
+                                            </div>
+                                          )}
+                                          {sq.type === 'صح أم خطأ' && (
+                                            <div className="space-y-2 pr-10">
+                                              {sq.options.map((opt) => (
+                                                <div key={opt.id} className="flex items-center gap-2">
+                                                  <button
+                                                    onClick={() => setNewQSubQuestions(prev => prev.map(q => q.id === sq.id ? { ...q, options: q.options.map(o => ({ ...o, isCorrect: o.id === opt.id })) } : q))}
+                                                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${opt.isCorrect ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-white'}`}
+                                                  >
+                                                    {opt.isCorrect && <Check size={12} className="text-white" />}
+                                                  </button>
+                                                  <span className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700">{opt.text}</span>
                                                 </div>
                                               ))}
                                             </div>
@@ -2141,15 +2252,13 @@ export default function QuestionBank() {
                                       ))}
                                       <button
                                         onClick={() => setNewQSubQuestions(prev => [...prev, {
-                                          id: Date.now().toString(),
+                                          id: crypto.randomUUID(),
                                           title: '',
                                           type: 'اختيار من متعدد',
                                           points: 1,
                                           options: [
-                                            { id: 'o1', text: '', isCorrect: true },
-                                            { id: 'o2', text: '', isCorrect: false },
-                                            { id: 'o3', text: '', isCorrect: false },
-                                            { id: 'o4', text: '', isCorrect: false },
+                                            { id: crypto.randomUUID(), text: '', isCorrect: true },
+                                            { id: crypto.randomUUID(), text: '', isCorrect: false },
                                           ],
                                         }])}
                                         disabled={newQSubQuestions.length >= 10}
@@ -3430,6 +3539,91 @@ export default function QuestionBank() {
           )}
         </div>
       </main>
+
+      {/* Question Preview Modal */}
+      <AnimatePresence>
+        {viewingQuestion && (
+          <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={() => setViewingQuestion(null)}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl border border-slate-100 p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-none"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-start mb-5">
+                <div>
+                  <span className="text-[10px] font-bold text-violet-600 bg-violet-50 px-2 py-1 rounded-full uppercase tracking-wider">{viewingQuestion.type}</span>
+                  <h3 className="text-lg font-bold text-slate-800 mt-2">{viewingQuestion.question?.title}</h3>
+                </div>
+                <button onClick={() => setViewingQuestion(null)} className="text-slate-400 hover:text-slate-600 shrink-0"><X size={20} /></button>
+              </div>
+
+              <div className="space-y-3">
+                {viewingQuestion.question?.passageText && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm text-slate-700 whitespace-pre-wrap">{viewingQuestion.question.passageText}</div>
+                )}
+
+                {Array.isArray(viewingQuestion.question?.options) && viewingQuestion.question.options.length > 0 && (
+                  <div className="space-y-2">
+                    {viewingQuestion.question.options.map((opt: any) => (
+                      <div key={opt.id} className={`flex items-center gap-2 p-2.5 rounded-xl border text-sm ${opt.isCorrect ? 'border-emerald-300 bg-emerald-50 text-emerald-800 font-bold' : 'border-slate-200 text-slate-600'}`}>
+                        {opt.isCorrect ? <CheckCircle2 size={16} className="text-emerald-500 shrink-0" /> : <div className="w-4 h-4 rounded-full border border-slate-300 shrink-0" />}
+                        {opt.text}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {viewingQuestion.question?.numericAnswer != null && (
+                  <p className="text-sm text-slate-700"><span className="font-bold">{language === 'ar' ? 'الإجابة الصحيحة: ' : 'Correct answer: '}</span>{viewingQuestion.question.numericAnswer} {viewingQuestion.question.numericUnit || ''} (± {viewingQuestion.question.numericTolerance || 0})</p>
+                )}
+
+                {Array.isArray(viewingQuestion.question?.pairs) && (
+                  <div className="space-y-1.5">
+                    {viewingQuestion.question.pairs.map((p: any) => (
+                      <div key={p.id} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 rounded-lg p-2">
+                        <span className="font-bold">{p.left}</span> <ArrowRight size={12} className="text-slate-400" /> <span>{p.right}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {Array.isArray(viewingQuestion.question?.orderItems) && (
+                  <ol className="list-decimal pr-5 space-y-1 text-sm text-slate-700">
+                    {viewingQuestion.question.orderItems.map((it: string, i: number) => <li key={i}>{it}</li>)}
+                  </ol>
+                )}
+
+                {Array.isArray(viewingQuestion.question?.subQuestions) && viewingQuestion.question.subQuestions.map((sq: any, i: number) => (
+                  <div key={sq.id || i} className="border-t border-slate-100 pt-3">
+                    <p className="font-bold text-slate-800 text-sm mb-1.5">{i + 1}. {sq.title} <span className="text-slate-400 font-normal">({sq.points} {language === 'ar' ? 'نقطة' : 'pts'})</span></p>
+                    {Array.isArray(sq.options) && sq.options.map((o: any) => (
+                      <div key={o.id} className={`text-xs pr-4 ${o.isCorrect ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>{o.isCorrect ? '✓' : '•'} {o.text}</div>
+                    ))}
+                  </div>
+                ))}
+
+                <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-100 text-xs text-slate-500 font-medium">
+                  <span className="bg-slate-100 px-2 py-1 rounded-full">{viewingQuestion.subject}</span>
+                  <span className="bg-slate-100 px-2 py-1 rounded-full">{viewingQuestion.grade}</span>
+                  <span className="bg-slate-100 px-2 py-1 rounded-full">{viewingQuestion.bloomLevel}</span>
+                  <span className="bg-slate-100 px-2 py-1 rounded-full">{viewingQuestion.difficulty}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-5 pt-4 border-t border-slate-100">
+                <button onClick={() => { const q = viewingQuestion; setViewingQuestion(null); openEditQuestion(q); }} className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold transition-colors shadow-none">
+                  <Edit2 size={16} /> {language === 'ar' ? 'تعديل' : 'Edit'}
+                </button>
+                <button onClick={() => setViewingQuestion(null)} className="px-5 py-2.5 text-slate-600 hover:bg-slate-50 rounded-xl font-bold transition-colors shadow-none">
+                  {language === 'ar' ? 'إغلاق' : 'Close'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
