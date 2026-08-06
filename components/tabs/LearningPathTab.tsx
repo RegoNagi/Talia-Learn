@@ -378,6 +378,15 @@ export function LearningPathTab({
                 </div>
               </div>
             ))}
+            {!isStudent && (
+              <button
+                onClick={() => setIsBuildingUnit(true)}
+                className="group bg-white rounded-2xl border-2 border-dashed border-slate-200 hover:border-teal-300 hover:bg-teal-50 transition-all p-5 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-teal-600 min-h-[168px]"
+              >
+                <Plus size={28} />
+                <span className="text-sm font-bold">{language === 'ar' ? 'إنشاء موديول جديد' : 'Create New Module'}</span>
+              </button>
+            )}
           </div>
         ) : (
         <>
@@ -392,6 +401,81 @@ export function LearningPathTab({
         {(lessonViewMode === 'grid' ? units.filter((u) => expandedUnits.includes(u.id)) : units).map((unit) => (
           <div key={unit.id} className="bg-white rounded-3xl border border-slate-100 shadow-none overflow-visible relative z-0">
             {/* Unit Header */}
+            {lessonViewMode === 'grid' && (
+            <div className="p-6 flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-3">
+                  <h2 className="font-black text-slate-900 text-2xl">{unit.title}</h2>
+                  {unit.isHidden && (
+                    <span className="flex items-center gap-1 bg-amber-50 text-amber-700 text-[10px] font-bold px-2 py-1 rounded-lg border border-amber-200">
+                      <EyeOff size={11} /> {language === 'ar' ? 'مخفي عن الطلاب' : 'Hidden from students'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 mt-2.5">
+                  <div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-teal-500 rounded-full transition-all duration-500" style={{ width: `${unit.progress}%` }} />
+                  </div>
+                  <span className="text-xs text-slate-400 font-medium">{unit.progress}% {language === 'ar' ? 'مكتمل' : 'completed'}</span>
+                </div>
+              </div>
+
+              {!isStudent && (
+                <div className="relative">
+                  <button
+                    onClick={() => setActiveUnitMenuId(activeUnitMenuId === unit.id ? null : unit.id)}
+                    className="w-10 h-10 flex items-center justify-center border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors"
+                  >
+                    <MoreVertical size={18} />
+                  </button>
+                  {activeUnitMenuId === unit.id && (
+                    <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-full mt-1 w-56 bg-white rounded-xl shadow-lg border border-slate-100 p-1 z-30">
+                      <button
+                        onClick={async () => { setActiveUnitMenuId(null); const ok = await toggleUnitComplete(unit.id, !unit.isComplete); if (ok) refreshUnits(); }}
+                        className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+                      >
+                        <Check size={14} /> {unit.isComplete ? (language === 'ar' ? 'إلغاء الاكتمال' : 'Unmark Complete') : (language === 'ar' ? 'وضع علامة اكتمل' : 'Mark as Complete')}
+                      </button>
+                      <button
+                        onClick={async () => { setActiveUnitMenuId(null); const ok = await toggleUnitHidden(unit.id, !unit.isHidden); if (ok) refreshUnits(); }}
+                        className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+                      >
+                        {unit.isHidden ? <Eye size={14} /> : <EyeOff size={14} />} {unit.isHidden ? (language === 'ar' ? 'إظهار للطلاب' : 'Show to students') : (language === 'ar' ? 'إخفاء عن الطلاب' : 'Hide from students')}
+                      </button>
+                      <button
+                        onClick={() => { setActiveUnitMenuId(null); openUnitShareModal(unit); }}
+                        className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+                      >
+                        <Share2 size={14} /> {language === 'ar' ? 'مشاركة مع فصول تانية' : 'Share with other classes'}
+                      </button>
+                      <button
+                        onClick={() => { setActiveUnitMenuId(null); handleAddClick(unit.id); }}
+                        className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+                      >
+                        <Plus size={14} /> {language === 'ar' ? 'إضافة محتوى' : 'Add Material'}
+                      </button>
+                      <div className="h-px bg-slate-100 my-1" />
+                      <button
+                        onClick={async () => {
+                          setActiveUnitMenuId(null);
+                          if (window.confirm('Are you sure you want to delete this module? This cannot be undone.')) {
+                            const { ok, error } = await deleteUnit(unit.id);
+                            if (ok) refreshUnits();
+                            else alert(language === 'ar' ? `حصل خطأ أثناء الحذف: ${error}` : `Error deleting: ${error}`);
+                          }
+                        }}
+                        className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2"
+                      >
+                        <Trash2 size={14} /> {language === 'ar' ? 'حذف الموديول' : 'Delete Module'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            )}
+
+            {lessonViewMode === 'list' && (
             <div className="p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors rounded-t-3xl border-b border-slate-50">
               <div 
                 onClick={() => toggleUnit(unit.id)}
@@ -529,6 +613,7 @@ export function LearningPathTab({
                 </button>
               </div>
             </div>
+            )}
 
             {/* Lessons List */}
             <AnimatePresence>
@@ -697,7 +782,7 @@ export function LearningPathTab({
 
                   {lessonViewMode === 'list' && (
                   <div className="bg-white rounded-b-3xl divide-y divide-slate-50">
-                    {unit.lessons.map((lesson, idx) => {
+                    {unit.lessons.map((lesson) => {
                       const ListTypeIcon = lesson.type === 'video' ? PlayCircle :
                         lesson.type === 'pdf' ? FileText :
                         lesson.type === 'link' ? LinkIcon :
@@ -723,7 +808,6 @@ export function LearningPathTab({
                         }}
                         className="group flex items-center gap-4 px-4 py-3.5 hover:bg-slate-50 transition-colors cursor-pointer"
                       >
-                        <span className="w-6 text-center text-sm font-bold text-slate-300 shrink-0">{idx + 1}</span>
                         <div className={`relative w-32 h-20 rounded-xl overflow-hidden shrink-0 flex items-center justify-center
                           ${lesson.type === 'video' ? 'bg-pink-50 text-pink-400' :
                             lesson.type === 'pdf' ? 'bg-blue-50 text-blue-400' :
@@ -840,6 +924,7 @@ export function LearningPathTab({
         {/* Create New Unit Button / Smart Course Planner */}
         {!isStudent && (
           !isBuildingUnit ? (
+            (lessonViewMode === 'grid' && expandedUnits.length === 0) ? null : (
             <button 
               onClick={() => setIsBuildingUnit(true)}
               className="w-full py-6 border-2 border-dashed border-slate-200 rounded-3xl text-slate-500 font-medium hover:border-teal-300 hover:bg-teal-50 hover:text-teal-600 transition-all flex items-center justify-center gap-2 shadow-none"
@@ -847,6 +932,7 @@ export function LearningPathTab({
               <Plus size={20} />
               {language === 'ar' ? 'إنشاء وحدة جديدة' : 'Create New Module'}
             </button>
+            )
           ) : (
             <div className="bg-white rounded-3xl border border-slate-200 shadow-none p-6">
               <div className="flex justify-between items-center mb-6">
