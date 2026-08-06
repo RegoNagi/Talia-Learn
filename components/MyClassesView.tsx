@@ -378,9 +378,9 @@ export function MyClassesView({
                             <span className="text-[10px] font-bold text-slate-400 shrink-0">{pct}%</span>
                           </div>
                         );
-                      })()}                      </div>
+                      })()}
+                      </div>
                     </div>
-                  </div>
                   </Link>
                   );
                 })}

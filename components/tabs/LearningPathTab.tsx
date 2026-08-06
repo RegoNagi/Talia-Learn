@@ -636,7 +636,6 @@ export function LearningPathTab({
                       </div>
                     ))}
                   </div>
-                </div>
               </motion.div>
               )}
             </AnimatePresence>
