@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, startTransition } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { BookOpen, Users, Globe, Palette, X, Check } from 'lucide-react';
@@ -108,7 +108,7 @@ export function MyClassesView({
   const t = dict[language];
 
   useEffect(() => {
-    setIsLoadingData(true);
+    startTransition(() => setIsLoadingData(true));
     if (userRole === 'teacher' && authUser.teacherId) {
       getMyClassSections(authUser.teacherId).then((classes) => {
         setMyClasses(classes);
@@ -428,7 +428,7 @@ function SubjectThemeModal({ subjectName, currentTheme, language, onClose, onSav
   const [selectedColor, setSelectedColor] = useState(currentTheme.color);
   const [selectedIcon, setSelectedIcon] = useState(currentTheme.icon);
   const [isSaving, setIsSaving] = useState(false);
-  const PreviewIcon = getSubjectIconComponent(selectedIcon);
+  const PreviewIcon = useMemo(() => getSubjectIconComponent(selectedIcon), [selectedIcon]);
 
   const handleSave = async () => {
     setIsSaving(true);

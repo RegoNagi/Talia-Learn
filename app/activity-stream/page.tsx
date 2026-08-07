@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, startTransition } from 'react';
 import { BookOpen, Clock, Video, CheckCircle2, Globe, ChevronDown, BrainCircuit, ClipboardList, Paperclip, Plus, Upload, X, Trash2, Edit, RotateCcw, Check, ArrowLeft } from 'lucide-react';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
 import { motion, AnimatePresence } from 'motion/react';
@@ -97,8 +97,8 @@ export default function ActivityStreamPage() {
   const [activeTask, setActiveTask] = useState<TodoTask | null>(null);
 
   const refresh = () => {
-    if (!authUser?.teacherId) { setIsLoading(false); return; }
-    setIsLoading(true);
+    if (!authUser?.teacherId) { startTransition(() => setIsLoading(false)); return; }
+    startTransition(() => setIsLoading(true));
     getMyClassSections(authUser.teacherId).then((secs) => {
       setSections(secs);
       const scopes = secs.flatMap((sec) =>
@@ -107,6 +107,22 @@ export default function ActivityStreamPage() {
       getRealTodoTasksMulti(scopes).then((data) => {
         setTasks(data);
         setIsLoading(false);
+      });
+    });
+  };
+
+  const [activeView, setActiveView] = useState<'tasks' | 'trash'>('tasks');
+  const [deletedTasks, setDeletedTasks] = useState<DeletedQuickTask[]>([]);
+  const [isLoadingTrash, setIsLoadingTrash] = useState(false);
+  const [undoToast, setUndoToast] = useState<{ id: string; title: string } | null>(null);
+
+  const refreshTrash = () => {
+    if (!authUser?.teacherId) return;
+    startTransition(() => setIsLoadingTrash(true));
+    purgeOldTrash(authUser.teacherId).then(() => {
+      getDeletedQuickTasks(authUser.teacherId!).then((data) => {
+        setDeletedTasks(data);
+        setIsLoadingTrash(false);
       });
     });
   };
@@ -142,22 +158,6 @@ export default function ActivityStreamPage() {
   const [newFile, setNewFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [createError, setCreateError] = useState('');
-
-  const [activeView, setActiveView] = useState<'tasks' | 'trash'>('tasks');
-  const [deletedTasks, setDeletedTasks] = useState<DeletedQuickTask[]>([]);
-  const [isLoadingTrash, setIsLoadingTrash] = useState(false);
-  const [undoToast, setUndoToast] = useState<{ id: string; title: string } | null>(null);
-
-  const refreshTrash = () => {
-    if (!authUser?.teacherId) return;
-    setIsLoadingTrash(true);
-    purgeOldTrash(authUser.teacherId).then(() => {
-      getDeletedQuickTasks(authUser.teacherId!).then((data) => {
-        setDeletedTasks(data);
-        setIsLoadingTrash(false);
-      });
-    });
-  };
 
   useEffect(() => {
     if (activeView === 'trash') refreshTrash();

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, startTransition } from 'react';
 import Image from 'next/image';
 import { Search, Send, Zap, ChevronDown, Check, FileText, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -121,7 +121,7 @@ export function MessagesCenter({ language = 'ar', authUser }: { language?: 'ar' 
   const recipientRole = authUser?.role;
 
   useEffect(() => {
-    if (!recipientId || !recipientRole) { setIsLoadingReal(false); return; }
+    if (!recipientId || !recipientRole) { startTransition(() => setIsLoadingReal(false)); return; }
     getMyMessages(recipientId, recipientRole).then((msgs) => {
       setRealMessages(msgs);
       setIsLoadingReal(false);

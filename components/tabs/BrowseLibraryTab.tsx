@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, startTransition } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, Upload, FileText, File, X, Book, FileArchive, LayoutGrid, List, Folder, FolderPlus, Lock, Globe, Share2, Trash2, ChevronRight, Eye, Image as ImageIcon, Video, FileSpreadsheet, Film, Palette, ArrowLeft, ShieldCheck } from 'lucide-react';
 import {
@@ -42,7 +42,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   const [isOfficialPickerOpen, setIsOfficialPickerOpen] = useState(false);
 
   useEffect(() => {
-    if (forcedMode) setLibraryMode(forcedMode);
+    if (forcedMode) startTransition(() => setLibraryMode(forcedMode));
   }, [forcedMode]);
 
   const scope = teacherId && classId && subject ? { teacherId, classId, subject } : null;
@@ -51,7 +51,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   const refreshLibrary = () => {
     if (!scope) return;
     const thisRequestId = ++requestIdRef.current;
-    setIsLoadingLibrary(true);
+    startTransition(() => setIsLoadingLibrary(true));
     const modeAtRequestTime = libraryMode;
     const foldersPromise = modeAtRequestTime === 'material' ? getMaterialFolders(scope) : getMyLibraryFolders(scope);
     const filesPromise = modeAtRequestTime === 'material' ? getMaterialFiles(scope) : getMyLibraryFiles(scope);

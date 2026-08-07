@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle, X, Zap } from 'lucide-react';
 import { getRealPosts, createRealPost, getRealSchoolPosts, createRealSchoolPost, reactToRealPost, addRealComment, getActiveChallenge, createChallenge, getChallengeSubmissions, getTopChallengers, RealChallenge, ChallengeSubmission } from '@/services/classSpaceData';
@@ -179,7 +179,7 @@ export function SpacesView({ space, language = 'en', classId, subject, authUser,
 
   useEffect(() => {
     if (!isAnyRealScope) return;
-    setIsLoadingReal(true);
+    startTransition(() => setIsLoadingReal(true));
     const fetchPosts = isRealScope ? getRealPosts(classId!, subject!) : getRealSchoolPosts();
     fetchPosts.then((real) => {
       setPosts(real.map(mapRealPost));
@@ -206,7 +206,7 @@ export function SpacesView({ space, language = 'en', classId, subject, authUser,
   };
 
   useEffect(() => {
-    refreshChallenge();
+    startTransition(() => { refreshChallenge(); });
   }, [isRealScope, classId, subject]);
 
   const filteredPosts = isAnyRealScope ? posts : posts.filter(p => p.space === space);

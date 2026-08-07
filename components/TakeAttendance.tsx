@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { ChevronDown, Calendar, Search, CheckCircle2, XCircle, Clock, MessageSquare } from 'lucide-react';
 import {
   getMyClassSections, getStudentsByIds, getPeriods, getAttendanceSettings,
@@ -33,7 +33,7 @@ export function TakeAttendance({ language, teacherId }: TakeAttendanceProps) {
   const isToday = selectedDate === todayStr;
 
   useEffect(() => {
-    setIsLoadingClasses(true);
+    startTransition(() => setIsLoadingClasses(true));
     Promise.all([getMyClassSections(teacherId), getAttendanceSettings()]).then(([classes, settings]) => {
       setRealClasses(classes);
       setAttendanceMode(settings.mode);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense, Fragment, useMemo } from 'react';
+import { useState, useEffect, Suspense, Fragment, startTransition } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, BrainCircuit, CheckCircle2, ChevronDown, Plus, 
@@ -226,15 +226,16 @@ function AssessmentBuilderContent() {
   const [isUploadingOptImage, setIsUploadingOptImage] = useState<string | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [previewQuestionIndex, setPreviewQuestionIndex] = useState(0);
-  const previewQuestionsShuffled = useMemo(() => {
-    if (!shuffleQuestions) return questions;
+  const [previewQuestionsShuffled, setPreviewQuestionsShuffled] = useState<Question[]>([]);
+  useEffect(() => {
+    if (!shuffleQuestions) { startTransition(() => setPreviewQuestionsShuffled(questions)); return; }
     const arr = [...questions];
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
-    return arr;
-  }, [isPreviewMode, shuffleQuestions]);
+    startTransition(() => setPreviewQuestionsShuffled(arr));
+  }, [isPreviewMode, shuffleQuestions, questions]);
   const [allowFileUpload, setAllowFileUpload] = useState(true);
   const [allowTextEntry, setAllowTextEntry] = useState(true);
   const [passPercentage, setPassPercentage] = useState(65);

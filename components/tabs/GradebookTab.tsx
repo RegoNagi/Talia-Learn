@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { Download, Search, AlertTriangle, Sparkles, Send, PanelRightOpen, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -59,8 +59,8 @@ export function GradebookTab({
   const [searchQuery, setSearchQuery] = useState('');
 
   const refresh = async () => {
-    if (!subject || !grade) { setIsLoading(false); return; }
-    setIsLoading(true);
+    if (!subject || !grade) { startTransition(() => setIsLoading(false)); return; }
+    startTransition(() => setIsLoading(true));
     const config = await getGradebookConfigFull(subject, grade);
     if (!config) {
       setConfigId(null);
@@ -330,7 +330,7 @@ export function GradebookTab({
               ) : students.length === 0 ? (
                 <tr><td colSpan={99} className="p-10 text-center text-slate-400">No students enrolled yet.</td></tr>
               ) : filteredStudents.length === 0 ? (
-                <tr><td colSpan={99} className="p-10 text-center text-slate-400">No students match "{searchQuery}".</td></tr>
+                <tr><td colSpan={99} className="p-10 text-center text-slate-400">No students match &quot;{searchQuery}&quot;.</td></tr>
               ) : filteredStudents.map((student) => {
                 const studentEntries = entries[student.id] || {};
                 const total = computeWeightedTotal(studentEntries);

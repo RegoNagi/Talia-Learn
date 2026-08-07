@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, startTransition } from 'react';
 import { 
   Database, BookOpen, LayoutGrid, ChevronDown, Check, 
   Filter, TrendingUp, Presentation, BrainCircuit, AlignRight, FileText
@@ -111,7 +111,7 @@ export function AnalyticsDashboard({ language = 'ar' }: { language?: 'ar' | 'en'
   }, []);
 
   useEffect(() => {
-    setIsLoadingAnalytics(true);
+    startTransition(() => setIsLoadingAnalytics(true));
     const daysBack = timeRange === 'أخر 7 أيام' ? 7 : timeRange === 'أخر 30 يوم' ? 30 : timeRange === 'أخر 3 شهور' ? 90 : undefined;
     getBankAnalytics({
       grade: grade === 'كل الصفوف' ? undefined : grade,

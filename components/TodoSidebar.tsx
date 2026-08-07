@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { CheckSquare, ChevronRight, ChevronLeft, AlertCircle, Zap, Sun, CalendarRange, BookOpen, BrainCircuit, Video, Paperclip, ClipboardList, Check, Clock } from 'lucide-react';
 import { TodoTask, toggleQuickTaskCompletion } from '@/services/todoData';
 
@@ -62,7 +62,7 @@ export function TodoSidebar({
       const t = setTimeout(() => setContentVisible(true), 20);
       return () => clearTimeout(t);
     }
-    setContentVisible(false);
+    startTransition(() => setContentVisible(false));
   }, [isOpen]);
 
   const [optimisticCompleted, setOptimisticCompleted] = useState<Record<string, boolean>>({});

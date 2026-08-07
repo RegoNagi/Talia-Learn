@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Search, FileText, PlayCircle, Volume2, Box, Link as LinkIcon, Check, BookOpen, Folder, Sparkles } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { getOfficialCurriculumResources } from '@/services/academicData';
 import { getLibraryFiles } from '@/services/libraryData';
@@ -53,12 +53,12 @@ export function LibraryDrawer({ isOpen, onClose, targetUnitTitle, language = 'en
   const isRtl = language === 'ar';
 
   useEffect(() => {
-    setMounted(true);
+    startTransition(() => setMounted(true));
   }, []);
 
   useEffect(() => {
     if (!isOpen) return;
-    setIsLoading(true);
+    startTransition(() => setIsLoading(true));
     const officialPromise = grade && subject ? getOfficialCurriculumResources(grade, subject) : Promise.resolve([]);
     const myLibraryPromise = teacherId && classId && subject ? getLibraryFiles({ teacherId, classId, subject }) : Promise.resolve([]);
 

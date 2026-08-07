@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Calendar, Clock, AlertCircle, BrainCircuit, ClipboardList, X, ArrowRight, Video, BookOpen, Paperclip, Plus, Upload, Target, Library } from 'lucide-react';
 import { getRealTodoTasks, createQuickTask, getQuickTaskAttachmentUrl, TodoTask } from '@/services/todoData';
@@ -52,8 +52,8 @@ export function TimelineTab({ role = 'student', language = 'en', classId, subjec
   const isTeacher = role === 'teacher';
 
   const refresh = () => {
-    if (!classId || !subject) { setIsLoading(false); return; }
-    setIsLoading(true);
+    if (!classId || !subject) { startTransition(() => setIsLoading(false)); return; }
+    startTransition(() => setIsLoading(true));
     getRealTodoTasks({ teacherId, classId, subject, grade }).then((t) => {
       setTasks(t);
       setIsLoading(false);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, startTransition } from 'react';
 import { CheckCircle2, XCircle, Clock, Search, ShieldCheck, HelpCircle, FileText, Flag, ChevronDown, Calendar, PieChart, AlertCircle, ArrowLeftRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getPendingQuestions, approveQuestion, rejectQuestion, getPendingAssessments, getPendingAssessmentDetail, approveAssessment, rejectAssessment, BankQuestion } from '@/services/questionBankData';
@@ -84,24 +84,27 @@ export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
   const [questions, setQuestions] = useState<(BankQuestion & { creatorName: string; author: string; date: string })[]>([]);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(true);
 
-  const refreshPending = () => {
-    setIsLoadingQuestions(true);
+  const fetchPending = () => {
     getPendingQuestions().then((qs) => {
       setQuestions(qs.map((q) => ({ ...q, author: q.creatorName, date: new Date(q.createdAt).toLocaleDateString() })));
       setIsLoadingQuestions(false);
     });
   };
 
+  const refreshPending = () => {
+    setIsLoadingQuestions(true);
+    fetchPending();
+  };
+
   useEffect(() => {
-    refreshPending();
+    fetchPending();
   }, []);
 
   // التقييمات الحقيقية المولّدة من مخطط بنك الأسئلة واللي بانتظار اعتماد المشرف
   const [assessments, setAssessments] = useState<{ id: string; subject: string; title: string; author: string; date: string; questionCount: number }[]>([]);
   const [isLoadingAssessments, setIsLoadingAssessments] = useState(true);
 
-  const refreshPendingAssessments = () => {
-    setIsLoadingAssessments(true);
+  const fetchPendingAssessments = () => {
     getPendingAssessments().then((list) => {
       setAssessments(list.map((a) => ({
         id: a.id,
@@ -115,8 +118,13 @@ export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
     });
   };
 
+  const refreshPendingAssessments = () => {
+    setIsLoadingAssessments(true);
+    fetchPendingAssessments();
+  };
+
   useEffect(() => {
-    refreshPendingAssessments();
+    fetchPendingAssessments();
   }, []);
 
   // تفاصيل التقييم المحدد حاليًا (الأسئلة الحقيقية المرتبطة + توزيع بلوم/الصعوبة + التواريخ)
@@ -136,9 +144,11 @@ export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
   const activeItem = activeList.find(i => i.id === selectedItemId) || activeList[0];
 
   useEffect(() => {
-    if (subTab !== 'ASSESSMENTS' || !activeItem) { setAssessmentDetail(null); return; }
-    setIsLoadingAssessmentDetail(true);
+    if (subTab !== 'ASSESSMENTS' || !activeItem) { startTransition(() => setAssessmentDetail(null)); return; }
+    let cancelled = false;
+    startTransition(() => setIsLoadingAssessmentDetail(true));
     Promise.all([getPendingAssessmentDetail(activeItem.id), getQuizById(activeItem.id)]).then(([detail, quiz]) => {
+      if (cancelled) return;
       if (detail) {
         setAssessmentDetail({
           bloomData: detail.bloomData,
@@ -152,6 +162,7 @@ export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
       }
       setIsLoadingAssessmentDetail(false);
     });
+    return () => { cancelled = true; };
   }, [subTab, activeItem?.id]);
 
   const handleAction = async (id: string, action: 'APPROVED' | 'REJECTED', note?: string) => {
