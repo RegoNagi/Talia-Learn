@@ -21,6 +21,8 @@ import { AssessmentSidebar } from '@/components/AssessmentSidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { createAssignment, createQuiz, uploadAssignmentAttachment, getSubmissionFileUrl, getUnitsForAssignment, getAssignmentById, getQuizById, updateAssignment, updateQuiz, getTeacherOtherClasses, getClassRoster } from '@/services/assignmentData';
 import { getVisibleQuestions, convertBankQuestionToQuizQuestion, uploadQuestionImage, BankQuestion } from '@/services/questionBankData';
+import { HotspotEditor } from '@/components/question-editor/HotspotEditor';
+import { SubQuestionEditor } from '@/components/question-editor/SubQuestionEditor';
 import { getGradebookCategories } from '@/services/academicData';
 
 interface Question {
@@ -1434,77 +1436,24 @@ function AssessmentBuilderContent() {
                           )}
 
                           {q.type === 'hotspot' && (
-                            <div className="space-y-3">
-                              {!q.imageUrl ? (
-                                <label className="border-2 border-dashed border-slate-200 rounded-2xl p-8 flex flex-col items-center gap-2 text-slate-400 hover:bg-slate-50 cursor-pointer transition-colors">
-                                  <UploadCloud size={24} />
-                                  <span className="text-sm font-bold">{isUploadingQImage === q.id ? 'Uploading...' : 'Upload question image'}</span>
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={async (e) => {
-                                      const file = e.target.files?.[0];
-                                      if (!file) return;
-                                      setIsUploadingQImage(q.id);
-                                      const result = await uploadQuestionImage(file);
-                                      setIsUploadingQImage(null);
-                                      if (result) updateQuestion(q.id, { imageUrl: result.url });
-                                    }}
-                                  />
-                                </label>
-                              ) : (
-                                <div>
-                                  <p className="text-xs font-semibold text-slate-400 mb-2">Click on the image to place a new hotspot marker</p>
-                                  <div
-                                    className="relative inline-block border border-slate-200 rounded-xl overflow-hidden cursor-crosshair"
-                                    onClick={(e) => {
-                                      const rect = e.currentTarget.getBoundingClientRect();
-                                      const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
-                                      const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
-                                      const hotspots = [...(q.hotspots || []), { xPercent, yPercent, label: `${(q.hotspots || []).length + 1}`, isCorrect: (q.hotspots || []).length === 0 }];
-                                      updateQuestion(q.id, { hotspots });
-                                    }}
-                                  >
-                                    <img src={q.imageUrl} alt="" className="max-w-full max-h-96 block" />
-                                    {(q.hotspots || []).map((hs, hsIdx) => (
-                                      <div
-                                        key={hsIdx}
-                                        style={{ left: `${hs.xPercent}%`, top: `${hs.yPercent}%` }}
-                                        className={`absolute -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold ${hs.isCorrect ? 'bg-emerald-500 border-white text-white' : 'bg-white border-slate-400 text-slate-600'}`}
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        {hs.label}
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <button onClick={() => updateQuestion(q.id, { imageUrl: undefined, hotspots: [] })} className="text-xs font-bold text-red-500 hover:text-red-600 mt-2 block">
-                                    Remove image and start over
-                                  </button>
-                                </div>
-                              )}
-                              {(q.hotspots || []).length > 0 && (
-                                <div className="space-y-2">
-                                  {(q.hotspots || []).map((hs, hsIdx) => (
-                                    <div key={hsIdx} className="flex items-center gap-3">
-                                      <span className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-xs font-bold shrink-0">{hs.label}</span>
-                                      <button
-                                        onClick={() => updateQuestion(q.id, { hotspots: (q.hotspots || []).map((h, i) => ({ ...h, isCorrect: i === hsIdx })) })}
-                                        className={`flex-1 text-left px-4 py-2 rounded-xl text-sm font-bold transition-colors ${hs.isCorrect ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-50 text-slate-500 border border-slate-200 hover:bg-slate-100'}`}
-                                      >
-                                        {hs.isCorrect ? 'Correct Answer' : 'Click to mark correct'}
-                                      </button>
-                                      <button
-                                        onClick={() => updateQuestion(q.id, { hotspots: (q.hotspots || []).filter((_, i) => i !== hsIdx) })}
-                                        className="w-9 h-9 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 flex items-center justify-center transition-colors"
-                                      >
-                                        <Trash2 size={14} />
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                            <HotspotEditor
+                              imageUrl={q.imageUrl || ''}
+                              hotspots={q.hotspots || []}
+                              isUploading={isUploadingQImage === q.id}
+                              onUpload={async (file) => {
+                                setIsUploadingQImage(q.id);
+                                const result = await uploadQuestionImage(file);
+                                setIsUploadingQImage(null);
+                                if (result) updateQuestion(q.id, { imageUrl: result.url });
+                              }}
+                              onImageClick={(xPercent, yPercent) => {
+                                const hotspots = [...(q.hotspots || []), { xPercent, yPercent, label: `${(q.hotspots || []).length + 1}`, isCorrect: (q.hotspots || []).length === 0 }];
+                                updateQuestion(q.id, { hotspots });
+                              }}
+                              onMarkCorrect={(idx) => updateQuestion(q.id, { hotspots: (q.hotspots || []).map((h, i) => ({ ...h, isCorrect: i === idx })) })}
+                              onRemoveHotspot={(idx) => updateQuestion(q.id, { hotspots: (q.hotspots || []).filter((_, i) => i !== idx) })}
+                              onRemoveImage={() => updateQuestion(q.id, { imageUrl: undefined, hotspots: [] })}
+                            />
                           )}
 
                           {q.type === 'passage' && (
@@ -1521,86 +1470,17 @@ function AssessmentBuilderContent() {
                               </div>
                               <div className="space-y-3">
                                 {(q.subQuestions || []).map((sq, sqIdx) => (
-                                  <div key={sq.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-                                    <div className="flex items-center gap-2">
-                                      <span className="w-7 h-7 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-bold shrink-0">{sqIdx + 1}</span>
-                                      <input
-                                        value={sq.title}
-                                        onChange={(e) => { const subs = [...(q.subQuestions || [])]; subs[sqIdx] = { ...subs[sqIdx], title: e.target.value }; updateQuestion(q.id, { subQuestions: subs }); }}
-                                        placeholder={`Sub-question ${sqIdx + 1} text`}
-                                        className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-violet-400"
-                                      />
-                                      <select
-                                        value={sq.type}
-                                        onChange={(e) => {
-                                          const newType = e.target.value as 'اختيار من متعدد' | 'صح أم خطأ' | 'إجابة قصيرة';
-                                          const subs = [...(q.subQuestions || [])];
-                                          let options = subs[sqIdx].options;
-                                          if (newType === 'صح أم خطأ') {
-                                            options = [{ id: `o-${window.crypto.randomUUID()}`, text: 'True', isCorrect: true }, { id: `o-${window.crypto.randomUUID()}`, text: 'False', isCorrect: false }];
-                                          } else if (newType === 'اختيار من متعدد' && subs[sqIdx].type !== 'اختيار من متعدد') {
-                                            options = [{ id: `o-${window.crypto.randomUUID()}`, text: '', isCorrect: true }, { id: `o-${window.crypto.randomUUID()}`, text: '', isCorrect: false }];
-                                          }
-                                          subs[sqIdx] = { ...subs[sqIdx], type: newType, options };
-                                          updateQuestion(q.id, { subQuestions: subs });
-                                        }}
-                                        className="w-36 bg-white border border-slate-200 rounded-lg px-2 py-2 text-xs font-bold text-slate-700 outline-none"
-                                      >
-                                        <option value="اختيار من متعدد">Multiple Choice</option>
-                                        <option value="صح أم خطأ">True/False</option>
-                                        <option value="إجابة قصيرة">Short Answer</option>
-                                      </select>
-                                      <input
-                                        type="number"
-                                        min="1"
-                                        value={sq.points}
-                                        onChange={(e) => { const subs = [...(q.subQuestions || [])]; subs[sqIdx] = { ...subs[sqIdx], points: Number(e.target.value) }; updateQuestion(q.id, { subQuestions: subs }); }}
-                                        className="w-14 bg-white border border-slate-200 rounded-lg px-2 py-2 text-xs font-bold text-center outline-none"
-                                      />
-                                      <button onClick={() => updateQuestion(q.id, { subQuestions: (q.subQuestions || []).filter((_, i) => i !== sqIdx) })} className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-600 flex items-center justify-center shrink-0"><Trash2 size={13} /></button>
-                                    </div>
-                                    {sq.type === 'اختيار من متعدد' && (
-                                      <div className="space-y-2 pr-9">
-                                        {(sq.options || []).map((opt, oIdx) => (
-                                          <div key={opt.id} className="flex items-center gap-2">
-                                            <button
-                                              onClick={() => { const subs = [...(q.subQuestions || [])]; subs[sqIdx] = { ...subs[sqIdx], options: (subs[sqIdx].options || []).map(o => ({ ...o, isCorrect: o.id === opt.id })) }; updateQuestion(q.id, { subQuestions: subs }); }}
-                                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${opt.isCorrect ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-white'}`}
-                                            >
-                                              {opt.isCorrect && <Check size={12} className="text-white" />}
-                                            </button>
-                                            <input
-                                              value={opt.text}
-                                              onChange={(e) => { const subs = [...(q.subQuestions || [])]; const opts = [...(subs[sqIdx].options || [])]; opts[oIdx] = { ...opts[oIdx], text: e.target.value }; subs[sqIdx] = { ...subs[sqIdx], options: opts }; updateQuestion(q.id, { subQuestions: subs }); }}
-                                              placeholder="Option text"
-                                              className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-violet-400"
-                                            />
-                                            {(sq.options || []).length > 2 && (
-                                              <button onClick={() => { const subs = [...(q.subQuestions || [])]; subs[sqIdx] = { ...subs[sqIdx], options: (subs[sqIdx].options || []).filter(o => o.id !== opt.id) }; updateQuestion(q.id, { subQuestions: subs }); }} className="text-slate-300 hover:text-red-500 shrink-0"><Trash2 size={14} /></button>
-                                            )}
-                                          </div>
-                                        ))}
-                                        {(sq.options || []).length < 6 && (
-                                          <button onClick={() => { const subs = [...(q.subQuestions || [])]; subs[sqIdx] = { ...subs[sqIdx], options: [...(subs[sqIdx].options || []), { id: `o-${window.crypto.randomUUID()}`, text: '', isCorrect: false }] }; updateQuestion(q.id, { subQuestions: subs }); }} className="flex items-center gap-1.5 text-xs font-bold text-violet-600"><Plus size={13} /> Add option</button>
-                                        )}
-                                      </div>
-                                    )}
-                                    {sq.type === 'صح أم خطأ' && (
-                                      <div className="space-y-2 pr-9">
-                                        {(sq.options || []).map((opt) => (
-                                          <div key={opt.id} className="flex items-center gap-2">
-                                            <button
-                                              onClick={() => { const subs = [...(q.subQuestions || [])]; subs[sqIdx] = { ...subs[sqIdx], options: (subs[sqIdx].options || []).map(o => ({ ...o, isCorrect: o.id === opt.id })) }; updateQuestion(q.id, { subQuestions: subs }); }}
-                                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${opt.isCorrect ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 bg-white'}`}
-                                            >
-                                              {opt.isCorrect && <Check size={12} className="text-white" />}
-                                            </button>
-                                            <span className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700">{opt.text}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
+                                  <SubQuestionEditor
+                                    key={sq.id}
+                                    subQuestion={sq}
+                                    index={sqIdx}
+                                    onUpdate={(patch) => {
+                                      const subs = [...(q.subQuestions || [])];
+                                      subs[sqIdx] = { ...subs[sqIdx], ...patch };
+                                      updateQuestion(q.id, { subQuestions: subs });
+                                    }}
+                                    onDelete={() => updateQuestion(q.id, { subQuestions: (q.subQuestions || []).filter((_, i) => i !== sqIdx) })}
+                                  />
                                 ))}
                                 <button
                                   onClick={() => updateQuestion(q.id, { subQuestions: [...(q.subQuestions || []), { id: `sq-${window.crypto.randomUUID()}`, title: '', type: 'اختيار من متعدد' as const, points: 1, options: [{ id: `o-${window.crypto.randomUUID()}`, text: '', isCorrect: true }, { id: `o-${window.crypto.randomUUID()}`, text: '', isCorrect: false }] }] })}
