@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, startTransition } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Search, ChevronDown, Check, LayoutGrid, List as ListIcon, X, MessageSquare, AlertCircle, FileText, Plus, Send } from 'lucide-react';
@@ -44,8 +44,8 @@ export function ClassRoster({ language = 'ar', teacherId, authUser }: { language
   const [parentMessageResult, setParentMessageResult] = useState('');
 
   const loadRoster = async () => {
-    if (!teacherId) { setIsLoading(false); return; }
-    setIsLoading(true);
+    if (!teacherId) { startTransition(() => setIsLoading(false)); return; }
+    startTransition(() => setIsLoading(true));
     const sections = await getMyClassSections(teacherId);
     setClassOptions(sections.map((s) => s.name));
     setClassIdByName(Object.fromEntries(sections.map((s) => [s.name, s.id])));
@@ -78,7 +78,7 @@ export function ClassRoster({ language = 'ar', teacherId, authUser }: { language
   };
 
   useEffect(() => {
-    loadRoster();
+    startTransition(() => { loadRoster(); });
   }, [teacherId]);
 
   

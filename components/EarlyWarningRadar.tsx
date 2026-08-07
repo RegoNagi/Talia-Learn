@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, startTransition } from 'react';
 import Image from 'next/image';
 import { AlertCircle, AlertTriangle, CheckCircle2, MessageSquare, Zap, ChevronDown, ChevronUp, UserX, TrendingDown, Bot, ShieldCheck, X, Info, Settings2, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -112,8 +112,8 @@ export function EarlyWarningRadar({ language = 'ar', teacherId, authUser }: { la
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!teacherId) { setIsLoading(false); return; }
-    setIsLoading(true);
+    if (!teacherId) { startTransition(() => setIsLoading(false)); return; }
+    startTransition(() => setIsLoading(true));
     getRiskDataForTeacher(teacherId, authUser?.subjects || [], subjectFilter).then((data) => {
       setRawStudents(data.map((s) => ({
         id: s.id,

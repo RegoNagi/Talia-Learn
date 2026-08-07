@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -51,8 +51,8 @@ export default function Dashboard() {
   const router = useRouter();
 
   const refreshTodo = (silent = false) => {
-    if (!authUser?.teacherId) { setIsTodoLoading(false); return; }
-    if (!silent) setIsTodoLoading(true);
+    if (!authUser?.teacherId) { startTransition(() => setIsTodoLoading(false)); return; }
+    if (!silent) startTransition(() => setIsTodoLoading(true));
     getMyClassSections(authUser.teacherId).then((secs) => {
       const scopes = secs.flatMap((sec) =>
         (authUser.subjects || []).map((subject: string) => ({ teacherId: authUser.teacherId, classId: sec.id, subject, grade: sec.gradeLevel }))
@@ -65,7 +65,7 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    refreshTodo();
+    startTransition(() => { refreshTodo(); });
   }, [authUser?.teacherId, authUser?.subjects]);
 
   // مشرف بنك الأسئلة معندوش أي حاجة تانية يشوفها هنا، فبنوديه على طول لصفحته

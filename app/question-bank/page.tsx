@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
 import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
@@ -539,7 +539,7 @@ export default function QuestionBank() {
   const [isLoadingAssessments, setIsLoadingAssessments] = useState(true);
 
   const refreshAssessments = () => {
-    setIsLoadingAssessments(true);
+    startTransition(() => setIsLoadingAssessments(true));
     getBlueprintAssessments({ teacherId: authUser?.teacherId, isSupervisor }).then((list) => {
       setAssessmentsList(list);
       setIsLoadingAssessments(false);
@@ -729,13 +729,13 @@ export default function QuestionBank() {
 
   useEffect(() => {
     if (assessmentView === 'LIBRARY' && canContribute) {
-      refreshAssessments();
+      startTransition(() => { refreshAssessments(); });
     }
   }, [assessmentView, canContribute]);
 
   useEffect(() => {
     if (!canContribute) return;
-    setIsLoadingHub(true);
+    startTransition(() => setIsLoadingHub(true));
     getSubjectGradeCombos({ isSupervisor, teacherGrades: authUser?.grades, teacherSubjects: authUser?.subjects }).then(async (combos) => {
       const withCounts = await Promise.all(combos.map(async (c) => {
         const qs = await getVisibleQuestions({ teacherId: authUser?.teacherId, isSupervisor, subject: c.subject, grade: c.grade });
@@ -930,7 +930,7 @@ export default function QuestionBank() {
 
   useEffect(() => {
     if (assessmentView !== 'MANUAL_SELECTION' || !blueprintSubject || !blueprintGrade) return;
-    setIsLoadingManualPool(true);
+    startTransition(() => setIsLoadingManualPool(true));
     getVisibleQuestions({ subject: blueprintSubject, grade: blueprintGrade, isSupervisor: true }).then((qs) => {
       setManualPoolQuestions(qs.filter((q) => q.status === 'approved'));
       setIsLoadingManualPool(false);
@@ -938,7 +938,7 @@ export default function QuestionBank() {
   }, [assessmentView, blueprintSubject, blueprintGrade]);
 
   useEffect(() => {
-    if (!manualSwapModalQId) { setManualSwapAlternatives([]); return; }
+    if (!manualSwapModalQId) { startTransition(() => setManualSwapAlternatives([])); return; }
     const current = blueprintQuestions.find((q) => q.id === manualSwapModalQId);
     if (!current) return;
     getVisibleQuestions({ subject: current.subject, grade: current.grade, isSupervisor: true }).then((pool) => {
@@ -948,7 +948,7 @@ export default function QuestionBank() {
   }, [manualSwapModalQId]);
 
   useEffect(() => {
-    refreshQuestions();
+    startTransition(() => { refreshQuestions(); });
   }, [activeSubject?.subject, activeSubject?.grade]);
 
   useEffect(() => {

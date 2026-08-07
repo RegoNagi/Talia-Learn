@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, startTransition } from 'react';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
 import { ActionItem, MagicButton } from '@/components/MagicButton';
 import { SpacesView } from '@/components/SpacesView';
@@ -70,7 +70,7 @@ function CourseWorkspaceContent() {
 
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam) setActiveTab(tabParam);
+    if (tabParam) startTransition(() => setActiveTab(tabParam));
   }, [searchParams]);
 
   const handleLogoutAndRedirect = () => {
@@ -95,8 +95,8 @@ function CourseWorkspaceContent() {
   }, [realClassId]);
 
   const refreshTodo = (silent = false) => {
-    if (!realClassId || !realSubject) { setIsTodoLoading(false); return; }
-    if (!silent) setIsTodoLoading(true);
+    if (!realClassId || !realSubject) { startTransition(() => setIsTodoLoading(false)); return; }
+    if (!silent) startTransition(() => setIsTodoLoading(true));
     getRealTodoTasks({ teacherId: authUser?.teacherId, classId: realClassId, subject: realSubject, grade: realClassInfo?.gradeLevel }).then((tasks) => {
       setTodoTasks(tasks);
       setIsTodoLoading(false);
@@ -104,7 +104,7 @@ function CourseWorkspaceContent() {
   };
 
   useEffect(() => {
-    refreshTodo();
+    startTransition(() => { refreshTodo(); });
   }, [realClassId, realSubject, realClassInfo?.gradeLevel, authUser?.teacherId]);
 
   const [demoAssessments, setDemoAssessments] = useState<DemoAssessment[]>([

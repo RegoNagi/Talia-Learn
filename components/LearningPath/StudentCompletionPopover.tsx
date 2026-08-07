@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Check, X, Send } from 'lucide-react';
 import { getLessonCompletionDetails, LessonCompletionInfo } from '@/services/learningPathData';
@@ -23,7 +23,7 @@ export function StudentCompletionPopover({ isOpen, onClose, lessonId, classId, l
 
   useEffect(() => {
     if (!isOpen || !lessonId || !classId) return;
-    setIsLoading(true);
+    startTransition(() => setIsLoading(true));
     getLessonCompletionDetails(lessonId, classId).then((data) => {
       setStudents(data);
       setIsLoading(false);

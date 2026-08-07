@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, startTransition } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { BookOpen, Users, Globe, Palette, X, Check } from 'lucide-react';
@@ -102,13 +102,13 @@ export function MyClassesView({
   };
 
   useEffect(() => {
-    refreshThemes();
+    startTransition(() => { refreshThemes(); });
   }, []);
 
   const t = dict[language];
 
   useEffect(() => {
-    setIsLoadingData(true);
+    startTransition(() => setIsLoadingData(true));
     if (userRole === 'teacher' && authUser.teacherId) {
       getMyClassSections(authUser.teacherId).then((classes) => {
         setMyClasses(classes);
@@ -137,7 +137,7 @@ export function MyClassesView({
         }
       });
     } else {
-      setIsLoadingData(false);
+      startTransition(() => setIsLoadingData(false));
     }
   }, [userRole, authUser]);
 
@@ -428,7 +428,6 @@ function SubjectThemeModal({ subjectName, currentTheme, language, onClose, onSav
   const [selectedColor, setSelectedColor] = useState(currentTheme.color);
   const [selectedIcon, setSelectedIcon] = useState(currentTheme.icon);
   const [isSaving, setIsSaving] = useState(false);
-  const PreviewIcon = getSubjectIconComponent(selectedIcon);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -442,7 +441,7 @@ function SubjectThemeModal({ subjectName, currentTheme, language, onClose, onSav
       <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className={`${selectedColor} p-5 text-white flex justify-between items-center transition-colors`}>
           <div className="flex items-center gap-2">
-            <PreviewIcon size={20} />
+            {React.createElement(getSubjectIconComponent(selectedIcon), { size: 20 })}
             <h3 className="font-extrabold text-sm">{subjectName}</h3>
           </div>
           <button onClick={onClose} className="text-white/80 hover:text-white">

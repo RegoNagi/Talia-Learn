@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, startTransition } from 'react';
 import { ChevronRight, ChevronLeft, ChevronDown, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getMyClassSections } from '@/services/attendanceData';
@@ -106,13 +106,13 @@ export function EducationalCalendar({ language = 'ar', teacherId, authUser }: { 
   const [isLoadingTerm, setIsLoadingTerm] = useState(false);
 
   useEffect(() => {
-    if (!teacherId) { setIsLoading(false); return; }
+    if (!teacherId) { startTransition(() => setIsLoading(false)); return; }
     getMyClassSections(teacherId).then(setSections);
   }, [teacherId]);
 
   useEffect(() => {
     if (!teacherId) return;
-    setIsLoading(true);
+    startTransition(() => setIsLoading(true));
     getCalendarEvents(teacherId, authUser?.subjects || [], currentDate.getFullYear(), currentDate.getMonth()).then((data) => {
       setEvents(data);
       setIsLoading(false);
@@ -121,7 +121,7 @@ export function EducationalCalendar({ language = 'ar', teacherId, authUser }: { 
 
   useEffect(() => {
     if (!teacherId || activeView !== 'term') return;
-    setIsLoadingTerm(true);
+    startTransition(() => setIsLoadingTerm(true));
     getActiveTermRange().then((term) => {
       setTermRange(term);
       if (!term || !term.startDate || !term.endDate) { setIsLoadingTerm(false); setTermEvents([]); return; }

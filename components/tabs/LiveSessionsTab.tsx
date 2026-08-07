@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import Image from 'next/image';
 import { getLiveSessions, createLiveSession, updateLiveSession, deleteLiveSession, RealLiveSession } from '@/services/liveSessionsData';
@@ -32,6 +32,11 @@ interface UpcomingSession {
 export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teacherId, teacherName, studentId, className }: { viewRole?: string; classId?: string; subject?: string; teacherId?: string; teacherName?: string; studentId?: string; className?: string }) {
   const isTeacher = viewRole === 'TEACHER';
   const isStudent = viewRole === 'STUDENT';
+  const [nowTs, setNowTs] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowTs(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [showMaterialsModal, setShowMaterialsModal] = useState(false);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
@@ -55,7 +60,7 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
   };
 
   useEffect(() => {
-    refresh();
+    startTransition(() => { refresh(); });
   }, [classId, subject]);
 
   const now = new Date();
@@ -619,9 +624,8 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
                   <div className="divide-y divide-slate-100">
                     {[...sessions].sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()).map((s) => {
                       const start = new Date(s.scheduledAt).getTime();
-                      const now = Date.now();
-                      const isLive = Math.abs(now - start) < 60 * 60 * 1000 && now >= start;
-                      const isPast = !isLive && start < now;
+                      const isLive = Math.abs(nowTs - start) < 60 * 60 * 1000 && nowTs >= start;
+                      const isPast = !isLive && start < nowTs;
                       return (
                         <div key={s.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-4 hover:bg-slate-50 transition-colors group">
                           <div className="col-span-3 font-semibold text-slate-800 text-sm">

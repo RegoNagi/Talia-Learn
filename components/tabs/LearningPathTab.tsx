@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Book, ChevronDown, MoreHorizontal, PlayCircle, FileText, BrainCircuit, Shuffle, Plus, Sparkles, Trash2, EyeOff, Eye, Share2, Edit, Layout, Check, ClipboardCheck, X, MoreVertical, Link as LinkIcon, LayoutGrid, List, ArrowLeft, Clock, CheckCircle2 } from 'lucide-react';
 
@@ -71,7 +71,7 @@ export function LearningPathTab({
 
   const refreshUnits = () => {
     if (!learnScope) return;
-    setIsLoadingUnits(true);
+    startTransition(() => setIsLoadingUnits(true));
     getUnits(learnScope).then(async (realUnits) => {
       const unitIds = realUnits.map(u => u.id);
       const [lessons, unitAssessments] = await Promise.all([
@@ -130,7 +130,7 @@ export function LearningPathTab({
   };
 
   useEffect(() => {
-    refreshUnits();
+    startTransition(() => { refreshUnits(); });
   }, [learnScope?.classId, learnScope?.subject]);
 
   const [expandedUnits, setExpandedUnits] = useState<string[]>([]);

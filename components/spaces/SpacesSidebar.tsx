@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { FileText, MessageSquare, Heart, CheckCircle, Star, Trophy, Link as LinkIcon, Plus, ArrowRight, Calendar } from 'lucide-react';
 import Image from 'next/image';
 import { getUpcomingSchoolEvents, getSchoolAnnouncements, ChallengeSubmission, SchoolEvent, SchoolAnnouncement } from '@/services/classSpaceData';
@@ -32,10 +32,15 @@ export function SpacesSidebar({ space, language = 'en', classId, subject, teache
   const [resources, setResources] = useState<{ id: string; title: string; type: string; size: string; url: string }[]>([]);
   const [liveSessions, setLiveSessions] = useState<RealLiveSession[]>([]);
   const [isLoadingSidebarData, setIsLoadingSidebarData] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     if (!isRealScope || space !== 'subject' || !classId || !subject || !teacherId) return;
-    setIsLoadingSidebarData(true);
+    startTransition(() => setIsLoadingSidebarData(true));
     (async () => {
       const [assignments, files, sessions] = await Promise.all([
         getAssignments({ teacherId, classId, subject }),
@@ -173,7 +178,6 @@ export function SpacesSidebar({ space, language = 'en', classId, subject, teache
   }
 
   if (space === 'subject') {
-    const now = Date.now();
     const liveNow = liveSessions.find((s) => {
       const start = new Date(s.scheduledAt).getTime();
       return Math.abs(now - start) < 60 * 60 * 1000 && now >= start;

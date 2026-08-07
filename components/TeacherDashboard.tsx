@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, startTransition } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useRouter } from 'next/navigation';
 import { getMyClassSections, LearnClassSection } from '@/services/attendanceData';
@@ -104,13 +104,13 @@ export function TeacherDashboard({ language = 'en', userRole = 'teacher', authUs
   const scopedSubjects = subjectFilter === 'all' ? subjectsAll : [subjectFilter];
 
   useEffect(() => {
-    if (!teacherId) { setIsLoading(false); return; }
+    if (!teacherId) { startTransition(() => setIsLoading(false)); return; }
     getMyClassSections(teacherId).then(setSections);
   }, [teacherId]);
 
   useEffect(() => {
-    if (!teacherId || sections.length === 0) { if (!teacherId) setIsLoading(false); return; }
-    setIsLoading(true);
+    if (!teacherId || sections.length === 0) { if (!teacherId) startTransition(() => setIsLoading(false)); return; }
+    startTransition(() => setIsLoading(true));
     Promise.all([
       getTodayAttendanceSummary(scopedSections),
       getGradingSummaries(scopedSections, scopedSubjects, teacherId),

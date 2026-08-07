@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   CheckCircle, BarChart3, Zap, PenTool, Eye,
@@ -56,7 +56,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
 
   const refreshList = () => {
     if (!scope && !studentScope) return;
-    setIsLoading(true);
+    startTransition(() => setIsLoading(true));
     const fetchScope = scope || { teacherId: '', classId: classId!, subject: subject! };
     Promise.all([getAssignments(fetchScope), getQuizzes(fetchScope)]).then(async ([items, quizItems]) => {
       setAssignments(items);
@@ -89,7 +89,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
   };
 
   useEffect(() => {
-    refreshList();
+    startTransition(() => { refreshList(); });
   }, [scope?.classId, scope?.subject, studentScope?.classId, studentScope?.subject]);
 
   // ============ Teacher: Grading ============
@@ -717,7 +717,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
             </div>
             <h2 className="text-3xl font-black text-slate-800 mb-3">Quiz Submitted!</h2>
             {quizResult.needsManualReview ? (
-              <p className="text-slate-500 font-medium mb-6 text-lg">Some of your answers need your teacher's review before a final grade is ready.</p>
+              <p className="text-slate-500 font-medium mb-6 text-lg">Some of your answers need your teacher&apos;s review before a final grade is ready.</p>
             ) : (
               <p className="text-5xl font-black text-emerald-600 mb-2">{quizResult.score}/{quizResult.maxScore}</p>
             )}
