@@ -498,6 +498,8 @@ export default function QuestionBank() {
   const [newQAudioUrl, setNewQAudioUrl] = useState('');
   const [isUploadingQAudio, setIsUploadingQAudio] = useState(false);
   const [newQPassageText, setNewQPassageText] = useState('');
+  const [newQFillBlankAnswer, setNewQFillBlankAnswer] = useState('');
+  const [newQEssayModelAnswer, setNewQEssayModelAnswer] = useState('');
   const [newQSubQuestions, setNewQSubQuestions] = useState<{
     id: string;
     title: string;
@@ -607,6 +609,12 @@ export default function QuestionBank() {
         ...(newQType === 'مقطع صوتي' ? {
           audioUrl: newQAudioUrl || undefined,
         } : {}),
+        ...(newQType === 'أكمل الفراغ' ? {
+          correctAnswer: newQFillBlankAnswer || undefined,
+        } : {}),
+        ...(newQType === 'سؤال مقالي' ? {
+          modelAnswer: newQEssayModelAnswer || undefined,
+        } : {}),
         ...(newQType === 'قطعة' ? {
           passageText: newQPassageText || undefined,
           subQuestions: newQSubQuestions.filter((sq) => sq.title.trim()).map((sq) => ({
@@ -644,6 +652,8 @@ export default function QuestionBank() {
     setNewQAudioUrl('');
     setNewQPassageText('');
     setNewQSubQuestions([]);
+    setNewQFillBlankAnswer('');
+    setNewQEssayModelAnswer('');
     const wasEditing = !!editingQuestionId;
     setEditingQuestionId(null);
     // CRITICAL: We explicitly do NOT clear newQType, newQUnit, newQBloom, or newQDiff.
@@ -671,6 +681,8 @@ export default function QuestionBank() {
     setNewQTitle(q.question?.title || '');
     setNewQQuestionImageUrl((q.question as any)?.questionImageUrl || '');
     setQStandard(q.question?.standard || '');
+    setNewQFillBlankAnswer((q.question as any)?.correctAnswer || '');
+    setNewQEssayModelAnswer((q.question as any)?.modelAnswer || '');
     setNewQOptions(q.question?.options?.length ? q.question.options.map((o: any) => ({ ...o })) : [
       { id: crypto.randomUUID(), text: '', isCorrect: true, imageUrl: null },
       { id: crypto.randomUUID(), text: '', isCorrect: false, imageUrl: null },
@@ -1790,6 +1802,8 @@ export default function QuestionBank() {
                               {newQType === 'سؤال مقالي' && (
                                  <motion.div key="essay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4 mb-4">
                                     <textarea 
+                                      value={newQEssayModelAnswer}
+                                      onChange={(e) => setNewQEssayModelAnswer(e.target.value)}
                                       placeholder={language === 'ar' ? 'نموذج الإجابة أو دليل التصحيح...' : 'Model answer or grading guide...'}
                                       className="w-full h-32 bg-slate-50 border border-slate-200 text-slate-800 rounded-2xl p-4 font-bold text-sm focus:outline-none focus:border-violet-400 resize-none transition-colors placeholder:font-normal placeholder:text-slate-400"
                                     />
@@ -1804,6 +1818,8 @@ export default function QuestionBank() {
                                       </div>
                                       <input 
                                         type="text" 
+                                        value={newQFillBlankAnswer}
+                                        onChange={(e) => setNewQFillBlankAnswer(e.target.value)}
                                         placeholder={language === 'ar' ? 'الكلمة المفقودة (الإجابة الصحيحة)...' : 'The missing word (correct answer)...'}
                                         className="w-full bg-transparent text-slate-800 text-sm font-bold px-4 py-3 focus:outline-none placeholder:font-normal placeholder:text-slate-400"
                                       />

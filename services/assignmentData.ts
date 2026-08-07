@@ -39,6 +39,8 @@ export interface QuizQuestion {
   sectionId?: string | null;
   imageUrl?: string;
   audioUrl?: string;
+  correctAnswer?: string;
+  modelAnswer?: string;
   // اختيار من متعدد / صح أم خطأ / مقطع صوتي
   options?: { id: string; text: string; isCorrect: boolean; imageUrl?: string }[];
   // إجابة رقمية

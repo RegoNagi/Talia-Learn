@@ -9,6 +9,8 @@ export type BankStatus = 'approved' | 'pending' | 'rejected';
 export interface BankQuestionContent {
   title: string;
   questionImageUrl?: string;
+  correctAnswer?: string;
+  modelAnswer?: string;
   options?: { id: string; text: string; isCorrect: boolean; imageUrl?: string }[];
   correctOption?: number;
   standard?: string;
@@ -478,6 +480,8 @@ export function convertBankQuestionToQuizQuestion(bq: BankQuestion, pointsPerQue
     hotspots: bq.question?.hotspots ?? undefined,
     audioUrl: bq.question?.audioUrl ?? undefined,
     passageText: bq.question?.passageText ?? undefined,
+    correctAnswer: (bq.question as any)?.correctAnswer ?? undefined,
+    modelAnswer: (bq.question as any)?.modelAnswer ?? undefined,
     subQuestions: bq.question?.subQuestions ?? undefined,
   };
 }

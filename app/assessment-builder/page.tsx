@@ -43,6 +43,8 @@ interface Question {
   hotspots?: { xPercent: number; yPercent: number; label: string; isCorrect: boolean }[];
   audioUrl?: string;
   passageText?: string;
+  correctAnswer?: string;
+  modelAnswer?: string;
   subQuestions?: { id: string; title: string; type: string; points: number; options?: { id: string; text: string; isCorrect: boolean }[] }[];
 }
 
@@ -760,7 +762,15 @@ function AssessmentBuilderContent() {
                         </div>
                       )}
                       {q.type === 'short_answer' && (
-                        <textarea disabled rows={2} className="w-full border border-slate-200 rounded-xl p-3 text-slate-400 bg-slate-50 resize-none" placeholder="Student's answer..." />
+                        <div className="space-y-2">
+                          {typeof q.correctAnswer === 'string' && (
+                            <p className="text-xs font-bold text-violet-500 uppercase tracking-wider">Fill in the Blank {q.correctAnswer && <span className="text-slate-500 font-normal normal-case">— answer: {q.correctAnswer}</span>}</p>
+                          )}
+                          {typeof q.modelAnswer === 'string' && (
+                            <p className="text-xs font-bold text-violet-500 uppercase tracking-wider">Essay {q.modelAnswer && <span className="text-slate-500 font-normal normal-case block mt-1">Model answer: {q.modelAnswer}</span>}</p>
+                          )}
+                          <textarea disabled rows={2} className="w-full border border-slate-200 rounded-xl p-3 text-slate-400 bg-slate-50 resize-none" placeholder="Student's answer..." />
+                        </div>
                       )}
                       {q.type === 'file_upload' && (
                         <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex items-center gap-3 text-slate-400 bg-slate-50">
@@ -867,8 +877,8 @@ function AssessmentBuilderContent() {
                   { type: 'multiple_choice', icon: ListChecks, label: 'Multiple Choice' },
                   { type: 'true_false', icon: CheckSquare, label: 'True/False' },
                   { type: 'short_answer', icon: Type, label: 'Short Answer' },
-                  { type: 'short_answer', icon: AlignLeft, label: 'Fill in the Blank' },
-                  { type: 'short_answer', icon: PenLine, label: 'Essay' },
+                  { type: 'short_answer', icon: AlignLeft, label: 'Fill in the Blank', extra: { correctAnswer: '' } },
+                  { type: 'short_answer', icon: PenLine, label: 'Essay', extra: { modelAnswer: '' } },
                   { type: 'numeric_answer', icon: Calculator, label: 'Numeric Answer' },
                   { type: 'matching', icon: GitMerge, label: 'Matching' },
                   { type: 'ordering', icon: ListOrdered, label: 'Ordering' },
@@ -1032,11 +1042,28 @@ function AssessmentBuilderContent() {
                         <div className="flex items-center gap-2 text-blue-600 font-bold text-xs tracking-widest uppercase">
                           <span>QUESTION {idx + 1} •</span>
                           <select
-                            value={q.type}
+                            value={q.type === 'short_answer' ? (typeof q.correctAnswer === 'string' ? 'fill_blank' : typeof q.modelAnswer === 'string' ? 'essay' : 'short_answer') : q.type}
                             onChange={(e) => {
-                              const newType = e.target.value as Question['type'];
+                              const selected = e.target.value;
+                              if (selected === 'fill_blank') {
+                                updateQuestion(q.id, {
+                                  type: 'short_answer', correctAnswer: q.correctAnswer ?? '', modelAnswer: undefined,
+                                  options: undefined, numericAnswer: undefined, numericTolerance: undefined, pairs: undefined, orderItems: undefined, categories: undefined, classifyItems: undefined, zones: undefined, dragItems: undefined, hotspots: undefined, subQuestions: undefined,
+                                });
+                                return;
+                              }
+                              if (selected === 'essay') {
+                                updateQuestion(q.id, {
+                                  type: 'short_answer', modelAnswer: q.modelAnswer ?? '', correctAnswer: undefined,
+                                  options: undefined, numericAnswer: undefined, numericTolerance: undefined, pairs: undefined, orderItems: undefined, categories: undefined, classifyItems: undefined, zones: undefined, dragItems: undefined, hotspots: undefined, subQuestions: undefined,
+                                });
+                                return;
+                              }
+                              const newType = selected as Question['type'];
                               updateQuestion(q.id, {
                                 type: newType,
+                                correctAnswer: undefined,
+                                modelAnswer: undefined,
                                 options: newType === 'multiple_choice' ? [
                                   { id: `opt-${window.crypto.randomUUID()}`, text: 'Option 1', isCorrect: false },
                                   { id: `opt-${window.crypto.randomUUID()}`, text: 'Option 2', isCorrect: false }
@@ -1064,6 +1091,8 @@ function AssessmentBuilderContent() {
                             <option value="multiple_choice">Multiple Choice</option>
                             <option value="true_false">True/False</option>
                             <option value="short_answer">Short Answer</option>
+                            <option value="fill_blank">Fill in the Blank</option>
+                            <option value="essay">Essay</option>
                             <option value="numeric_answer">Numeric Answer</option>
                             <option value="matching">Matching</option>
                             <option value="ordering">Ordering</option>
@@ -1236,7 +1265,37 @@ function AssessmentBuilderContent() {
                         </div>
                       )}
 
-                      {q.type === 'short_answer' && (
+                      {q.type === 'short_answer' && typeof q.correctAnswer === 'string' && (
+                        <div className="space-y-2 mb-8">
+                          <div className="p-1 border border-slate-200 rounded-2xl bg-white focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all flex items-center pr-2">
+                            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 shrink-0 ml-1">
+                              <Type size={14} />
+                            </div>
+                            <input
+                              type="text"
+                              value={q.correctAnswer}
+                              onChange={(e) => updateQuestion(q.id, { correctAnswer: e.target.value })}
+                              placeholder="The missing word (correct answer)..."
+                              className="w-full bg-transparent text-slate-800 text-sm font-bold px-4 py-3 outline-none placeholder:font-normal placeholder:text-slate-400"
+                            />
+                          </div>
+                          <p className="text-xs font-semibold text-slate-400">Note: use the <span className="font-mono text-slate-600 bg-slate-100 px-1 py-0.5 rounded">___</span> symbol in the question text to mark the blank.</p>
+                        </div>
+                      )}
+
+                      {q.type === 'short_answer' && typeof q.modelAnswer === 'string' && (
+                        <div className="mb-8">
+                          <textarea
+                            value={q.modelAnswer}
+                            onChange={(e) => updateQuestion(q.id, { modelAnswer: e.target.value })}
+                            rows={4}
+                            placeholder="Model answer or grading guide..."
+                            className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-2xl p-4 font-bold text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 resize-none placeholder:font-normal placeholder:text-slate-400"
+                          />
+                        </div>
+                      )}
+
+                      {q.type === 'short_answer' && typeof q.correctAnswer !== 'string' && typeof q.modelAnswer !== 'string' && (
                         <div className="bg-slate-50 rounded-2xl border border-slate-100 p-6 text-slate-400 text-sm italic mb-8">
                           Students will provide a text-based response here.
                         </div>

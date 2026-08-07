@@ -317,6 +317,12 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
                 <p className="font-bold text-slate-800 flex-1">{q.text}</p>
                 <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full shrink-0">{q.points} pts max</span>
               </div>
+              {(q.correctAnswer || q.modelAnswer) && (
+                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 mb-3">
+                  <p className="text-[11px] font-bold text-indigo-500 uppercase tracking-wider mb-1">{q.correctAnswer ? 'Reference Answer' : 'Model Answer / Grading Guide'}</p>
+                  <p className="text-sm text-indigo-700">{q.correctAnswer || q.modelAnswer}</p>
+                </div>
+              )}
               {q.type === 'short_answer' ? (
                 <p className="text-slate-600 bg-slate-50 rounded-xl p-4 mb-4">{activeQuizAttemptForGrading.answers[q.id] || '(No answer)'}</p>
               ) : (
