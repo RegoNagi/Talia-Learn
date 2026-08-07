@@ -130,7 +130,7 @@ export function LearningPathTab({
   };
 
   useEffect(() => {
-    refreshUnits();
+    startTransition(() => { refreshUnits(); });
   }, [learnScope?.classId, learnScope?.subject]);
 
   const [expandedUnits, setExpandedUnits] = useState<string[]>([]);

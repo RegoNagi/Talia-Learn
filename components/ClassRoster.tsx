@@ -78,7 +78,7 @@ export function ClassRoster({ language = 'ar', teacherId, authUser }: { language
   };
 
   useEffect(() => {
-    loadRoster();
+    startTransition(() => { loadRoster(); });
   }, [teacherId]);
 
   

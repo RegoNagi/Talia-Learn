@@ -32,6 +32,11 @@ export function SpacesSidebar({ space, language = 'en', classId, subject, teache
   const [resources, setResources] = useState<{ id: string; title: string; type: string; size: string; url: string }[]>([]);
   const [liveSessions, setLiveSessions] = useState<RealLiveSession[]>([]);
   const [isLoadingSidebarData, setIsLoadingSidebarData] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     if (!isRealScope || space !== 'subject' || !classId || !subject || !teacherId) return;
@@ -173,7 +178,6 @@ export function SpacesSidebar({ space, language = 'en', classId, subject, teache
   }
 
   if (space === 'subject') {
-    const now = Date.now();
     const liveNow = liveSessions.find((s) => {
       const start = new Date(s.scheduledAt).getTime();
       return Math.abs(now - start) < 60 * 60 * 1000 && now >= start;

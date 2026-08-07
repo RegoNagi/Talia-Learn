@@ -104,7 +104,7 @@ function CourseWorkspaceContent() {
   };
 
   useEffect(() => {
-    refreshTodo();
+    startTransition(() => { refreshTodo(); });
   }, [realClassId, realSubject, realClassInfo?.gradeLevel, authUser?.teacherId]);
 
   const [demoAssessments, setDemoAssessments] = useState<DemoAssessment[]>([

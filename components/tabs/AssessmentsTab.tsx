@@ -89,7 +89,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
   };
 
   useEffect(() => {
-    refreshList();
+    startTransition(() => { refreshList(); });
   }, [scope?.classId, scope?.subject, studentScope?.classId, studentScope?.subject]);
 
   // ============ Teacher: Grading ============

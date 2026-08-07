@@ -65,7 +65,7 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    refreshTodo();
+    startTransition(() => { refreshTodo(); });
   }, [authUser?.teacherId, authUser?.subjects]);
 
   // مشرف بنك الأسئلة معندوش أي حاجة تانية يشوفها هنا، فبنوديه على طول لصفحته

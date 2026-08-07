@@ -89,7 +89,7 @@ export function GradebookTab({
   };
 
   useEffect(() => {
-    refresh();
+    startTransition(() => { refresh(); });
   }, [subject, grade, classId]);
 
   const categories = Array.from(new Set(assessments.map(a => a.category)));

@@ -163,12 +163,12 @@ function AssessmentBuilderContent() {
 
   useEffect(() => {
     if (isBankDrawerOpen && scopeSubject && scopeGrade) {
-      setIsLoadingBank(true);
+      startTransition(() => setIsLoadingBank(true));
       getVisibleQuestions({ teacherId: authUser?.teacherId, isSupervisor: authUser?.role === 'qb_supervisor', subject: scopeSubject, grade: scopeGrade }).then((qs) => {
         setBankQuestions(qs);
         setIsLoadingBank(false);
       });
-      setSelectedBankIds([]);
+      startTransition(() => setSelectedBankIds([]));
     }
   }, [isBankDrawerOpen, authUser?.teacherId, scopeSubject, scopeGrade]);
 
@@ -245,7 +245,7 @@ function AssessmentBuilderContent() {
   const [gradingMethod, setGradingMethod] = useState<'Points' | 'Percentage' | 'Scale'>('Points');
 
   useEffect(() => {
-    if (activeTab === 'assignment') setGradingMethod('Points');
+    if (activeTab === 'assignment') startTransition(() => setGradingMethod('Points'));
   }, [activeTab]);
 
   const [isGeneratingRubric, setIsGeneratingRubric] = useState(false);
@@ -426,7 +426,7 @@ function AssessmentBuilderContent() {
 
   useEffect(() => {
     if (!editId) return;
-    setIsEditLoading(true);
+    startTransition(() => setIsEditLoading(true));
     if (initialType === 'quiz') {
       getQuizById(editId).then((q) => {
         if (q) {

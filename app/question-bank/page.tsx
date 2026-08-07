@@ -948,7 +948,7 @@ export default function QuestionBank() {
   }, [manualSwapModalQId]);
 
   useEffect(() => {
-    refreshQuestions();
+    startTransition(() => { refreshQuestions(); });
   }, [activeSubject?.subject, activeSubject?.grade]);
 
   useEffect(() => {

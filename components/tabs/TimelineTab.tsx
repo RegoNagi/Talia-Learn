@@ -61,7 +61,7 @@ export function TimelineTab({ role = 'student', language = 'en', classId, subjec
   };
 
   useEffect(() => {
-    refresh();
+    startTransition(() => { refresh(); });
   }, [classId, subject, teacherId, grade]);
 
   const grouped = BUCKET_ORDER.map((bucket) => ({

@@ -69,7 +69,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   };
 
   useEffect(() => {
-    refreshLibrary();
+    startTransition(() => { refreshLibrary(); });
   }, [scope?.classId, scope?.subject, libraryMode]);
   
   // Modals
