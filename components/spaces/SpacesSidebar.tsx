@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { FileText, MessageSquare, Heart, CheckCircle, Star, Trophy, Link as LinkIcon, Plus, ArrowRight, Calendar } from 'lucide-react';
 import Image from 'next/image';
 import { getUpcomingSchoolEvents, getSchoolAnnouncements, ChallengeSubmission, SchoolEvent, SchoolAnnouncement } from '@/services/classSpaceData';
@@ -40,7 +40,7 @@ export function SpacesSidebar({ space, language = 'en', classId, subject, teache
 
   useEffect(() => {
     if (!isRealScope || space !== 'subject' || !classId || !subject || !teacherId) return;
-    setIsLoadingSidebarData(true);
+    startTransition(() => setIsLoadingSidebarData(true));
     (async () => {
       const [assignments, files, sessions] = await Promise.all([
         getAssignments({ teacherId, classId, subject }),

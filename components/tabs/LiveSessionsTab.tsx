@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import Image from 'next/image';
 import { getLiveSessions, createLiveSession, updateLiveSession, deleteLiveSession, RealLiveSession } from '@/services/liveSessionsData';
@@ -60,7 +60,7 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
   };
 
   useEffect(() => {
-    refresh();
+    startTransition(() => { refresh(); });
   }, [classId, subject]);
 
   const now = new Date();
