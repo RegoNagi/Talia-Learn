@@ -505,7 +505,7 @@ export default function QuestionBank() {
   const [newQSubQuestions, setNewQSubQuestions] = useState<{
     id: string;
     title: string;
-    type: 'اختيار من متعدد' | 'صح أم خطأ' | 'إجابة قصيرة';
+    type: string;
     points: number;
     options: { id: string; text: string; isCorrect: boolean }[];
   }[]>([]);
