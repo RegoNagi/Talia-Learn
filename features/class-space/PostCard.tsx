@@ -3,14 +3,8 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { 
-  Lightbulb, 
-  CheckCircle, 
-  Heart, 
-  PartyPopper, 
   MessageSquare, 
-  Send, 
-  MoreHorizontal,
-  Tag
+  Send
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Post, User } from '@/types/classSpace';

@@ -6,8 +6,7 @@ import {
   Zap, 
   Image as ImageIcon, 
   FileText, 
-  X, 
-  Send 
+  X 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, AIChallenge } from '@/types/classSpace';

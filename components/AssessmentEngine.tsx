@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, Clock, UploadCloud, CheckCircle2, CheckCircle, Calendar, File, BookOpen } from 'lucide-react';
 import { DemoAssessment } from '@/app/courses/[courseId]/page';
