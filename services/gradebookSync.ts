@@ -78,16 +78,16 @@ export async function syncAssessmentToGradebook(input: {
 }
 
 // بيسجّل درجة طالب فعليًا في جدول الدرجات الحقيقي (grade_entries)
-export async function syncGradeEntry(assessmentId: string, studentId: string, score: number | null, status: string): Promise<boolean> {
+export async function syncGradeEntry(assessmentId: string, studentId: string, score: number | null, status: string): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('grade_entries').upsert(
     { assessment_id: assessmentId, student_id: studentId, score, status },
     { onConflict: 'assessment_id,student_id' }
   );
   if (error) {
     console.error('Error syncing grade entry:', error);
-    return false;
+    return { ok: false, error: error.message };
   }
-  return true;
+  return { ok: true, error: null };
 }
 
 // بتعمل الاتنين مرة واحدة: تتأكد إن عنصر التقييم موجود، وبعدين تسجّل درجة الطالب
@@ -102,9 +102,9 @@ export async function syncGradeToGradebook(input: {
   studentId: string;
   score: number | null;
   status: string;
-}): Promise<boolean> {
+}): Promise<{ ok: boolean; error: string | null }> {
   const assessmentId = await syncAssessmentToGradebook(input);
-  if (!assessmentId) return false;
+  if (!assessmentId) return { ok: false, error: 'Could not create or find the gradebook assessment' };
   return syncGradeEntry(assessmentId, input.studentId, input.score, input.status);
 }
 

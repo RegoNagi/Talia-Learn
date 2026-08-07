@@ -104,19 +104,19 @@ export async function deleteUnit(id: string): Promise<{ ok: boolean; error: stri
   return { ok: !error, error: error?.message || null };
 }
 
-export async function toggleUnitHidden(id: string, isHidden: boolean): Promise<boolean> {
+export async function toggleUnitHidden(id: string, isHidden: boolean): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('learning_units').update({ is_hidden: isHidden }).eq('id', id);
-  return !error;
+  return { ok: !error, error: error?.message || null };
 }
 
-export async function toggleUnitComplete(id: string, isComplete: boolean): Promise<boolean> {
+export async function toggleUnitComplete(id: string, isComplete: boolean): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('learning_units').update({ is_complete: isComplete }).eq('id', id);
-  return !error;
+  return { ok: !error, error: error?.message || null };
 }
 
-export async function updateUnitSharing(id: string, sharedWith: string[]): Promise<boolean> {
+export async function updateUnitSharing(id: string, sharedWith: string[]): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('learning_units').update({ shared_with: sharedWith }).eq('id', id);
-  return !error;
+  return { ok: !error, error: error?.message || null };
 }
 
 export async function getLessons(unitIds: string[]): Promise<LearnLesson[]> {
@@ -178,14 +178,14 @@ export async function updateLesson(id: string, input: { title?: string }): Promi
   return { ok: !error, error: error?.message || null };
 }
 
-export async function toggleLessonHidden(id: string, isHidden: boolean): Promise<boolean> {
+export async function toggleLessonHidden(id: string, isHidden: boolean): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('learning_lessons').update({ is_hidden: isHidden }).eq('id', id);
-  return !error;
+  return { ok: !error, error: error?.message || null };
 }
 
-export async function toggleLessonComplete(id: string, isComplete: boolean): Promise<boolean> {
+export async function toggleLessonComplete(id: string, isComplete: boolean): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('learning_lessons').update({ is_complete: isComplete }).eq('id', id);
-  return !error;
+  return { ok: !error, error: error?.message || null };
 }
 
 export function getLessonFileUrl(storagePath: string): string {

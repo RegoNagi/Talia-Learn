@@ -153,49 +153,49 @@ export async function createLibraryFolder(scope: LibraryScope, input: { parentId
   return data.id;
 }
 
-export async function deleteLibraryFolder(id: string): Promise<boolean> {
+export async function deleteLibraryFolder(id: string): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('library_folders').delete().eq('id', id);
-  if (error) { console.error('Error deleting library folder:', error); return false; }
-  return true;
+  if (error) { console.error('Error deleting library folder:', error); return { ok: false, error: error.message }; }
+  return { ok: true, error: null };
 }
 
 // زر عام/خاص السريع: يبان لزميلك المعلم (نفس الفصل والمادة) ولا لأ — مش بينشر لـ Material
-export async function toggleFolderPrivacy(id: string, isPublic: boolean): Promise<boolean> {
+export async function toggleFolderPrivacy(id: string, isPublic: boolean): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('library_folders').update({ is_public: isPublic }).eq('id', id);
-  return !error;
+  return { ok: !error, error: error?.message || null };
 }
 
-export async function toggleFilePrivacy(id: string, isPublic: boolean): Promise<boolean> {
+export async function toggleFilePrivacy(id: string, isPublic: boolean): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('library_files').update({ is_public: isPublic }).eq('id', id);
-  return !error;
+  return { ok: !error, error: error?.message || null };
 }
 
 // زر "إضافة لـ Material" — بينشر بس لمادة المعلم ده نفسه، ومحدش غيره
-export async function addFolderToMaterial(id: string): Promise<boolean> {
+export async function addFolderToMaterial(id: string): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('library_folders').update({ in_material: true }).eq('id', id);
-  return !error;
+  return { ok: !error, error: error?.message || null };
 }
-export async function addFileToMaterial(id: string): Promise<boolean> {
+export async function addFileToMaterial(id: string): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('library_files').update({ in_material: true }).eq('id', id);
-  return !error;
+  return { ok: !error, error: error?.message || null };
 }
-export async function removeFolderFromMaterial(id: string): Promise<boolean> {
+export async function removeFolderFromMaterial(id: string): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('library_folders').update({ in_material: false }).eq('id', id);
-  return !error;
+  return { ok: !error, error: error?.message || null };
 }
-export async function removeFileFromMaterial(id: string): Promise<boolean> {
+export async function removeFileFromMaterial(id: string): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('library_files').update({ in_material: false }).eq('id', id);
-  return !error;
+  return { ok: !error, error: error?.message || null };
 }
 
 // مشاركة مع فصول تانية و/أو معلمين بالاسم
-export async function updateFolderSharing(id: string, sharedWithClasses: string[], sharedWithTeachers: string[]): Promise<boolean> {
+export async function updateFolderSharing(id: string, sharedWithClasses: string[], sharedWithTeachers: string[]): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('library_folders').update({ shared_with: sharedWithClasses, shared_with_teachers: sharedWithTeachers }).eq('id', id);
-  return !error;
+  return { ok: !error, error: error?.message || null };
 }
-export async function updateFileSharing(id: string, sharedWithClasses: string[], sharedWithTeachers: string[]): Promise<boolean> {
+export async function updateFileSharing(id: string, sharedWithClasses: string[], sharedWithTeachers: string[]): Promise<{ ok: boolean; error: string | null }> {
   const { error } = await supabase.from('library_files').update({ shared_with: sharedWithClasses, shared_with_teachers: sharedWithTeachers }).eq('id', id);
-  return !error;
+  return { ok: !error, error: error?.message || null };
 }
 
 export async function uploadLibraryFile(
@@ -274,13 +274,13 @@ export function getLibraryFileDownloadUrl(storagePath: string): string {
   return data.publicUrl;
 }
 
-export async function deleteLibraryFile(id: string, storagePath: string | null): Promise<boolean> {
+export async function deleteLibraryFile(id: string, storagePath: string | null): Promise<{ ok: boolean; error: string | null }> {
   if (storagePath) {
     await supabase.storage.from('library-files').remove([storagePath]);
   }
   const { error } = await supabase.from('library_files').delete().eq('id', id);
-  if (error) { console.error('Error deleting library file:', error); return false; }
-  return true;
+  if (error) { console.error('Error deleting library file:', error); return { ok: false, error: error.message }; }
+  return { ok: true, error: null };
 }
 
 // بيجيب كل الفصول الحقيقية بتاعة نفس المعلم (لخيار "شير مع فصولي")

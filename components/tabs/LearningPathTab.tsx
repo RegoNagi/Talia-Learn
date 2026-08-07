@@ -170,7 +170,7 @@ export function LearningPathTab({
 
   const handleSaveUnitShare = async () => {
     if (!shareUnit) return;
-    const ok = await updateUnitSharing(shareUnit.id, selectedUnitShareClasses);
+    const { ok } = await updateUnitSharing(shareUnit.id, selectedUnitShareClasses);
     if (ok) {
       refreshUnits();
       setShareUnit(null);
@@ -432,7 +432,7 @@ export function LearningPathTab({
               {!isStudent && (
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={async () => { const ok = await toggleUnitComplete(unit.id, !unit.isComplete); if (ok) refreshUnits(); }}
+                    onClick={async () => { const { ok } = await toggleUnitComplete(unit.id, !unit.isComplete); if (ok) refreshUnits(); }}
                     title={unit.isComplete ? (language === 'ar' ? 'إلغاء الاكتمال' : 'Unmark Complete') : (language === 'ar' ? 'وضع علامة اكتمل' : 'Mark as Complete')}
                     className={`w-10 h-10 flex items-center justify-center rounded-xl border-2 transition-colors ${unit.isComplete ? 'bg-emerald-500 border-transparent text-white' : 'bg-white border-emerald-500 text-emerald-500 hover:bg-emerald-50'}`}
                   >
@@ -461,7 +461,7 @@ export function LearningPathTab({
                         <Edit size={14} /> {language === 'ar' ? 'تعديل الاسم' : 'Edit Name'}
                       </button>
                       <button
-                        onClick={async () => { setActiveUnitMenuId(null); const ok = await toggleUnitHidden(unit.id, !unit.isHidden); if (ok) refreshUnits(); }}
+                        onClick={async () => { setActiveUnitMenuId(null); const { ok } = await toggleUnitHidden(unit.id, !unit.isHidden); if (ok) refreshUnits(); }}
                         className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
                       >
                         {unit.isHidden ? <Eye size={14} /> : <EyeOff size={14} />} {unit.isHidden ? (language === 'ar' ? 'إظهار للطلاب' : 'Show to students') : (language === 'ar' ? 'إخفاء عن الطلاب' : 'Hide from students')}
@@ -527,7 +527,7 @@ export function LearningPathTab({
                     <button
                       onClick={async (e) => {
                         e.stopPropagation();
-                        const ok = await toggleUnitComplete(unit.id, !unit.isComplete);
+                        const { ok } = await toggleUnitComplete(unit.id, !unit.isComplete);
                         if (ok) refreshUnits();
                       }}
                       title={language === 'ar' ? 'وضع علامة اكتمل' : 'Mark as Complete'}
@@ -540,7 +540,7 @@ export function LearningPathTab({
                     <button
                       onClick={async (e) => {
                         e.stopPropagation();
-                        const ok = await toggleUnitHidden(unit.id, !unit.isHidden);
+                        const { ok } = await toggleUnitHidden(unit.id, !unit.isHidden);
                         if (ok) refreshUnits();
                       }}
                       className={`w-9 h-9 flex items-center justify-center border rounded-xl transition-all shadow-none
@@ -700,7 +700,7 @@ export function LearningPathTab({
                                 <button
                                   onClick={async () => {
                                     setActiveLessonMenuId(null);
-                                    const ok = await toggleLessonHidden(lesson.id, !lesson.isHidden);
+                                    const { ok } = await toggleLessonHidden(lesson.id, !lesson.isHidden);
                                     if (ok) refreshUnits();
                                   }}
                                   className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
@@ -750,7 +750,7 @@ export function LearningPathTab({
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   if (!isStudent) {
-                                    const ok = await toggleLessonComplete(lesson.id, !lesson.isTopicComplete);
+                                    const { ok } = await toggleLessonComplete(lesson.id, !lesson.isTopicComplete);
                                     if (ok) refreshUnits();
                                   } else if ((lesson.id === 'math-quiz' || lesson.id === 'phys-lab')) {
                                     onAssessmentClick(lesson.id);
@@ -847,7 +847,7 @@ export function LearningPathTab({
                           <button
                             onClick={async (e) => {
                               e.stopPropagation();
-                              const ok = await toggleLessonComplete(lesson.id, !lesson.isTopicComplete);
+                              const { ok } = await toggleLessonComplete(lesson.id, !lesson.isTopicComplete);
                               if (ok) refreshUnits();
                             }}
                             className={`shrink-0 flex items-center justify-center w-7 h-7 rounded-lg transition-all border ${
@@ -893,7 +893,7 @@ export function LearningPathTab({
                               <button
                                 onClick={async () => {
                                   setActiveLessonMenuId(null);
-                                  const ok = await toggleLessonHidden(lesson.id, !lesson.isHidden);
+                                  const { ok } = await toggleLessonHidden(lesson.id, !lesson.isHidden);
                                   if (ok) refreshUnits();
                                 }}
                                 className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"

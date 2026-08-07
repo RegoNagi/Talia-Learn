@@ -218,7 +218,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   const deleteFolder = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (confirm(isRtl ? 'هل أنت تأكد من حذف هذا المجلد وجميع محتوياته؟' : 'Are you sure you want to delete this folder and its content?')) {
-      const ok = await deleteLibraryFolder(id);
+      const { ok } = await deleteLibraryFolder(id);
       if (ok) refreshLibrary();
     }
   };
@@ -227,7 +227,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
     if (e) e.stopPropagation();
     if (confirm(isRtl ? 'هل أنت تأكد من حذف هذا الملف؟' : 'Are you sure you want to delete this file?')) {
       const file = files.find(f => f.id === id);
-      const ok = await deleteLibraryFile(id, file?.storagePath || null);
+      const { ok } = await deleteLibraryFile(id, file?.storagePath || null);
       if (ok) refreshLibrary();
     }
   };
@@ -242,7 +242,7 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
   const handleSaveShare = async () => {
     if (!shareItem) return;
     const { item, isFolder } = shareItem;
-    const ok = isFolder
+    const { ok } = isFolder
       ? await updateFolderSharing(item.id, selectedTargetLibs, selectedTargetTeachers)
       : await updateFileSharing(item.id, selectedTargetLibs, selectedTargetTeachers);
     if (ok) {
@@ -257,13 +257,13 @@ export function BrowseLibraryTab({ language = 'en', role = 'teacher', teacherId,
 
   const toggleFolderInMaterial = async (folder: LibraryFolder, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const ok = folder.inMaterial ? await removeFolderFromMaterial(folder.id) : await addFolderToMaterial(folder.id);
+    const { ok } = folder.inMaterial ? await removeFolderFromMaterial(folder.id) : await addFolderToMaterial(folder.id);
     if (ok) refreshLibrary();
   };
 
   const toggleFileInMaterial = async (file: LibraryFile, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const ok = file.inMaterial ? await removeFileFromMaterial(file.id) : await addFileToMaterial(file.id);
+    const { ok } = file.inMaterial ? await removeFileFromMaterial(file.id) : await addFileToMaterial(file.id);
     if (ok) refreshLibrary();
   };
 
