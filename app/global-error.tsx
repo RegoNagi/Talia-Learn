@@ -28,8 +28,8 @@ export default function GlobalError({
             textAlign: 'center',
           }}
         >
-          <h1 style={{ fontSize: '24px', marginBottom: '12px' }}>حصل خطأ غير متوقع</h1>
-          <p style={{ color: '#666', marginBottom: '24px' }}>تم تسجيل المشكلة، وبنعمل على حلها.</p>
+          <h1 style={{ fontSize: '24px', marginBottom: '12px' }}>{'حصل خطأ غير متوقع'}</h1>
+          <p style={{ color: '#666', marginBottom: '24px' }}>{'تم تسجيل المشكلة، وبنعمل على حلها.'}</p>
           
             href="/"
             style={{
@@ -40,7 +40,7 @@ export default function GlobalError({
               textDecoration: 'none',
             }}
           >
-            الرجوع للصفحة الرئيسية
+            {'الرجوع للصفحة الرئيسية'}
           </a>
         </div>
       </body>
