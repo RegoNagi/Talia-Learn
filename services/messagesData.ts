@@ -265,17 +265,20 @@ export async function getMyParentContacts(teacherId: string): Promise<MessageCon
   const parentIds = Array.from(new Set(links.map((l: any) => l.parent_id)));
   const { data: parents } = await supabase.from('parents').select('id, users ( name )').in('id', parentIds);
   const studentNameById = new Map(students.map((s) => [s.id, s.name]));
-  return (links || []).map((l: any) => {
-    const parent = (parents || []).find((p: any) => p.id === l.parent_id);
-    if (!parent) return null;
-    return {
+  const parentsById = new Map((parents || []).map((p: any) => [p.id, p]));
+  const result: MessageContact[] = [];
+  for (const l of links as any[]) {
+    const parent = parentsById.get(l.parent_id);
+    if (!parent) continue;
+    result.push({
       id: parent.id,
-      role: 'parent' as const,
+      role: 'parent',
       name: parent.users?.name || 'Parent',
       studentName: studentNameById.get(l.student_id),
       studentId: l.student_id,
-    };
-  }).filter((c): c is MessageContact => c !== null);
+    });
+  }
+  return result;
 }
 
 // جهات اتصال حقيقية: باقي المعلمين في المدرسة (لمراسلة زميل)
