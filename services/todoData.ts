@@ -241,3 +241,14 @@ export async function purgeOldTrash(teacherId: string): Promise<void> {
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   await supabase.from('quick_tasks').delete().eq('teacher_id', teacherId).not('deleted_at', 'is', null).lt('deleted_at', cutoff);
 }
+// تفضية عامة يوميّة — بتمسح سلة كل المعلمين مرة واحدة، للـ cron job (مش مربوطة بمعلم معيّن)
+export async function purgeAllOldTrash(): Promise<{ ok: boolean; deletedCount: number; error: string | null }> {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('quick_tasks')
+    .delete()
+    .not('deleted_at', 'is', null)
+    .lt('deleted_at', cutoff)
+    .select('id');
+  return { ok: !error, deletedCount: data?.length || 0, error: error?.message || null };
+}
