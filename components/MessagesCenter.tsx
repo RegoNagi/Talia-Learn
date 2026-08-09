@@ -1,47 +1,20 @@
 'use client';
 
 import React, { useState, useRef, useEffect, startTransition } from 'react';
-import Image from 'next/image';
-import { Search, Send, Zap, ChevronDown, Check, FileText, CheckCircle2 } from 'lucide-react';
+import { Search, Send, Zap, ChevronDown, Check, CheckCircle2, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getMyMessages, markMessageAsRead, AppMessage } from '@/services/messagesData';
-
-interface ChatContact {
-  id: string;
-  nameEn: string;
-  nameAr: string;
-  role: 'student' | 'parent' | 'teacher';
-  avatar: string;
-  previewAr: string;
-  previewEn: string;
-  timeAr: string;
-  timeEn: string;
-  unread: boolean;
-  online: boolean;
-  academicId: string;
-  className?: string;        // for students
-  path?: 'standard' | 'empowerment' | 'excellence'; // for students
-  studentNameAr?: string;    // for parents
-  studentNameEn?: string;    // for parents
-  departmentAr?: string;     // for teachers
-  departmentEn?: string;     // for teachers
-}
-
-const MOCK_CHATS: ChatContact[] = [
-  { id: '1', nameAr: 'أحمد علي', nameEn: 'Ahmed Ali', role: 'student', academicId: 'STD-1001', className: '10-A', path: 'empowerment', previewAr: 'شكراً جزيلاً لك', previewEn: 'Thank you very much', timeAr: '10:30 ص', timeEn: '10:30 AM', unread: true, online: true, avatar: 'https://picsum.photos/seed/ahmad/100' },
-  { id: '2', nameAr: 'فاطمة محمد', nameEn: 'Fatima Mohammed', role: 'parent', academicId: 'PRT-2001', studentNameAr: 'يوسف العلي', studentNameEn: 'Yousef Al-Ali', previewAr: 'متى موعد اللقاء القادم؟', previewEn: 'When is the next meeting?', timeAr: 'أمس', timeEn: 'Yesterday', unread: false, online: false, avatar: 'https://picsum.photos/seed/fatima/100' },
-  { id: '3', nameAr: 'أ. سارة سعيد', nameEn: 'Sarah Saeed', role: 'teacher', academicId: 'TCH-3001', departmentAr: 'قسم الرياضيات', departmentEn: 'Math Department', previewAr: 'تم إرسال الملفات المطلوبة.', previewEn: 'Required files have been sent.', timeAr: 'الإثنين', timeEn: 'Monday', unread: false, online: true, avatar: 'https://picsum.photos/seed/sarasc/100' },
-  { id: '4', nameAr: 'يوسف محمود', nameEn: 'Yousef Mahmoud', role: 'student', academicId: 'STD-1002', className: '11-B', path: 'excellence', previewAr: 'هل يمكنني مراجعة الاختبار؟', previewEn: 'Can I review the test?', timeAr: 'الأحد', timeEn: 'Sunday', unread: true, online: false, avatar: 'https://picsum.photos/seed/yousef/100' },
-  { id: '5', nameAr: 'خالد زيدان', nameEn: 'Khaled Zaidan', role: 'student', academicId: 'STD-1003', className: '10-A', path: 'standard', previewAr: 'سأرسل الواجب اليوم.', previewEn: 'I will send the homework today.', timeAr: 'الثلاثاء', timeEn: 'Tuesday', unread: false, online: true, avatar: 'https://picsum.photos/seed/khaled/100' },
-  { id: '6', nameAr: 'محمد حسن (ولي أمر)', nameEn: 'Mohammed Hassan (Parent)', role: 'parent', academicId: 'PRT-2002', studentNameAr: 'لينة حسن', studentNameEn: 'Leena Hassan', previewAr: 'شكراً لاهتمامكم', previewEn: 'thanks for your care', timeAr: 'الأربعاء', timeEn: 'Wednesday', unread: false, online: true, avatar: 'https://picsum.photos/seed/mhassan/100' },
-  { id: '7', nameAr: 'أ. عمر الخالدي', nameEn: 'Omar Al-Khalidi', role: 'teacher', academicId: 'TCH-3002', departmentAr: 'الإدارة', departmentEn: 'Administration', previewAr: 'اجتماع القسم غداً.', previewEn: 'Department meeting tomorrow.', timeAr: 'الخميس', timeEn: 'Thursday', unread: true, online: false, avatar: 'https://picsum.photos/seed/omar/100' },
-];
-
-const MOCK_MESSAGES = [
-  { id: 'm1', senderId: '1', textAr: 'السلام عليكم أستاذ، بخصوص الواجب الأخير، هل يمكنني تسليمه غداً؟', textEn: 'Hello teacher, regarding the last assignment, can I submit it tomorrow?', timeAr: '10:15 ص', timeEn: '10:15 AM', isMine: false },
-  { id: 'm2', senderId: 'me', textAr: 'وعليكم السلام. لا بأس، يمكنك تسليمه غداً قبل نهاية اليوم الدراسي.', textEn: 'Hello. It is fine, you can submit it tomorrow before the end of the school day.', timeAr: '10:20 ص', timeEn: '10:20 AM', isMine: true },
-  { id: 'm3', senderId: '1', textAr: 'شكراً جزيلاً لك', textEn: 'Thank you very much', timeAr: '10:30 ص', timeEn: '10:30 AM', isMine: false }
-];
+import {
+  getMyMessages,
+  markMessageAsRead,
+  getConversation,
+  sendMessage,
+  sendMessageToStudentParent,
+  getMyStudentContacts,
+  getMyParentContacts,
+  getAllTeacherContacts,
+  AppMessage,
+  MessageContact,
+} from '@/services/messagesData';
 
 const CANNED_RESPONSES = {
   ar: [
@@ -115,18 +88,22 @@ function FilterDropdown({ options, value, onChange, placeholder }: { options: {i
 export function MessagesCenter({ language = 'ar', authUser }: { language?: 'ar' | 'en'; authUser?: any }) {
   const isRtl = language === 'ar';
 
+  const myId = authUser?.parentId || authUser?.studentId || authUser?.teacherId;
+  const myRole = authUser?.role;
+  const myName = authUser?.name || '';
+  const isTeacher = myRole === 'teacher';
+
+  // === صندوق "إشعارات من المعلمين" — كان موجود من قبل وحقيقي بالفعل، سايبينه زي ما هو ===
   const [realMessages, setRealMessages] = useState<AppMessage[]>([]);
   const [isLoadingReal, setIsLoadingReal] = useState(true);
-  const recipientId = authUser?.parentId || authUser?.studentId || authUser?.teacherId;
-  const recipientRole = authUser?.role;
 
   useEffect(() => {
-    if (!recipientId || !recipientRole) { startTransition(() => setIsLoadingReal(false)); return; }
-    getMyMessages(recipientId, recipientRole).then((msgs) => {
+    if (!myId || !myRole) { startTransition(() => setIsLoadingReal(false)); return; }
+    getMyMessages(myId, myRole).then((msgs) => {
       setRealMessages(msgs);
       setIsLoadingReal(false);
     });
-  }, [recipientId, recipientRole]);
+  }, [myId, myRole]);
 
   const handleOpenRealMessage = async (msg: AppMessage) => {
     if (!msg.isRead) {
@@ -134,94 +111,152 @@ export function MessagesCenter({ language = 'ar', authUser }: { language?: 'ar' 
       setRealMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, isRead: true } : m)));
     }
   };
-  
+
+  // === مركز المحادثات الحقيقي — بيبان بس للمعلم (نفس الأدوار الثلاثة اللي كانت في التصميم الأصلي) ===
   const [activeTab, setActiveTab] = useState<'student' | 'parent' | 'teacher'>('student');
-  const [activeChatId, setActiveChatId] = useState<string>('1');
-  const [messageInput, setMessageInput] = useState('');
-  const [messages, setMessages] = useState(MOCK_MESSAGES);
-  
-  // Sub-filters
+  const [studentContacts, setStudentContacts] = useState<MessageContact[]>([]);
+  const [parentContacts, setParentContacts] = useState<MessageContact[]>([]);
+  const [teacherContacts, setTeacherContacts] = useState<MessageContact[]>([]);
+  const [isLoadingContacts, setIsLoadingContacts] = useState(true);
+
+  useEffect(() => {
+    if (!isTeacher || !authUser?.teacherId) { startTransition(() => setIsLoadingContacts(false)); return; }
+    startTransition(() => setIsLoadingContacts(true));
+    Promise.all([
+      getMyStudentContacts(authUser.teacherId),
+      getMyParentContacts(authUser.teacherId),
+      getAllTeacherContacts(authUser.teacherId),
+    ]).then(([students, parents, teachers]) => {
+      setStudentContacts(students);
+      setParentContacts(parents);
+      setTeacherContacts(teachers);
+      setIsLoadingContacts(false);
+    });
+  }, [isTeacher, authUser?.teacherId]);
+
+  const contactsForTab = activeTab === 'student' ? studentContacts : activeTab === 'parent' ? parentContacts : teacherContacts;
+
   const [classFilter, setClassFilter] = useState('all');
   const [parentSearch, setParentSearch] = useState('');
-  const [deptFilter, setDeptFilter] = useState('all');
+  const classOptions = Array.from(new Set(studentContacts.map((c) => c.className).filter((c): c is string => !!c))).map((c) => ({ id: c, label: c }));
 
-  const filteredChats = MOCK_CHATS.filter(c => {
-    if (c.role !== activeTab) return false;
-    
+  const filteredContacts = contactsForTab.filter((c) => {
     if (activeTab === 'student' && classFilter !== 'all' && c.className !== classFilter) return false;
     if (activeTab === 'parent' && parentSearch) {
-      const studentName = isRtl ? c.studentNameAr : c.studentNameEn;
-      if (!studentName?.toLowerCase().includes(parentSearch.toLowerCase())) return false;
+      if (!c.studentName?.toLowerCase().includes(parentSearch.toLowerCase())) return false;
     }
-    if (activeTab === 'teacher' && deptFilter !== 'all') {
-      const dept = isRtl ? c.departmentAr : c.departmentEn;
-      if (dept !== deptFilter) return false;
-    }
-    
     return true;
   });
 
-  const activeChat = MOCK_CHATS.find(c => c.id === activeChatId) || filteredChats[0] || MOCK_CHATS[0];
+  const [activeContactId, setActiveContactId] = useState<string | null>(null);
+  useEffect(() => {
+    if (filteredContacts.length > 0 && !filteredContacts.find((c) => c.id === activeContactId)) {
+      startTransition(() => setActiveContactId(filteredContacts[0].id));
+    }
+  }, [filteredContacts, activeContactId]);
 
-  const handleSendMessage = (e?: React.FormEvent) => {
+  const activeContact = filteredContacts.find((c) => c.id === activeContactId) || filteredContacts[0] || null;
+
+  const [conversation, setConversation] = useState<AppMessage[]>([]);
+  const [isLoadingConversation, setIsLoadingConversation] = useState(false);
+
+  const refreshConversation = () => {
+    if (!myId || !myRole || !activeContact) { setConversation([]); return; }
+    startTransition(() => setIsLoadingConversation(true));
+    getConversation(myId, myRole, activeContact.id, activeContact.role).then((msgs) => {
+      setConversation(msgs);
+      setIsLoadingConversation(false);
+    });
+  };
+
+  useEffect(() => {
+    startTransition(() => { refreshConversation(); });
+  }, [myId, myRole, activeContact?.id, activeContact?.role]);
+
+  const [messageInput, setMessageInput] = useState('');
+  const [alsoSendEmail, setAlsoSendEmail] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [sendError, setSendError] = useState('');
+
+  const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!messageInput.trim()) return;
-    
-    setMessages([...messages, {
-      id: Date.now().toString(),
-      senderId: 'me',
-      textAr: messageInput,
-      textEn: messageInput,
-      timeAr: 'الآن',
-      timeEn: 'Now',
-      isMine: true
-    }]);
-    setMessageInput('');
+    if (!messageInput.trim() || !activeContact || !myId || !myRole) return;
+    setIsSending(true);
+    setSendError('');
+
+    const result = activeContact.role === 'parent'
+      ? await sendMessageToStudentParent({
+          senderId: myId,
+          senderRole: myRole,
+          senderName: myName,
+          studentId: activeContact.studentId || activeContact.id,
+          content: messageInput,
+          sendEmailCopy: alsoSendEmail,
+        })
+      : await sendMessage({
+          senderId: myId,
+          senderRole: myRole,
+          senderName: myName,
+          recipientId: activeContact.id,
+          recipientRole: activeContact.role,
+          content: messageInput,
+          sendEmailCopy: alsoSendEmail,
+        });
+
+    setIsSending(false);
+    if (result.ok) {
+      setMessageInput('');
+      refreshConversation();
+    } else {
+      setSendError(result.error || (isRtl ? 'حصل خطأ أثناء الإرسال' : 'An error occurred while sending'));
+    }
   };
 
   const handleCannedResponse = (text: string) => {
     setMessageInput(prev => prev ? `${prev} ${text}` : text);
   };
 
-  const getPathBadge = (path?: string) => {
-    if (!path) return null;
-    if (path === 'empowerment') {
-      return (
-        <span className="inline-block px-3 py-1 text-xs font-bold rounded-lg bg-orange-50 text-orange-600 border border-orange-100">
-          {isRtl ? 'مسار التمكين' : 'Empowerment Path'}
-        </span>
-      );
-    }
-    if (path === 'excellence') {
-      return (
-        <span className="inline-block px-3 py-1 text-xs font-bold rounded-lg bg-green-50 text-green-600 border border-green-100">
-          {isRtl ? 'مسار التميز' : 'Excellence Path'}
-        </span>
-      );
-    }
-    return (
-      <span className="inline-block px-3 py-1 text-xs font-bold rounded-lg bg-gray-50 text-gray-600 border border-gray-100">
-        {isRtl ? 'المسار الأساسي' : 'Standard Path'}
-      </span>
-    );
-  };
-
-  const classOptions = [
-    { id: '10-A', label: isRtl ? 'الصف 10-أ' : 'Class 10-A' },
-    { id: '10-B', label: isRtl ? 'الصف 10-ب' : 'Class 10-B' },
-    { id: '11-B', label: isRtl ? 'الصف 11-ب' : 'Class 11-B' },
-  ];
-
-  const deptOptions = [
-    { id: isRtl ? 'قسم الرياضيات' : 'Math Department', label: isRtl ? 'قسم الرياضيات' : 'Math Dept' },
-    { id: isRtl ? 'الإدارة' : 'Administration', label: isRtl ? 'الإدارة' : 'Administration' },
-  ];
-
   const cannedList = CANNED_RESPONSES[isRtl ? 'ar' : 'en'];
+
+  if (!isTeacher) {
+    // الطلاب وأولياء الأمور بيشوفوا صندوق الإشعارات بس دلوقتي — مركز المحادثات الكامل مخصوص للمعلم
+    return (
+      <div className="space-y-4">
+        {myId && (
+          <div className="bg-white border border-gray-100 rounded-2xl p-4" dir={isRtl ? 'rtl' : 'ltr'}>
+            <h3 className="text-sm font-bold text-gray-800 mb-3">{isRtl ? 'إشعارات من المعلمين' : 'Notifications from Teachers'}</h3>
+            {isLoadingReal ? (
+              <p className="text-xs text-gray-400">{isRtl ? 'جاري التحميل...' : 'Loading...'}</p>
+            ) : realMessages.length === 0 ? (
+              <p className="text-xs text-gray-400">{isRtl ? 'مفيش رسائل لسه.' : 'No messages yet.'}</p>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {realMessages.map((msg) => (
+                  <button
+                    key={msg.id}
+                    onClick={() => handleOpenRealMessage(msg)}
+                    className={`w-full text-left p-3 rounded-xl border transition-colors ${msg.isRead ? 'border-gray-100 bg-gray-50/50' : 'border-orange-200 bg-orange-50'}`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-gray-800">{msg.senderName}</span>
+                      <span className="text-[10px] text-gray-400">{new Date(msg.createdAt).toLocaleString()}</span>
+                    </div>
+                    {msg.subject && <p className="text-xs font-semibold text-gray-600 mb-0.5">{msg.subject}</p>}
+                    <p className="text-xs text-gray-600">{msg.content}</p>
+                    {!msg.isRead && <span className="inline-block mt-1 text-[9px] font-bold text-orange-600 uppercase">{isRtl ? 'جديد' : 'New'}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      {recipientId && (
+      {myId && (
         <div className="bg-white border border-gray-100 rounded-2xl p-4" dir={isRtl ? 'rtl' : 'ltr'}>
           <h3 className="text-sm font-bold text-gray-800 mb-3">{isRtl ? 'إشعارات من المعلمين' : 'Notifications from Teachers'}</h3>
           {isLoadingReal ? (
@@ -251,12 +286,11 @@ export function MessagesCenter({ language = 'ar', authUser }: { language?: 'ar' 
       )}
     <div className="h-[calc(100vh-140px)] w-full bg-white border border-gray-100 flex overflow-hidden rounded-2xl shadow-none" dir={isRtl ? 'rtl' : 'ltr'}>
       
-      {/* Column 1: Advanced Directory & Chat List (30%) */}
+      {/* Column 1: Directory & Chat List */}
       <div className="w-[30%] min-w-[320px] flex flex-col bg-white border-e border-gray-100 z-10 shrink-0">
         <div className="p-4 border-b border-gray-100 shadow-none flex flex-col gap-4">
           <h2 className="text-xl font-bold text-gray-800">{isRtl ? 'الرسائل' : 'Messages'}</h2>
           
-          {/* Primary Role Tabs */}
           <div className="flex bg-gray-50 p-1 rounded-xl border border-gray-100">
             <button 
               onClick={() => { setActiveTab('student'); setClassFilter('all'); }}
@@ -271,14 +305,13 @@ export function MessagesCenter({ language = 'ar', authUser }: { language?: 'ar' 
               {isRtl ? 'أولياء الأمور' : 'Parents'}
             </button>
             <button 
-              onClick={() => { setActiveTab('teacher'); setDeptFilter('all'); }}
+              onClick={() => { setActiveTab('teacher'); }}
               className={`flex-1 py-1.5 rounded-lg text-xs font-bold text-center transition-colors shadow-none ${activeTab === 'teacher' ? 'bg-white text-orange-600 border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
             >
               {isRtl ? 'المعلمين' : 'Teachers'}
             </button>
           </div>
 
-          {/* Dynamic Sub-Filters */}
           <div className="w-full">
             {activeTab === 'student' && (
                <FilterDropdown 
@@ -302,104 +335,86 @@ export function MessagesCenter({ language = 'ar', authUser }: { language?: 'ar' 
                  />
                </div>
             )}
-            {activeTab === 'teacher' && (
-               <FilterDropdown 
-                 options={deptOptions} 
-                 value={deptFilter} 
-                 onChange={setDeptFilter} 
-                 placeholder={isRtl ? 'فلترة بالقسم' : 'Filter by Dept'} 
-               />
-            )}
           </div>
         </div>
 
         {/* Chat List */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
-          {filteredChats.map((chat) => (
+          {isLoadingContacts ? (
+            <div className="text-center p-6 text-gray-400 text-sm">{isRtl ? 'جاري التحميل...' : 'Loading...'}</div>
+          ) : filteredContacts.map((contact) => (
             <button 
-              key={chat.id}
-              onClick={() => setActiveChatId(chat.id)}
-              className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all shadow-none text-start border-s-4 ${activeChatId === chat.id ? 'bg-orange-50 border-orange-500' : 'bg-white hover:bg-gray-50 border-transparent'}`}
+              key={contact.id}
+              onClick={() => setActiveContactId(contact.id)}
+              className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all shadow-none text-start border-s-4 ${activeContactId === contact.id ? 'bg-orange-50 border-orange-500' : 'bg-white hover:bg-gray-50 border-transparent'}`}
             >
-              <div className="relative shrink-0">
-                <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-100 shadow-none">
-                  <Image src={chat.avatar} alt={chat.nameEn} fill className="object-cover rounded-full" />
-                </div>
-                {chat.online && (
-                  <span className="absolute bottom-0 end-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></span>
-                )}
+              <div className="w-12 h-12 rounded-full bg-orange-100 text-orange-700 font-bold flex items-center justify-center shrink-0 text-lg">
+                {contact.name?.charAt(0) || '?'}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-baseline mb-1">
-                  <h3 className={`font-bold text-sm truncate ${activeChatId === chat.id ? 'text-orange-900' : 'text-gray-800'}`}>{isRtl ? chat.nameAr : chat.nameEn}</h3>
-                  <span className={`text-[10px] shrink-0 font-medium ${chat.unread ? 'text-orange-600' : 'text-gray-400'}`}>{isRtl ? chat.timeAr : chat.timeEn}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <p className={`text-xs truncate ${chat.unread ? 'text-gray-800 font-bold' : 'text-gray-500'}`}>
-                    {isRtl ? chat.previewAr : chat.previewEn}
-                  </p>
-                  {chat.unread && (
-                    <span className="w-2 h-2 bg-orange-500 rounded-full shrink-0 ms-2"></span>
-                  )}
-                </div>
+                <h3 className={`font-bold text-sm truncate ${activeContactId === contact.id ? 'text-orange-900' : 'text-gray-800'}`}>{contact.name}</h3>
+                <p className="text-xs truncate text-gray-500">
+                  {contact.role === 'student' && contact.className}
+                  {contact.role === 'parent' && (isRtl ? `ولي أمر: ${contact.studentName}` : `Parent of: ${contact.studentName}`)}
+                  {contact.role === 'teacher' && (isRtl ? 'معلم' : 'Teacher')}
+                </p>
               </div>
             </button>
           ))}
-          {filteredChats.length === 0 && (
+          {!isLoadingContacts && filteredContacts.length === 0 && (
             <div className="text-center p-6 text-gray-400 text-sm">
-              {isRtl ? 'لا توجد رسائل مطابقة.' : 'No matching chats.'}
+              {isRtl ? 'لا توجد جهات اتصال مطابقة.' : 'No matching contacts.'}
             </div>
           )}
         </div>
       </div>
 
-      {/* Column 2: Active Chat & Canned Responses (45%) */}
-      <div className="w-[45%] flex flex-col bg-slate-50/20 shrink-0 border-e border-gray-100">
+      {/* Column 2: Active Conversation */}
+      <div className="flex-1 flex flex-col bg-slate-50/20 shrink-0">
         
-        {/* Chat Header (Sticky Top) */}
+        {activeContact ? (
+        <>
         <div className="h-16 border-b border-gray-100 flex items-center justify-between px-6 shrink-0 bg-white sticky top-0 z-10 shadow-none">
           <div className="flex items-center gap-4">
-             <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-100 relative shadow-none">
-               <Image src={activeChat.avatar} alt={activeChat.nameEn} fill className="object-cover rounded-full" />
+             <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-700 font-bold flex items-center justify-center shrink-0">
+               {activeContact.name?.charAt(0) || '?'}
              </div>
              <div>
-               <h3 className="font-bold text-gray-800 text-sm leading-tight">{isRtl ? activeChat.nameAr : activeChat.nameEn}</h3>
+               <h3 className="font-bold text-gray-800 text-sm leading-tight">{activeContact.name}</h3>
                <p className="text-xs text-gray-500 mt-0.5">
-                 {activeChat.role === 'student' ? (isRtl ? `طالب • ${activeChat.className}` : `Student • ${activeChat.className}`)
-                 : activeChat.role === 'parent' ? (isRtl ? `ولي أمر الطالب: ${activeChat.studentNameAr}` : `Parent of: ${activeChat.studentNameEn}`)
-                 : (isRtl ? `معلم • ${activeChat.departmentAr}` : `Teacher • ${activeChat.departmentEn}`)}
+                 {activeContact.role === 'student' ? (isRtl ? `طالب • ${activeContact.className || ''}` : `Student • ${activeContact.className || ''}`)
+                 : activeContact.role === 'parent' ? (isRtl ? `ولي أمر الطالب: ${activeContact.studentName}` : `Parent of: ${activeContact.studentName}`)
+                 : (isRtl ? 'معلم' : 'Teacher')}
                </p>
              </div>
           </div>
         </div>
 
-        {/* Message Stream */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
-          <div className="flex justify-center">
-            <span className="text-[10px] font-bold text-gray-400 bg-white px-3 py-1 rounded-full border border-gray-100">
-              {isRtl ? 'اليوم' : 'Today'}
-            </span>
-          </div>
-          
-          {messages.map((msg) => (
-            <div key={msg.id} className={`flex flex-col max-w-[80%] ${msg.isMine ? 'ms-auto items-end' : 'me-auto items-start'}`}>
-               <div className={`px-4 py-3 shadow-none ${msg.isMine 
-                  ? 'bg-orange-500 text-white rounded-2xl rounded-ee-none' 
-                  : 'bg-white border border-gray-100 text-gray-700 rounded-2xl rounded-es-none'
-               }`}>
-                 <p className="text-sm leading-relaxed">{isRtl ? msg.textAr : msg.textEn}</p>
-               </div>
-               <div className="flex items-center gap-1 mt-1 text-gray-400">
-                 <span className="text-[10px] font-medium">{isRtl ? msg.timeAr : msg.timeEn}</span>
-                 {msg.isMine && <CheckCircle2 size={12} className="text-orange-400" />}
-               </div>
-            </div>
-          ))}
+          {isLoadingConversation ? (
+            <p className="text-center text-xs text-gray-400">{isRtl ? 'جاري التحميل...' : 'Loading...'}</p>
+          ) : conversation.length === 0 ? (
+            <p className="text-center text-xs text-gray-400">{isRtl ? 'لسه مفيش رسائل في المحادثة دي.' : 'No messages in this conversation yet.'}</p>
+          ) : conversation.map((msg) => {
+            const isMine = msg.senderId === myId && msg.senderRole === myRole;
+            return (
+              <div key={msg.id} className={`flex flex-col max-w-[80%] ${isMine ? 'ms-auto items-end' : 'me-auto items-start'}`}>
+                 <div className={`px-4 py-3 shadow-none ${isMine 
+                    ? 'bg-orange-500 text-white rounded-2xl rounded-ee-none' 
+                    : 'bg-white border border-gray-100 text-gray-700 rounded-2xl rounded-es-none'
+                 }`}>
+                   <p className="text-sm leading-relaxed">{msg.content}</p>
+                 </div>
+                 <div className="flex items-center gap-1 mt-1 text-gray-400">
+                   <span className="text-[10px] font-medium">{new Date(msg.createdAt).toLocaleString()}</span>
+                   {isMine && <CheckCircle2 size={12} className="text-orange-400" />}
+                 </div>
+              </div>
+            );
+          })}
         </div>
 
-        {/* Sticky Input Area */}
         <div className="bg-white border-t border-gray-100 sticky bottom-0 z-10 flex flex-col shadow-none">
-          {/* Canned Responses */}
           <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto scrollbar-hide border-b border-gray-50">
             {cannedList.map((canned, idx) => (
               <button 
@@ -412,6 +427,8 @@ export function MessagesCenter({ language = 'ar', authUser }: { language?: 'ar' 
               </button>
             ))}
           </div>
+
+          {sendError && <p className="px-4 pt-2 text-xs font-bold text-rose-600">{sendError}</p>}
 
           <form onSubmit={handleSendMessage} className="flex flex-col p-3 gap-2">
             <textarea 
@@ -426,40 +443,34 @@ export function MessagesCenter({ language = 'ar', authUser }: { language?: 'ar' 
                 }
               }}
             />
-            <div className="flex justify-end px-2">
+            <div className="flex justify-between items-center px-2">
+              <label className="flex items-center gap-2 text-xs font-bold text-gray-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={alsoSendEmail}
+                  onChange={(e) => setAlsoSendEmail(e.target.checked)}
+                  className="w-4 h-4 accent-orange-500"
+                />
+                <Mail size={14} className="text-gray-400" />
+                {isRtl ? 'ابعت كمان نسخة إيميل' : 'Also send an email copy'}
+              </label>
               <button 
                 type="submit" 
-                disabled={!messageInput.trim()} 
-                className={`flex items-center justify-center p-2 rounded-xl transition-all shadow-none ${messageInput.trim() ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-gray-100 text-gray-400'}`}
+                disabled={!messageInput.trim() || isSending} 
+                className={`flex items-center justify-center p-2 rounded-xl transition-all shadow-none ${messageInput.trim() && !isSending ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-gray-100 text-gray-400'}`}
               >
                 <Send size={18} className={isRtl ? 'rotate-180' : ''} />
               </button>
             </div>
           </form>
         </div>
+        </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-sm text-gray-400">
+            {isRtl ? 'اختار جهة اتصال عشان تبدأ محادثة' : 'Select a contact to start a conversation'}
+          </div>
+        )}
 
-      </div>
-
-      {/* Column 3: Participant Intelligence (25%) */}
-      <div className="flex-1 min-w-[200px] flex flex-col bg-white border-s border-gray-100 py-10 px-6 shrink-0 relative shadow-none">
-         <div className="flex flex-col items-center text-center">
-            <div className="w-28 h-28 rounded-full overflow-hidden border border-gray-100 mb-5 shadow-none relative">
-               <Image src={activeChat.avatar} alt={activeChat.nameEn} fill className="object-cover rounded-full" />
-            </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-1 leading-tight">{isRtl ? activeChat.nameAr : activeChat.nameEn}</h3>
-            <p className="text-sm text-gray-500 font-mono mb-6">{activeChat.academicId}</p>
-
-            {activeChat.role === 'student' && (
-              <div className="w-full mb-6 flex justify-center">
-                {getPathBadge(activeChat.path)}
-              </div>
-            )}
-
-            <button className="w-full py-3 rounded-xl border border-gray-200 text-gray-700 text-sm font-bold hover:bg-gray-50 transition-colors shadow-none flex items-center justify-center gap-2">
-              <FileText size={16} className="text-gray-400" />
-              {isRtl ? 'فتح السجل الشامل' : 'Open Full Record'}
-            </button>
-         </div>
       </div>
 
     </div>
