@@ -151,7 +151,7 @@ export function MessagesCenter({ language = 'ar', authUser }: { language?: 'ar' 
   const [activeContactId, setActiveContactId] = useState<string | null>(null);
   useEffect(() => {
     if (filteredContacts.length > 0 && !filteredContacts.find((c) => c.id === activeContactId)) {
-      setActiveContactId(filteredContacts[0].id);
+      startTransition(() => setActiveContactId(filteredContacts[0].id));
     }
   }, [filteredContacts, activeContactId]);
 
@@ -170,7 +170,7 @@ export function MessagesCenter({ language = 'ar', authUser }: { language?: 'ar' 
   };
 
   useEffect(() => {
-    refreshConversation();
+    startTransition(() => { refreshConversation(); });
   }, [myId, myRole, activeContact?.id, activeContact?.role]);
 
   const [messageInput, setMessageInput] = useState('');
