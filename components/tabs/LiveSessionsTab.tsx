@@ -4,6 +4,7 @@ import { useState, useEffect, startTransition } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import Image from 'next/image';
 import { getLiveSessions, createLiveSession, updateLiveSession, deleteLiveSession, RealLiveSession } from '@/services/liveSessionsData';
+import { supabase } from '@/lib/supabaseClient';
 import { broadcastMessageToClass, getClassAnnouncementsForStudent, AppMessage } from '@/services/messagesData';
 import { getClassRoster } from '@/services/assignmentData';
 import { Video, Calendar, Users, Play, Sparkles, Users2, MoreVertical, MessageSquare, Clock, ChevronRight, Radio, X, FileText, Download, BarChart3, PieChart, CalendarPlus, Trash2, UploadCloud, CheckCircle2, AlertCircle, Search, Filter, Book, Edit } from 'lucide-react';
@@ -61,6 +62,26 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
 
   useEffect(() => {
     startTransition(() => { refresh(); });
+  }, [classId, subject]);
+
+  // Realtime: أي جلسة جديدة أو تعديل عليها يظهر فورًا من غير refresh يدوي
+  useEffect(() => {
+    if (!classId || !subject) return;
+    const channel = supabase
+      .channel(`live-sessions-${classId}-${subject}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'live_sessions', filter: `class_id=eq.${classId}` },
+        (payload: any) => {
+          const row = payload.new || payload.old;
+          if (row?.subject && row.subject !== subject) return;
+          refresh();
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [classId, subject]);
 
   const now = new Date();
@@ -268,6 +289,9 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
                       View Reports
                     </button>
                   )}
+                </div>
+              </div>
+              )}
                 </div>
               </div>
 
@@ -651,7 +675,7 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
                             {isPast ? (
                               <span className="text-slate-300 text-sm font-medium">—</span>
                             ) : (
-                              <a
+                              
                                 href={s.joinUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
