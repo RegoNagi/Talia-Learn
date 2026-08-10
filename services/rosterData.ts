@@ -68,3 +68,17 @@ export async function getTodayAbsentStudentIds(studentIds: string[]): Promise<Se
   });
   return absent;
 }
+export async function getRecentNotesForStudents(studentIds: string[]): Promise<Record<string, string>> {
+  if (studentIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from('student_notes')
+    .select('student_id, text, created_at')
+    .in('student_id', studentIds)
+    .order('created_at', { ascending: false });
+  if (error || !data) return {};
+  const recentByStudent: Record<string, string> = {};
+  (data as any[]).forEach((row) => {
+    if (!recentByStudent[row.student_id]) recentByStudent[row.student_id] = row.text;
+  });
+  return recentByStudent;
+}
