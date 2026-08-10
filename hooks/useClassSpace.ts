@@ -14,6 +14,7 @@ import {
 
 import { getRealPosts, createRealPost, reactToRealPost, addRealComment, getRealHomeworkItems, createRealHomeworkItem, getRealQuizItems, getRealResourceItems } from '@/services/classSpaceData';
 import { getLiveSessions as getRealLiveSessionsRaw } from '@/services/liveSessionsData';
+import { supabase } from '@/lib/supabaseClient';
 
 export function useClassSpace(scope?: { authUser?: any; userRole?: 'teacher' | 'student' | 'parent' | 'qb_supervisor'; classId?: string; subject?: string; grade?: string; className?: string }) {
   const [filters, setFilters] = useState<ClassSpaceFilterState>({
@@ -166,6 +167,26 @@ export function useClassSpace(scope?: { authUser?: any; userRole?: 'teacher' | '
     fetchHomework();
     fetchQuizzes();
   }, [fetchPosts, fetchLiveSessions, fetchHomework, fetchQuizzes]);
+
+  // Realtime: أي تحديث على الجلسات المباشرة لنفس الفصل/المادة يحدّث تلقائي
+  useEffect(() => {
+    if (!scope?.classId || !scope?.subject) return;
+    const channel = supabase
+      .channel(`class-space-live-sessions-${scope.classId}-${scope.subject}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'live_sessions', filter: `class_id=eq.${scope.classId}` },
+        (payload: any) => {
+          const row = payload.new || payload.old;
+          if (row?.subject && row.subject !== scope.subject) return;
+          fetchLiveSessions();
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [scope?.classId, scope?.subject, fetchLiveSessions]);
 
   useEffect(() => {
     fetchResources();
