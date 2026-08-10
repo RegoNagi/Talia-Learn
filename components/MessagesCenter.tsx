@@ -15,6 +15,7 @@ import {
   AppMessage,
   MessageContact,
 } from '@/services/messagesData';
+import { supabase } from '@/lib/supabaseClient';
 
 const CANNED_RESPONSES = {
   ar: [
