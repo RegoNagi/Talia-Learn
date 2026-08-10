@@ -60,8 +60,8 @@ export async function getTodayAttendanceSummary(sections: LearnClassSection[]): 
   let present = 0;
   let total = 0;
   const absentStudentIds: string[] = [];
-  for (const sec of sections) {
-    const byPeriod = await getAttendanceForDate(sec.id, today);
+  const allByPeriod = await Promise.all(sections.map((sec) => getAttendanceForDate(sec.id, today)));
+  allByPeriod.forEach((byPeriod) => {
     Object.values(byPeriod).forEach((statuses) => {
       Object.entries(statuses).forEach(([studentId, status]) => {
         total++;
@@ -69,40 +69,44 @@ export async function getTodayAttendanceSummary(sections: LearnClassSection[]): 
         else if (status === 'absent') absentStudentIds.push(studentId);
       });
     });
-  }
+  });
   return { present, total, absentStudentIds };
 }
 
 // بيجيب ملخص التصحيح المطلوب (واجبات + كويزات) عبر كل فصول المعلم والمواد
 export async function getGradingSummaries(sections: LearnClassSection[], subjects: string[], teacherId: string): Promise<{ assignments: GradingSummary[]; quizzes: GradingSummary[] }> {
-  const assignments: GradingSummary[] = [];
-  const quizzes: GradingSummary[] = [];
+  const combos = sections.flatMap((sec) => subjects.map((subject) => ({ sec, subject })));
 
-  for (const sec of sections) {
-    for (const subject of subjects) {
-      const scope = { teacherId, classId: sec.id, subject };
-      const [assList, quizList] = await Promise.all([getAssignments(scope), getQuizzes(scope)]);
+  const perCombo = await Promise.all(combos.map(async ({ sec, subject }) => {
+    const scope = { teacherId, classId: sec.id, subject };
+    const [assList, quizList] = await Promise.all([getAssignments(scope), getQuizzes(scope)]);
 
-      for (const a of assList) {
-        if (a.status !== 'Active') continue;
+    const activeAssignments = assList.filter((a) => a.status === 'Active');
+    const activeQuizzes = quizList.filter((q) => q.status === 'Active');
+
+    const [assignmentResults, quizResults] = await Promise.all([
+      Promise.all(activeAssignments.map(async (a) => {
         const subs = await getSubmissionsForAssignment(a.id, sec.id);
         const submitted = subs.filter((s) => s.submittedAt);
         const toGrade = submitted.filter((s) => s.grade === null).length;
-        if (toGrade > 0) {
-          assignments.push({ toGrade, totalSubmissions: submitted.length, className: sec.name, title: a.title, assessmentId: a.id, type: 'assignment' });
-        }
-      }
-
-      for (const q of quizList) {
-        if (q.status !== 'Active') continue;
+        return toGrade > 0 ? { toGrade, totalSubmissions: submitted.length, className: sec.name, title: a.title, assessmentId: a.id, type: 'assignment' as const } : null;
+      })),
+      Promise.all(activeQuizzes.map(async (q) => {
         const attempts = await getQuizAttemptsForQuiz(q.id, sec.id);
         const needsReview = attempts.filter((at: any) => at.needsManualReview && at.status === 'submitted');
-        if (needsReview.length > 0) {
-          quizzes.push({ toGrade: needsReview.length, totalSubmissions: attempts.length, className: sec.name, title: q.title, assessmentId: q.id, type: 'quiz' });
-        }
-      }
-    }
-  }
+        return needsReview.length > 0 ? { toGrade: needsReview.length, totalSubmissions: attempts.length, className: sec.name, title: q.title, assessmentId: q.id, type: 'quiz' as const } : null;
+      })),
+    ]);
+
+    return { assignmentResults, quizResults };
+  }));
+
+  const assignments: GradingSummary[] = [];
+  const quizzes: GradingSummary[] = [];
+  perCombo.forEach(({ assignmentResults, quizResults }) => {
+    assignmentResults.forEach((r) => { if (r) assignments.push(r); });
+    quizResults.forEach((r) => { if (r) quizzes.push(r); });
+  });
   return { assignments, quizzes };
 }
 
@@ -113,57 +117,58 @@ export async function getTodaySchedule(sections: LearnClassSection[], subjects: 
   const arabicDayName = WEEK_DAY_MAP_AR[today.getDay()];
   const todayKey = today.toISOString().slice(0, 10);
 
-  for (const sec of sections) {
-    const periods = await getPeriods(sec.id);
-    periods.filter((p) => p.day === arabicDayName).forEach((p) => {
+  const combos = sections.flatMap((sec) => subjects.map((subject) => ({ sec, subject })));
+
+  const [periodsBySections, sessionsByCombo] = await Promise.all([
+    Promise.all(sections.map((sec) => getPeriods(sec.id))),
+    Promise.all(combos.map(({ sec, subject }) => getLiveSessions(sec.id, subject))),
+  ]);
+
+  sections.forEach((sec, i) => {
+    periodsBySections[i].filter((p) => p.day === arabicDayName).forEach((p) => {
       items.push({ id: `period-${p.id}`, time: p.startTime, title: p.subject, className: sec.name, isLive: false });
     });
+  });
 
-    for (const subject of subjects) {
-      const sessions = await getLiveSessions(sec.id, subject);
-      sessions.forEach((s) => {
-        if (new Date(s.scheduledAt).toISOString().slice(0, 10) === todayKey) {
-          items.push({
-            id: `live-${s.id}`,
-            time: new Date(s.scheduledAt).toTimeString().slice(0, 5),
-            title: s.title,
-            className: sec.name,
-            isLive: true,
-            joinUrl: s.joinUrl,
-          });
-        }
-      });
-    }
-  }
+  combos.forEach(({ sec }, i) => {
+    sessionsByCombo[i].forEach((s) => {
+      if (new Date(s.scheduledAt).toISOString().slice(0, 10) === todayKey) {
+        items.push({
+          id: `live-${s.id}`,
+          time: new Date(s.scheduledAt).toTimeString().slice(0, 5),
+          title: s.title,
+          className: sec.name,
+          isLive: true,
+          joinUrl: s.joinUrl,
+        });
+      }
+    });
+  });
 
   return items.sort((a, b) => a.time.localeCompare(b.time));
 }
 
 // بيجيب تقدّم المحتوى الحقيقي (عدد الدروس المكتملة من إجمالي الدروس) لكل فصل ومادة
 export async function getContentProgression(sections: LearnClassSection[], subjects: string[], teacherId: string): Promise<ProgressionItem[]> {
-  const results: ProgressionItem[] = [];
-  for (const sec of sections) {
-    for (const subject of subjects) {
-      const units = await getUnits({ teacherId, classId: sec.id, subject });
-      if (units.length === 0) continue;
-      const lessons = await getLessons(units.map((u) => u.id));
-      const completed = lessons.filter((l) => l.isComplete).length;
-      results.push({ className: sec.name, subject, completed, total: lessons.length });
-    }
-  }
-  return results;
+  const combos = sections.flatMap((sec) => subjects.map((subject) => ({ sec, subject })));
+  const perCombo = await Promise.all(combos.map(async ({ sec, subject }) => {
+    const units = await getUnits({ teacherId, classId: sec.id, subject });
+    if (units.length === 0) return null;
+    const lessons = await getLessons(units.map((u) => u.id));
+    const completed = lessons.filter((l) => l.isComplete).length;
+    return { className: sec.name, subject, completed, total: lessons.length };
+  }));
+  return perCombo.filter((r): r is ProgressionItem => r !== null);
 }
 
 // بيجيب عدد "المكافآت" (نقاط تحدي) اللي لسه محتاجة تصحيح/منح نقاط
 export async function getPendingRewardsCount(sections: LearnClassSection[], subjects: string[]): Promise<number> {
-  let pending = 0;
-  for (const sec of sections) {
-    for (const subject of subjects) {
-      const challenge = await getActiveChallenge(sec.id, subject);
-      if (!challenge) continue;
-      const subs = await getChallengeSubmissions(challenge.id);
-      pending += subs.filter((s) => s.xpAwarded === null).length;
-    }
-  }
-  return pending;
+  const combos = sections.flatMap((sec) => subjects.map((subject) => ({ sec, subject })));
+  const perCombo = await Promise.all(combos.map(async ({ sec, subject }) => {
+    const challenge = await getActiveChallenge(sec.id, subject);
+    if (!challenge) return 0;
+    const subs = await getChallengeSubmissions(challenge.id);
+    return subs.filter((s) => s.xpAwarded === null).length;
+  }));
+  return perCombo.reduce((a, b) => a + b, 0);
 }
