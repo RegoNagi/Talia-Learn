@@ -19,13 +19,19 @@ export interface CalendarEvent {
 export async function getCalendarEvents(teacherId: string, subjects: string[], year: number, month: number): Promise<CalendarEvent[]> {
   const events: CalendarEvent[] = [];
   const sections = await getMyClassSections(teacherId);
-
+  const combos = sections.flatMap((sec) => subjects.map((subject) => ({ sec, subject })));
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
+  const [periodsBySection, sessionsByCombo, schoolEvents] = await Promise.all([
+    Promise.all(sections.map((sec) => getPeriods(sec.id))),
+    Promise.all(combos.map(({ sec, subject }) => getLiveSessions(sec.id, subject))),
+    getUpcomingSchoolEvents(50),
+  ]);
+
   // الحصص الدراسية الأسبوعية المتكررة الحقيقية — بنطابق اسم اليوم بالعربي مع كل يوم فعلي في الشهر المعروض
-  for (const sec of sections) {
-    const periods = await getPeriods(sec.id);
-    if (periods.length === 0) continue;
+  sections.forEach((sec, i) => {
+    const periods = periodsBySection[i];
+    if (periods.length === 0) return;
     for (let day = 1; day <= daysInMonth; day++) {
       const cellDate = new Date(year, month, day);
       const arabicDayName = WEEK_DAY_MAP_AR[cellDate.getDay()];
@@ -40,23 +46,19 @@ export async function getCalendarEvents(teacherId: string, subjects: string[], y
         });
       });
     }
-  }
+  });
 
   // الحصص المباشرة الحقيقية لكل فصل ومادة
-  for (const sec of sections) {
-    for (const subject of subjects) {
-      const sessions = await getLiveSessions(sec.id, subject);
-      sessions.forEach((s) => {
-        const d = new Date(s.scheduledAt);
-        if (d.getFullYear() === year && d.getMonth() === month) {
-          events.push({ id: `live-${s.id}`, title: s.title, className: sec.name, type: 'live', date: d.toISOString().slice(0, 10), time: d.toTimeString().slice(0, 5) });
-        }
-      });
-    }
-  }
+  combos.forEach(({ sec }, i) => {
+    sessionsByCombo[i].forEach((s) => {
+      const d = new Date(s.scheduledAt);
+      if (d.getFullYear() === year && d.getMonth() === month) {
+        events.push({ id: `live-${s.id}`, title: s.title, className: sec.name, type: 'live', date: d.toISOString().slice(0, 10), time: d.toTimeString().slice(0, 5) });
+      }
+    });
+  });
 
   // فعاليات المدرسة الحقيقية المنشورة (مش محددة بفصل معيّن)
-  const schoolEvents = await getUpcomingSchoolEvents(50);
   schoolEvents.forEach((ev) => {
     const d = new Date(ev.eventDate);
     if (d.getFullYear() === year && d.getMonth() === month) {
@@ -86,22 +88,24 @@ export async function getActiveTermRange(): Promise<TermRange | null> {
 export async function getEventsInRange(teacherId: string, subjects: string[], startDate: string, endDate: string): Promise<CalendarEvent[]> {
   const events: CalendarEvent[] = [];
   const sections = await getMyClassSections(teacherId);
+  const combos = sections.flatMap((sec) => subjects.map((subject) => ({ sec, subject })));
   const start = new Date(startDate);
   const end = new Date(endDate);
 
-  for (const sec of sections) {
-    for (const subject of subjects) {
-      const sessions = await getLiveSessions(sec.id, subject);
-      sessions.forEach((s) => {
-        const d = new Date(s.scheduledAt);
-        if (d >= start && d <= end) {
-          events.push({ id: `live-${s.id}`, title: s.title, className: sec.name, type: 'live', date: d.toISOString().slice(0, 10), time: d.toTimeString().slice(0, 5) });
-        }
-      });
-    }
-  }
+  const [sessionsByCombo, schoolEvents] = await Promise.all([
+    Promise.all(combos.map(({ sec, subject }) => getLiveSessions(sec.id, subject))),
+    getUpcomingSchoolEvents(100),
+  ]);
 
-  const schoolEvents = await getUpcomingSchoolEvents(100);
+  combos.forEach(({ sec }, i) => {
+    sessionsByCombo[i].forEach((s) => {
+      const d = new Date(s.scheduledAt);
+      if (d >= start && d <= end) {
+        events.push({ id: `live-${s.id}`, title: s.title, className: sec.name, type: 'live', date: d.toISOString().slice(0, 10), time: d.toTimeString().slice(0, 5) });
+      }
+    });
+  });
+
   schoolEvents.forEach((ev) => {
     const d = new Date(ev.eventDate);
     if (d >= start && d <= end) {
