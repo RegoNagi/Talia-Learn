@@ -174,6 +174,45 @@ export function MessagesCenter({ language = 'ar', authUser }: { language?: 'ar' 
     startTransition(() => { refreshConversation(); });
   }, [myId, myRole, activeContact?.id, activeContact?.role]);
 
+  // Realtime: أي رسالة جديدة توصلني تظهر فورًا من غير ما احتاج أعمل refresh
+  useEffect(() => {
+    if (!myId || !myRole) return;
+    const channel = supabase
+      .channel(`messages-inbox-${myId}-${myRole}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `recipient_id=eq.${myId}` },
+        (payload) => {
+          const row = payload.new as any;
+          if (row.recipient_role !== myRole) return;
+          const newMsg: AppMessage = {
+            id: row.id,
+            senderId: row.sender_id,
+            senderName: row.sender_name,
+            senderRole: row.sender_role,
+            recipientId: row.recipient_id,
+            recipientRole: row.recipient_role,
+            subject: row.subject,
+            content: row.content,
+            isRead: row.is_read,
+            createdAt: row.created_at,
+          };
+          setConversation((prev) => {
+            if (activeContact && row.sender_id === activeContact.id && row.sender_role === activeContact.role) {
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            }
+            return prev;
+          });
+          setRealMessages((prev) => (prev.some((m) => m.id === newMsg.id) ? prev : [newMsg, ...prev]));
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [myId, myRole, activeContact?.id, activeContact?.role]);
+
   const [messageInput, setMessageInput] = useState('');
   const [alsoSendEmail, setAlsoSendEmail] = useState(false);
   const [isSending, setIsSending] = useState(false);
