@@ -1,6 +1,6 @@
 import { getMyClassSections, getStudentsByIds, getAttendancePercentagesForStudents } from './attendanceData';
 import { getGradebookConfigFull, getRealAssessments, getRealGradeEntries } from './gradebookSync';
-import { getStudentNotes } from './rosterData';
+import { getRecentNotesForStudents } from './rosterData';
 
 export interface StudentRiskData {
   id: string;
@@ -53,6 +53,8 @@ export async function getRiskDataForTeacher(teacherId: string, subjects: string[
     }
   }
 
+  const recentNotesByStudent = await getRecentNotesForStudents(studentRows.map((s) => s.id));
+
   const results: StudentRiskData[] = [];
   for (const s of studentRows) {
     const cls = classByStudent[s.id];
@@ -60,8 +62,6 @@ export async function getRiskDataForTeacher(teacherId: string, subjects: string[
 
     const percentages = studentPercentages[s.id] || [];
     const overallAverage = percentages.length > 0 ? percentages.reduce((a, b) => a + b, 0) / percentages.length : null;
-
-    const notes = await getStudentNotes(s.id);
 
     results.push({
       id: s.id,
@@ -71,7 +71,7 @@ export async function getRiskDataForTeacher(teacherId: string, subjects: string[
       attendance: attendanceMap[s.id] ?? 0,
       overallAverage,
       gradedCount: percentages.length,
-      recentNote: notes[0]?.text || null,
+      recentNote: recentNotesByStudent[s.id] || null,
     });
   }
   return results;
