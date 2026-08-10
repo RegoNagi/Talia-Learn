@@ -291,9 +291,6 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
                   )}
                 </div>
               </div>
-              )}
-                </div>
-              </div>
 
               {/* Minimalist Filter Toolbar */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50 border border-slate-100 p-3 rounded-2xl shadow-none">
@@ -419,7 +416,6 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
             </div>
           </section>
         </div>
-
         {/* Right Column: Contextual Sidebar */}
         <div className="lg:col-span-4 space-y-6">
           
@@ -783,7 +779,6 @@ export function LiveSessionsTab({ viewRole = 'TEACHER', classId, subject, teache
             </motion.div>
           </div>
         )}
-
         {/* Insights Modal */}
         {showInsightsModal && (
           <div key="modal-insights" className="fixed inset-0 z-[100] flex items-center justify-center p-4">
