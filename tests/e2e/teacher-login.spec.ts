@@ -11,9 +11,14 @@ test('المعلم يقدر يسجّل دخول ويشوف داشبورده', as
   await page.getByPlaceholder('••••••••').fill(process.env.TEST_TEACHER_PASSWORD!);
   await page.getByRole('button', { name: /دخول للمنصة|Sign In/i }).click();
 
-  // بعد تسجيل الدخول، فورم كلمة المرور المفروض يختفي (يعني خرجنا من شاشة اللوجين)
-  await expect(page.getByPlaceholder('••••••••')).toBeHidden({ timeout: 10000 });
+  // نستنى لحد ما رسالة الخطأ (لو ظهرت) أو خانة الإيميل تختفي — أيهما أسرع
+  await Promise.race([
+    expect(page.getByText('الإيميل أو كلمة المرور غلط.')).toBeVisible({ timeout: 15000 }),
+    expect(page.getByPlaceholder('name@school.com')).toBeHidden({ timeout: 15000 }),
+  ]).catch(() => {});
 
-  // ومفيش رسالة خطأ ظاهرة
+  // النتيجة النهائية: لازم مفيش رسالة خطأ ظاهرة (يعني الدخول نجح فعليًا)
   await expect(page.getByText('الإيميل أو كلمة المرور غلط.')).toBeHidden();
+  // وخانة الإيميل بتاعة اللوجين اختفت (يعني خرجنا من شاشة الدخول للداشبورد)
+  await expect(page.getByPlaceholder('name@school.com')).toBeHidden();
 });
