@@ -108,12 +108,13 @@ export async function syncGradeToGradebook(input: {
   return syncGradeEntry(assessmentId, input.studentId, input.score, input.status);
 }
 
-// بيجيب إعداد الدرجات الكامل (id + أوزان الفئات) لمادة وصف معيّنين
+// بيجيب إعداد الدرجات الكامل (id + أوزان الفئات) لمادة وصف معيّنين — بس لو الإعداد "معتمد" فعليًا من الأدمن (مش مسودة أو طلب اعتماد لسه)
 export async function getGradebookConfigFull(subject: string, grade: string): Promise<{ id: string; categoryWeights: Record<string, number>; passingScore: number } | null> {
   const { data, error } = await supabase
     .from('gradebook_configs')
-    .select('id, category_weights, passing_score, gradebook_config_grades ( grade )')
-    .eq('subject_name', subject);
+    .select('id, category_weights, passing_score, status, gradebook_config_grades ( grade )')
+    .eq('subject_name', subject)
+    .eq('status', 'approved');
   if (error || !data) return null;
   const match = data.find((row: any) => (row.gradebook_config_grades || []).some((g: any) => g.grade === grade));
   if (!match) return null;
