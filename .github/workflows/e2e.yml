@@ -17,7 +17,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test
         env:
-          E2E_BASE_URL: https://talia-learn-lms-git-main-prod-talia7.vercel.app
+          E2E_BASE_URL: https://talia-learn-lms.vercel.app
           TEST_TEACHER_EMAIL: ${{ secrets.TEST_TEACHER_EMAIL }}
           TEST_TEACHER_PASSWORD: ${{ secrets.TEST_TEACHER_PASSWORD }}
           TEST_STUDENT_EMAIL: ${{ secrets.TEST_STUDENT_EMAIL }}
