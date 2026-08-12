@@ -1,0 +1,26 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [Main-Prod]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+        env:
+          E2E_BASE_URL: https://talia-learn-lms-git-main-prod-talia7.vercel.app
+          TEST_TEACHER_EMAIL: ${{ secrets.TEST_TEACHER_EMAIL }}
+          TEST_TEACHER_PASSWORD: ${{ secrets.TEST_TEACHER_PASSWORD }}
+          TEST_STUDENT_EMAIL: ${{ secrets.TEST_STUDENT_EMAIL }}
+          TEST_STUDENT_PASSWORD: ${{ secrets.TEST_STUDENT_PASSWORD }}
+          TEST_PARENT_EMAIL: ${{ secrets.TEST_PARENT_EMAIL }}
+          TEST_PARENT_PASSWORD: ${{ secrets.TEST_PARENT_PASSWORD }}
