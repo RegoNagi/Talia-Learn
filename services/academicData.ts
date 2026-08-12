@@ -115,3 +115,18 @@ export async function getAllClassSections(): Promise<{ id: string; name: string;
   return (data || []).map((row: any) => ({ id: row.id, name: row.name, gradeLevel: row.grade_level ?? '' }));
 }
 
+// بيجيب خطط الدروس الرسمية الحقيقية (من Talia 360) لصف ومادة معيّنين — بس اللي المشرف اعتمدها فعليًا للمادة
+export async function getOfficialLessonPlans(grade: string, subject: string): Promise<{ id: string; title: string; content: string; weekNumber: number | null }[]> {
+  const { data, error } = await supabase
+    .from('curriculum_lesson_plans')
+    .select('id, title, content, week_number')
+    .eq('grade', grade)
+    .eq('subject', subject)
+    .eq('assigned_to_subject', true)
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('Error fetching official lesson plans:', error);
+    return [];
+  }
+  return (data || []).map((row: any) => ({ id: row.id, title: row.title, content: row.content || '', weekNumber: row.week_number }));
+}
