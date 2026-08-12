@@ -146,6 +146,23 @@ export async function createRealPost(input: {
   return mapPost(data);
 }
 
+export async function reactToRealPost(postId: string, userId: string, reactionType: keyof PostInteractions): Promise<void> {
+  await supabase.from('class_post_reactions').upsert(
+    { post_id: postId, user_id: userId, reaction_type: reactionType },
+    { onConflict: 'post_id,user_id,reaction_type' }
+  );
+}
+
+export async function addRealComment(postId: string, authorId: string, authorRole: string, authorName: string, content: string): Promise<void> {
+  await supabase.from('class_post_comments').insert({
+    post_id: postId,
+    author_id: authorId,
+    author_role: authorRole,
+    author_name: authorName,
+    content,
+  });
+}
+
 // ============ محول البيانات الحقيقية لويدجت الواجب/الكويز/المصادر في مساحة المادة ============
 
 import { getAssignments, getQuizzes, createAssignment, createQuiz, getSubmissionFileUrl, getSubmissionsForAssignment, getClassRoster } from './assignmentData';
