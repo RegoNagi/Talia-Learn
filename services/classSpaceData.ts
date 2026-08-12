@@ -113,6 +113,18 @@ export async function createRealPost(input: {
   topicTag?: string;
   media?: any;
 }): Promise<Post | null> {
+  // نتأكد إن المساحة (فصل+مادة) مش مؤرشفة قبل ما نسمح بأي بوست جديد
+  const { data: spaceSettings } = await supabase
+    .from('class_space_settings')
+    .select('status')
+    .eq('class_id', input.classId)
+    .eq('subject', input.subject)
+    .maybeSingle();
+  if (spaceSettings?.status === 'Archived') {
+    console.error('Cannot post: space is archived');
+    return null;
+  }
+
   const { data, error } = await supabase
     .from('class_posts')
     .insert({
@@ -132,23 +144,6 @@ export async function createRealPost(input: {
     return null;
   }
   return mapPost(data);
-}
-
-export async function reactToRealPost(postId: string, userId: string, reactionType: keyof PostInteractions): Promise<void> {
-  await supabase.from('class_post_reactions').upsert(
-    { post_id: postId, user_id: userId, reaction_type: reactionType },
-    { onConflict: 'post_id,user_id,reaction_type' }
-  );
-}
-
-export async function addRealComment(postId: string, authorId: string, authorRole: string, authorName: string, content: string): Promise<void> {
-  await supabase.from('class_post_comments').insert({
-    post_id: postId,
-    author_id: authorId,
-    author_role: authorRole,
-    author_name: authorName,
-    content,
-  });
 }
 
 // ============ محول البيانات الحقيقية لويدجت الواجب/الكويز/المصادر في مساحة المادة ============
