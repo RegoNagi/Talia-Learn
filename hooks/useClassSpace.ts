@@ -209,12 +209,13 @@ export function useClassSpace(scope?: { authUser?: any; userRole?: 'teacher' | '
         topicTag: postData.topicTag,
         media: postData.media,
       });
-      if (newPost) setPosts(prev => [newPost, ...prev]);
-      showNotification('Post published successfully to Class Space!');
-    } catch (e) {
-      showNotification('Failed to publish post.');
-    }
-  };
+
+      if (newPost) {
+        setPosts(prev => [newPost, ...prev]);
+        showNotification('Post published successfully to Class Space!');
+      } else {
+        showNotification('لا يمكن النشر — هذه المساحة مؤرشفة حاليًا.');
+      }
 
   const reactToPost = async (postId: string, reaction: keyof Post['interactions']) => {
     if (!hasRealScope || !currentUser) return;
