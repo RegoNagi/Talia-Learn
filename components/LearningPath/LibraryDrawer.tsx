@@ -1,10 +1,10 @@
 'use client';
 
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Search, FileText, PlayCircle, Volume2, Box, Link as LinkIcon, Check, BookOpen, Folder, Sparkles } from 'lucide-react';
+import { X, Search, FileText, PlayCircle, Volume2, Box, Link as LinkIcon, Check, BookOpen, Folder, Sparkles, ClipboardList } from 'lucide-react';
 import { useState, useEffect, startTransition } from 'react';
 import { createPortal } from 'react-dom';
-import { getOfficialCurriculumResources } from '@/services/academicData';
+import { getOfficialCurriculumResources, getOfficialLessonPlans } from '@/services/academicData';
 import { getLibraryFiles } from '@/services/libraryData';
 
 interface LibraryDrawerProps {
@@ -20,7 +20,7 @@ interface LibraryDrawerProps {
 }
 
 type FileType = 'all' | 'docs' | 'video' | 'audio' | 'scorm' | 'link';
-type SourceType = 'official' | 'my-library';
+type SourceType = 'official' | 'my-library' | 'lesson-plan';
 
 interface LibraryItem {
   id: string;
@@ -29,6 +29,13 @@ interface LibraryItem {
   folder?: string;
   size?: string;
   url?: string;
+}
+
+interface LessonPlanItem {
+  id: string;
+  title: string;
+  content: string;
+  weekNumber: number | null;
 }
 
 // بيحوّل نوع المصدر الرسمي (من المنهج) لنفس الأنواع اللي شاشة الاستيراد بتفهمها
@@ -48,6 +55,8 @@ export function LibraryDrawer({ isOpen, onClose, targetUnitTitle, language = 'en
   const [mounted, setMounted] = useState(false);
   const [officialItems, setOfficialItems] = useState<LibraryItem[]>([]);
   const [myLibraryItems, setMyLibraryItems] = useState<LibraryItem[]>([]);
+  const [lessonPlans, setLessonPlans] = useState<LessonPlanItem[]>([]);
+  const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const isRtl = language === 'ar';
@@ -61,10 +70,12 @@ export function LibraryDrawer({ isOpen, onClose, targetUnitTitle, language = 'en
     startTransition(() => setIsLoading(true));
     const officialPromise = grade && subject ? getOfficialCurriculumResources(grade, subject) : Promise.resolve([]);
     const myLibraryPromise = teacherId && classId && subject ? getLibraryFiles({ teacherId, classId, subject }) : Promise.resolve([]);
+    const lessonPlansPromise = grade && subject ? getOfficialLessonPlans(grade, subject) : Promise.resolve([]);
 
-    Promise.all([officialPromise, myLibraryPromise]).then(([official, mine]) => {
+    Promise.all([officialPromise, myLibraryPromise, lessonPlansPromise]).then(([official, mine, plans]) => {
       setOfficialItems(official.map((r) => ({ id: r.id, title: r.title, type: normalizeOfficialType(r.type), url: r.url })));
       setMyLibraryItems(mine.map((f) => ({ id: f.id, title: f.name, type: (f.type === 'sheet' || f.type === 'slides' ? 'docs' : (f.type as any)) || 'docs', size: f.size })));
+      setLessonPlans(plans);
       setIsLoading(false);
     });
   }, [isOpen, grade, subject, teacherId, classId]);
@@ -73,7 +84,7 @@ export function LibraryDrawer({ isOpen, onClose, targetUnitTitle, language = 'en
     setSelectedItems(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
 
-  const rawList: LibraryItem[] = source === 'official' ? officialItems : myLibraryItems;
+  const rawList: LibraryItem[] = source === 'official' ? officialItems : source === 'my-library' ? myLibraryItems : [];
   const filteredItems = rawList.filter(item => {
     if (fileTypeFilter !== 'all' && item.type !== fileTypeFilter) return false;
     if (searchQuery.trim() && !item.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -117,30 +128,54 @@ export function LibraryDrawer({ isOpen, onClose, targetUnitTitle, language = 'en
             </div>
 
             {/* Source Toggle */}
-            <div className="grid grid-cols-2 gap-2 p-4 pb-2">
-              <button onClick={() => setSource('official')} className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold ${source === 'official' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                <BookOpen size={14} /> {isRtl ? 'المكتبة الرسمية' : 'Official Library'}
+            <div className="grid grid-cols-3 gap-2 p-4 pb-2">
+              <button onClick={() => setSource('official')} className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[11px] font-bold ${source === 'official' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                <BookOpen size={14} /> {isRtl ? 'المكتبة الرسمية' : 'Official'}
               </button>
-              <button onClick={() => setSource('my-library')} className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold ${source === 'my-library' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+              <button onClick={() => setSource('my-library')} className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[11px] font-bold ${source === 'my-library' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
                 <Folder size={14} /> {isRtl ? 'مكتبتي' : 'My Library'}
+              </button>
+              <button onClick={() => setSource('lesson-plan')} className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[11px] font-bold ${source === 'lesson-plan' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                <ClipboardList size={14} /> {isRtl ? 'الخطة الرسمية' : 'Lesson Plan'}
               </button>
             </div>
 
-            <div className="px-4">
-              <div className="relative mb-3">
-                <Search className="absolute right-3 top-2.5 text-slate-400" size={14} />
-                <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={isRtl ? 'دوّر على مورد...' : 'Search resources...'} className="w-full pr-9 pl-3 py-2 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 text-xs" />
+            {source !== 'lesson-plan' && (
+              <div className="px-4">
+                <div className="relative mb-3">
+                  <Search className="absolute right-3 top-2.5 text-slate-400" size={14} />
+                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={isRtl ? 'دوّر على مورد...' : 'Search resources...'} className="w-full pr-9 pl-3 py-2 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 text-xs" />
+                </div>
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {(['all', 'docs', 'video', 'audio', 'scorm', 'link'] as FileType[]).map((t) => (
+                    <button key={t} onClick={() => setFileTypeFilter(t)} className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${fileTypeFilter === t ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>{t}</button>
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                {(['all', 'docs', 'video', 'audio', 'scorm', 'link'] as FileType[]).map((t) => (
-                  <button key={t} onClick={() => setFileTypeFilter(t)} className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${fileTypeFilter === t ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>{t}</button>
-                ))}
-              </div>
-            </div>
+            )}
 
             <div className="flex-1 overflow-y-auto p-4 pt-0 space-y-2">
               {isLoading ? (
                 <p className="text-center text-xs text-slate-400 py-10">{isRtl ? 'جاري التحميل...' : 'Loading...'}</p>
+              ) : source === 'lesson-plan' ? (
+                lessonPlans.length === 0 ? (
+                  <p className="text-center text-xs text-slate-400 py-10">{isRtl ? 'لسه مفيش خطة درس معتمدة لهذه المادة والصف.' : 'No approved lesson plan for this subject/grade yet.'}</p>
+                ) : (
+                  lessonPlans.map((plan) => (
+                    <div key={plan.id} onClick={() => setExpandedPlanId(expandedPlanId === plan.id ? null : plan.id)} className="p-3 rounded-2xl border border-slate-200 bg-white cursor-pointer">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0"><ClipboardList size={16} className="text-indigo-600" /></div>
+                        <div className="flex-1 min-w-0">
+                          <h5 className="font-semibold text-xs text-slate-800 truncate">{plan.title}</h5>
+                          {plan.weekNumber != null && <p className="text-[10px] text-slate-400 mt-0.5">{isRtl ? `الأسبوع ${plan.weekNumber}` : `Week ${plan.weekNumber}`}</p>}
+                        </div>
+                      </div>
+                      {expandedPlanId === plan.id && (
+                        <p className="mt-3 text-xs text-slate-600 whitespace-pre-wrap border-t border-slate-100 pt-3">{plan.content}</p>
+                      )}
+                    </div>
+                  ))
+                )
               ) : filteredItems.length === 0 ? (
                 <p className="text-center text-xs text-slate-400 py-10">{isRtl ? 'مفيش موارد هنا لسه.' : 'No resources here yet.'}</p>
               ) : (
@@ -156,11 +191,13 @@ export function LibraryDrawer({ isOpen, onClose, targetUnitTitle, language = 'en
                 ))
               )}
             </div>
-            <div className="p-4 border-t border-slate-100">
-              <button disabled={selectedItems.length === 0} onClick={handleInject} className="w-full py-2.5 rounded-xl font-bold text-xs bg-indigo-600 text-white disabled:opacity-50">
-                {isRtl ? `إضافة ${selectedItems.length} عنصر للوحدة` : `Inject ${selectedItems.length} Items to Unit`}
-              </button>
-            </div>
+            {source !== 'lesson-plan' && (
+              <div className="p-4 border-t border-slate-100">
+                <button disabled={selectedItems.length === 0} onClick={handleInject} className="w-full py-2.5 rounded-xl font-bold text-xs bg-indigo-600 text-white disabled:opacity-50">
+                  {isRtl ? `إضافة ${selectedItems.length} عنصر للوحدة` : `Inject ${selectedItems.length} Items to Unit`}
+                </button>
+              </div>
+            )}
           </motion.div>
         </>
       )}
