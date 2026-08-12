@@ -216,7 +216,11 @@ export function useClassSpace(scope?: { authUser?: any; userRole?: 'teacher' | '
       } else {
         showNotification('لا يمكن النشر — هذه المساحة مؤرشفة حاليًا.');
       }
-
+    } catch (e) {
+      showNotification('Failed to publish post.');
+    }
+  };
+  
   const reactToPost = async (postId: string, reaction: keyof Post['interactions']) => {
     if (!hasRealScope || !currentUser) return;
     try {
