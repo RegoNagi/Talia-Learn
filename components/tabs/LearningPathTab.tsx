@@ -187,8 +187,8 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
   const [isLoadingLessonPlans, setIsLoadingLessonPlans] = useState(true);
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
   useEffect(() => {
-    if (!grade || !subject) { setIsLoadingLessonPlans(false); return; }
-    setIsLoadingLessonPlans(true);
+    if (!grade || !subject) { startTransition(() => setIsLoadingLessonPlans(false)); return; }
+    startTransition(() => setIsLoadingLessonPlans(true));
     getOfficialLessonPlans(grade, subject).then((plans) => {
       setLessonPlans(plans);
       setIsLoadingLessonPlans(false);
