@@ -25,6 +25,7 @@ export interface GradingSummary {
   title: string;
   assessmentId: string;
   type: 'assignment' | 'quiz';
+  category?: string;
 }
 
 export interface ScheduleItem {
@@ -89,7 +90,7 @@ export async function getGradingSummaries(sections: LearnClassSection[], subject
         const subs = await getSubmissionsForAssignment(a.id, sec.id);
         const submitted = subs.filter((s) => s.submittedAt);
         const toGrade = submitted.filter((s) => s.grade === null).length;
-        return toGrade > 0 ? { toGrade, totalSubmissions: submitted.length, className: sec.name, title: a.title, assessmentId: a.id, type: 'assignment' as const } : null;
+        return toGrade > 0 ? { toGrade, totalSubmissions: submitted.length, className: sec.name, title: a.title, assessmentId: a.id, type: 'assignment' as const, category: a.settings?.category || '' } : null;
       })),
       Promise.all(activeQuizzes.map(async (q) => {
         const attempts = await getQuizAttemptsForQuiz(q.id, sec.id);
