@@ -180,12 +180,18 @@ export function TeacherDashboard({ language = 'en', userRole = 'teacher', authUs
         <FlatFilterDropdown options={classOptions} value={classFilter} onChange={setClassFilter} placeholder={isRtl ? 'الفصل' : 'Class'} />
         <span style={{ width: 1, height: 24, background: '#f0f0f2' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setSubjectFilter('all')}
+            style={{ whiteSpace: 'nowrap', fontFamily: 'inherit', fontSize: 12.5, fontWeight: subjectFilter === 'all' ? 600 : 500, color: subjectFilter === 'all' ? '#fff' : '#71717a', background: subjectFilter === 'all' ? ACCENT : 'transparent', border: `1px solid ${subjectFilter === 'all' ? ACCENT : 'transparent'}`, borderRadius: 999, padding: '7px 14px', cursor: 'pointer' }}
+          >
+            {isRtl ? 'الكل' : 'All'}
+          </button>
           {subjectsAll.map((subj) => {
             const on = subjectFilter === subj;
             return (
               <button
                 key={subj}
-                onClick={() => setSubjectFilter(on ? 'all' : subj)}
+                onClick={() => setSubjectFilter(subj)}
                 style={{ whiteSpace: 'nowrap', fontFamily: 'inherit', fontSize: 12.5, fontWeight: on ? 600 : 500, color: on ? '#fff' : '#71717a', background: on ? ACCENT : 'transparent', border: `1px solid ${on ? ACCENT : 'transparent'}`, borderRadius: 999, padding: '7px 14px', cursor: 'pointer' }}
               >
                 {subj}
