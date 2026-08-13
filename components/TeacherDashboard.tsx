@@ -9,7 +9,6 @@ import {
   getGradingSummaries,
   getTodaySchedule,
   getContentProgression,
-  getPendingRewardsCount,
   AttendanceSummary,
   GradingSummary,
   ScheduleItem,
@@ -98,7 +97,6 @@ export function TeacherDashboard({ language = 'en', userRole = 'teacher', authUs
   const [grading, setGrading] = useState<{ assignments: GradingSummary[]; quizzes: GradingSummary[] }>({ assignments: [], quizzes: [] });
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [progression, setProgression] = useState<ProgressionItem[]>([]);
-  const [pendingRewards, setPendingRewards] = useState(0);
 
   const scopedSections = sections.filter((s) => (gradeFilter === 'all' || s.gradeLevel === gradeFilter) && (classFilter === 'all' || s.id === classFilter));
   const scopedSubjects = subjectFilter === 'all' ? subjectsAll : [subjectFilter];
@@ -116,13 +114,11 @@ export function TeacherDashboard({ language = 'en', userRole = 'teacher', authUs
       getGradingSummaries(scopedSections, scopedSubjects, teacherId),
       getTodaySchedule(scopedSections, scopedSubjects),
       getContentProgression(scopedSections, scopedSubjects, teacherId),
-      getPendingRewardsCount(scopedSections, scopedSubjects),
-    ]).then(([att, grd, sch, prog, rewards]) => {
+    ]).then(([att, grd, sch, prog]) => {
       setAttendance(att);
       setGrading(grd);
       setSchedule(sch);
       setProgression(prog);
-      setPendingRewards(rewards);
       setIsLoading(false);
     });
   }, [teacherId, sections, gradeFilter, classFilter, subjectFilter]);
@@ -270,9 +266,22 @@ export function TeacherDashboard({ language = 'en', userRole = 'teacher', authUs
         </section>
       </div>
 
-      {/* Row 2 */}
+      {/* Row 2 — عرض متساوي: نفس الحجم بيدي إشارة بصرية إن التلاتة بنفس الأهمية، وأسهل للمسح السريع بالعين */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 14 }}>
-        <section style={{ ...cardStyle, flex: '1 1 210px', minWidth: 0, padding: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
+        <section style={{ ...cardStyle, flex: '1 1 260px', minWidth: 0, padding: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#71717a' }}>{isRtl ? 'حصص مباشرة اليوم' : 'Live Sessions Today'}</span>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 7 }}>
+            <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 0.86, color: ACCENT }}>{liveNowCount}</span>
+            <span style={{ fontSize: 21, fontWeight: 400, color: '#a1a1aa', paddingBottom: 2 }}>/ {schedule.length}</span>
+          </div>
+          <span style={{ fontSize: 11, color: '#a1a1aa' }}>{isRtl ? 'مباشر الآن من إجمالي حصص اليوم' : 'live now of periods today'}</span>
+          <button type="button" onClick={() => onNavigate && onNavigate('calendar')} style={{ marginTop: 'auto', alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, color: ACCENT, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}>
+            {isRtl ? 'عرض الجدول' : 'View Schedule'}
+            <Icon path="M5 12h14M13 6l6 6-6 6" size={14} width={2} />
+          </button>
+        </section>
+
+        <section style={{ ...cardStyle, flex: '1 1 260px', minWidth: 0, padding: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: '#71717a' }}>{isRtl ? 'واجبات' : 'Homework'}</span>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 7 }}>
             <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 0.86, color: ACCENT }}>{homeworkToGrade}</span>
@@ -285,7 +294,7 @@ export function TeacherDashboard({ language = 'en', userRole = 'teacher', authUs
           </button>
         </section>
 
-        <section style={{ ...cardStyle, flex: '1 1 210px', minWidth: 0, padding: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
+        <section style={{ ...cardStyle, flex: '1 1 260px', minWidth: 0, padding: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: '#71717a' }}>{isRtl ? 'كويزات محتاجة مراجعة' : 'Quizzes to Review'}</span>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 7 }}>
             <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 0.86, color: ACCENT }}>{totalQuizzesToGrade}</span>
@@ -300,27 +309,6 @@ export function TeacherDashboard({ language = 'en', userRole = 'teacher', authUs
             {isRtl ? 'راجع الآن' : 'Review Now'}
             <Icon path="M5 12h14M13 6l6 6-6 6" size={14} width={2} />
           </button>
-        </section>
-
-        <section style={{ ...cardStyle, flex: '1 1 210px', minWidth: 0, padding: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#71717a' }}>{isRtl ? 'حصص مباشرة اليوم' : 'Live Sessions Today'}</span>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 7 }}>
-            <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 0.86, color: ACCENT }}>{liveNowCount}</span>
-            <span style={{ fontSize: 21, fontWeight: 400, color: '#a1a1aa', paddingBottom: 2 }}>/ {schedule.length}</span>
-          </div>
-          <span style={{ fontSize: 11, color: '#a1a1aa' }}>{isRtl ? 'مباشر الآن من إجمالي حصص اليوم' : 'live now of periods today'}</span>
-          <button type="button" onClick={() => onNavigate && onNavigate('calendar')} style={{ marginTop: 'auto', alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, color: ACCENT, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}>
-            {isRtl ? 'عرض الجدول' : 'View Schedule'}
-            <Icon path="M5 12h14M13 6l6 6-6 6" size={14} width={2} />
-          </button>
-        </section>
-
-        <section style={{ ...cardStyle, flex: '1 1 210px', minWidth: 0, padding: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#71717a' }}>{isRtl ? 'مكافآت التحديات المعلّقة' : 'Pending Rewards'}</span>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 7 }}>
-            <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 0.86, color: ACCENT }}>{pendingRewards}</span>
-          </div>
-          <span style={{ fontSize: 11, color: '#a1a1aa' }}>{isRtl ? 'مشاركة محتاجة منح نقاط' : 'challenge submissions to award'}</span>
         </section>
       </div>
 
