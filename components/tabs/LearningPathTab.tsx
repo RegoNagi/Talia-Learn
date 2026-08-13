@@ -131,17 +131,7 @@ export function LearningPathTab({
     });
   };
 
-  useEffect(() => {
-    startTransition(() => { refreshUnits(); });
-  }, [learnScope?.classId, learnScope?.subject]);
-  useEffect(() => {
-    if (!grade || !subject) { setIsLoadingLessonPlans(false); return; }
-    setIsLoadingLessonPlans(true);
-    getOfficialLessonPlans(grade, subject).then((plans) => {
-      setLessonPlans(plans);
-      setIsLoadingLessonPlans(false);
-    });
-  }, [grade, subject]);
+  
 
   const [expandedUnits, setExpandedUnits] = useState<string[]>([]);
   const [lessonViewMode, setLessonViewMode] = useState<'grid' | 'list'>('grid');
@@ -196,6 +186,14 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
   const [lessonPlans, setLessonPlans] = useState<{ id: string; title: string; content: string; weekNumber: number | null }[]>([]);
   const [isLoadingLessonPlans, setIsLoadingLessonPlans] = useState(true);
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!grade || !subject) { setIsLoadingLessonPlans(false); return; }
+    setIsLoadingLessonPlans(true);
+    getOfficialLessonPlans(grade, subject).then((plans) => {
+      setLessonPlans(plans);
+      setIsLoadingLessonPlans(false);
+    });
+  }, [grade, subject]);
   
   const isStudent = viewRole === 'STUDENT';
 
