@@ -127,11 +127,13 @@ export function LearningPathTab({
         ],
       }));
       setUnits(mapped);
-      setIsLoadingUnits(false);
+     setIsLoadingUnits(false);
     });
   };
 
-  
+  useEffect(() => {
+    startTransition(() => { refreshUnits(); });
+  }, [learnScope?.classId, learnScope?.subject, teacherId]);
 
   const [expandedUnits, setExpandedUnits] = useState<string[]>([]);
   const [lessonViewMode, setLessonViewMode] = useState<'grid' | 'list'>('grid');
