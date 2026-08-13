@@ -141,7 +141,13 @@ export function TeacherDashboard({ language = 'en', userRole = 'teacher', authUs
   const totalSubmissions = grading.assignments.reduce((s, a) => s + a.totalSubmissions, 0);
   const submissionAvgPct = totalSubmissions > 0 ? Math.round((grading.assignments.reduce((s, a) => s + (a.totalSubmissions - a.toGrade), 0) / totalSubmissions) * 100) : 0;
   const liveNowCount = schedule.filter((s) => s.isLive).length;
+  const heroAssignment = grading.assignments[0];
   const heroQuiz = grading.quizzes[0];
+
+  // فئة "واجبات" تحديدًا (زي ما اتحددت في إعدادات الجريدبوك) — مش كل التكليفات بكل الفئات
+  const homeworkAssignments = grading.assignments.filter((a) => a.category === 'واجبات' || a.category === 'Homework');
+  const homeworkToGrade = homeworkAssignments.reduce((s, a) => s + a.toGrade, 0);
+  const homeworkSubmissions = homeworkAssignments.reduce((s, a) => s + a.totalSubmissions, 0);
 
   const gradeOptions = Array.from(new Set(sections.map((s) => s.gradeLevel))).map((g) => ({ id: g, label: isRtl ? `الصف ${g}` : `Grade ${g}` }));
   const classOptions = sections.filter((s) => gradeFilter === 'all' || s.gradeLevel === gradeFilter).map((s) => ({ id: s.id, label: s.name }));
@@ -233,18 +239,18 @@ export function TeacherDashboard({ language = 'en', userRole = 'teacher', authUs
         </section>
 
         <section style={{ flex: '0.95 1 250px', minWidth: 0, position: 'relative', overflow: 'hidden', borderRadius: 20, background: 'linear-gradient(155deg,#fb923c 0%,#ea580c 55%,#c2410c 100%)', color: '#fff', padding: 20, display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 12px 30px rgba(234,88,12,0.22)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.85)' }}>{isRtl ? 'تصحيح الكويزات' : 'Quiz Grading'}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.85)' }}>{isRtl ? 'تكليفات محتاجة تصحيح' : 'Assignments Needing Grading'}</span>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-            <span style={{ fontSize: 46, fontWeight: 700, letterSpacing: '-0.045em', lineHeight: 0.82 }}>{totalQuizzesToGrade}</span>
+            <span style={{ fontSize: 46, fontWeight: 700, letterSpacing: '-0.045em', lineHeight: 0.82 }}>{totalAssignmentsToGrade}</span>
           </div>
           <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.82)' }}>
-            {heroQuiz ? `${heroQuiz.title} · ${heroQuiz.className}` : (isRtl ? 'مفيش كويزات محتاجة تصحيح' : 'No quizzes need grading')}
+            {heroAssignment ? `${heroAssignment.title} · ${heroAssignment.className}` : (isRtl ? 'مفيش تكليفات محتاجة تصحيح' : 'No assignments need grading')}
           </span>
           <button
             type="button"
-            disabled={!heroQuiz}
-            onClick={() => { if (heroQuiz) { const sec = findSectionByName(heroQuiz.className); if (sec) goToAssessments(sec.id, scopedSubjects[0] || subjectsAll[0]); } }}
-            style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: '#c2410c', background: '#fff', border: 'none', borderRadius: 11, padding: '11px 16px', cursor: heroQuiz ? 'pointer' : 'default', opacity: heroQuiz ? 1 : 0.6 }}
+            disabled={!heroAssignment}
+            onClick={() => { if (heroAssignment) { const sec = findSectionByName(heroAssignment.className); if (sec) goToAssessments(sec.id, scopedSubjects[0] || subjectsAll[0]); } }}
+            style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: '#c2410c', background: '#fff', border: 'none', borderRadius: 11, padding: '11px 16px', cursor: heroAssignment ? 'pointer' : 'default', opacity: heroAssignment ? 1 : 0.6 }}
           >
             {isRtl ? 'صحّح الآن' : 'Grade Now'}
             <Icon path="M5 12h14M13 6l6 6-6 6" size={14} width={2.2} />
@@ -269,12 +275,29 @@ export function TeacherDashboard({ language = 'en', userRole = 'teacher', authUs
         <section style={{ ...cardStyle, flex: '1 1 210px', minWidth: 0, padding: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: '#71717a' }}>{isRtl ? 'واجبات' : 'Homework'}</span>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 7 }}>
-            <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 0.86, color: ACCENT }}>{totalAssignmentsToGrade}</span>
-            <span style={{ fontSize: 21, fontWeight: 400, color: '#a1a1aa', paddingBottom: 2 }}>/ {totalSubmissions}</span>
+            <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 0.86, color: ACCENT }}>{homeworkToGrade}</span>
+            <span style={{ fontSize: 21, fontWeight: 400, color: '#a1a1aa', paddingBottom: 2 }}>/ {homeworkSubmissions}</span>
           </div>
           <span style={{ fontSize: 11, color: '#a1a1aa' }}>{isRtl ? 'محتاجة تصحيح من إجمالي التسليمات' : 'to grade of submissions'}</span>
           <button type="button" onClick={() => scopedSections[0] && goToAssessments(scopedSections[0].id, scopedSubjects[0] || subjectsAll[0])} style={{ marginTop: 'auto', alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, color: ACCENT, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}>
             {isRtl ? 'صحّح الآن' : 'Grade Now'}
+            <Icon path="M5 12h14M13 6l6 6-6 6" size={14} width={2} />
+          </button>
+        </section>
+
+        <section style={{ ...cardStyle, flex: '1 1 210px', minWidth: 0, padding: 18, display: 'flex', flexDirection: 'column', gap: 13 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#71717a' }}>{isRtl ? 'كويزات محتاجة مراجعة' : 'Quizzes to Review'}</span>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 7 }}>
+            <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 0.86, color: ACCENT }}>{totalQuizzesToGrade}</span>
+          </div>
+          <span style={{ fontSize: 11, color: '#a1a1aa' }}>{isRtl ? 'أسئلة مصححة تلقائيًا محتاجة مراجعة يدوية' : 'auto-graded, some answers need manual review'}</span>
+          <button
+            type="button"
+            disabled={!heroQuiz}
+            onClick={() => { if (heroQuiz) { const sec = findSectionByName(heroQuiz.className); if (sec) goToAssessments(sec.id, scopedSubjects[0] || subjectsAll[0]); } }}
+            style={{ marginTop: 'auto', alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, color: ACCENT, background: 'transparent', border: 'none', padding: 0, cursor: heroQuiz ? 'pointer' : 'default', opacity: heroQuiz ? 1 : 0.6 }}
+          >
+            {isRtl ? 'راجع الآن' : 'Review Now'}
             <Icon path="M5 12h14M13 6l6 6-6 6" size={14} width={2} />
           </button>
         </section>
