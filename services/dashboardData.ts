@@ -2,7 +2,6 @@ import { supabase } from '@/lib/supabaseClient';
 import { getMyClassSections, getPeriods, getAttendanceForDate, LearnClassSection } from './attendanceData';
 import { getAssignments, getQuizzes, getSubmissionsForAssignment, getQuizAttemptsForQuiz } from './assignmentData';
 import { getLiveSessions } from './liveSessionsData';
-import { getActiveChallenge, getChallengeSubmissions } from './classSpaceData';
 import { getUnits, getLessons } from './learningPathData';
 
 const WEEK_DAY_MAP_AR = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
@@ -160,16 +159,4 @@ export async function getContentProgression(sections: LearnClassSection[], subje
     return { className: sec.name, subject, completed, total: lessons.length };
   }));
   return perCombo.filter((r): r is ProgressionItem => r !== null);
-}
-
-// بيجيب عدد "المكافآت" (نقاط تحدي) اللي لسه محتاجة تصحيح/منح نقاط
-export async function getPendingRewardsCount(sections: LearnClassSection[], subjects: string[]): Promise<number> {
-  const combos = sections.flatMap((sec) => subjects.map((subject) => ({ sec, subject })));
-  const perCombo = await Promise.all(combos.map(async ({ sec, subject }) => {
-    const challenge = await getActiveChallenge(sec.id, subject);
-    if (!challenge) return 0;
-    const subs = await getChallengeSubmissions(challenge.id);
-    return subs.filter((s) => s.xpAwarded === null).length;
-  }));
-  return perCombo.reduce((a, b) => a + b, 0);
 }
