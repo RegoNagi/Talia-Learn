@@ -11,6 +11,8 @@ import { BrowseLibraryTab } from '@/components/tabs/BrowseLibraryTab';
 import { getUnits, createUnit, deleteUnit, updateUnit, toggleUnitHidden, toggleUnitComplete, updateUnitSharing, getLessons, createLesson, updateLesson, deleteLesson, toggleLessonHidden, toggleLessonComplete, getLessonFileUrl, toggleLessonCompletionForStudent, getLessonCompletionCounts, getStudentLessonCompletions } from '@/services/learningPathData';
 import { getAssignmentsForUnits } from '@/services/assignmentData';
 import { getTeacherClassNames } from '@/services/libraryData';
+import { getOfficialLessonPlans } from '@/services/academicData';
+import { ClipboardList } from 'lucide-react';
 
 type ContentType = 'video' | 'pdf' | 'quiz' | 'assignment' | 'project' | 'link';
 type LessonSource = 'official' | 'custom' | 'ai';
@@ -132,6 +134,14 @@ export function LearningPathTab({
   useEffect(() => {
     startTransition(() => { refreshUnits(); });
   }, [learnScope?.classId, learnScope?.subject]);
+  useEffect(() => {
+    if (!grade || !subject) { setIsLoadingLessonPlans(false); return; }
+    setIsLoadingLessonPlans(true);
+    getOfficialLessonPlans(grade, subject).then((plans) => {
+      setLessonPlans(plans);
+      setIsLoadingLessonPlans(false);
+    });
+  }, [grade, subject]);
 
   const [expandedUnits, setExpandedUnits] = useState<string[]>([]);
   const [lessonViewMode, setLessonViewMode] = useState<'grid' | 'list'>('grid');
@@ -182,8 +192,11 @@ export function LearningPathTab({
   const [isBuildingUnit, setIsBuildingUnit] = useState(false);
   const [newUnitTitle, setNewUnitTitle] = useState('');
 
-  const [contentView, setContentView] = useState<'path' | 'material' | 'my-library'>('path');
-
+const [contentView, setContentView] = useState<'path' | 'material' | 'my-library' | 'lesson-plan'>('path');
+  const [lessonPlans, setLessonPlans] = useState<{ id: string; title: string; content: string; weekNumber: number | null }[]>([]);
+  const [isLoadingLessonPlans, setIsLoadingLessonPlans] = useState(true);
+  const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
+  
   const isStudent = viewRole === 'STUDENT';
 
   const toggleLessonCompletion = async (unitId: string, lessonId: string, forceStatus?: boolean) => {
@@ -314,7 +327,7 @@ export function LearningPathTab({
           >
             Material
           </button>
-          {!isStudent && (
+        {!isStudent && (
             <button
               onClick={() => setContentView('my-library')}
               className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors ${contentView === 'my-library' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
@@ -322,11 +335,43 @@ export function LearningPathTab({
               My Library
             </button>
           )}
+          {!isStudent && (
+            <button
+              onClick={() => setContentView('lesson-plan')}
+              className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${contentView === 'lesson-plan' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+            >
+              <ClipboardList size={16} />
+              Lesson Plan
+            </button>
+          )}
         </div>
       </div>
 
       {contentView === 'material' || contentView === 'my-library' ? (
         <BrowseLibraryTab language={language} role={viewRole?.toLowerCase() || 'student'} teacherId={teacherId} classId={classId} subject={subject} grade={grade} forcedMode={contentView === 'material' ? 'material' : 'my-library'} />
+      ) : contentView === 'lesson-plan' ? (
+        <div className="max-w-3xl mx-auto space-y-3">
+          {isLoadingLessonPlans ? (
+            <p className="text-center text-sm text-slate-400 py-16">Loading...</p>
+          ) : lessonPlans.length === 0 ? (
+            <p className="text-center text-sm text-slate-400 py-16">No approved lesson plan for this subject/grade yet.</p>
+          ) : (
+            lessonPlans.map((plan) => (
+              <div key={plan.id} onClick={() => setExpandedPlanId(expandedPlanId === plan.id ? null : plan.id)} className="p-4 rounded-2xl border border-slate-200 bg-white cursor-pointer hover:border-indigo-200 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0"><ClipboardList size={18} className="text-indigo-600" /></div>
+                  <div className="flex-1 min-w-0">
+                    <h5 className="font-bold text-sm text-slate-800">{plan.title}</h5>
+                    {plan.weekNumber != null && <p className="text-xs text-slate-400 mt-0.5">Week {plan.weekNumber}</p>}
+                  </div>
+                </div>
+                {expandedPlanId === plan.id && (
+                  <p className="mt-4 text-sm text-slate-600 whitespace-pre-wrap border-t border-slate-100 pt-4">{plan.content}</p>
+                )}
+              </div>
+            ))
+          )}
+        </div>
       ) : (
         <>
           {units.length > 0 && (
