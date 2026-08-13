@@ -66,9 +66,10 @@ function mapLesson(row: any): LearnLesson {
 export async function getUnits(scope: UnitScope): Promise<LearnUnit[]> {
   const [ownRes, sharedRes] = await Promise.all([
     supabase.from('learning_units').select(UNIT_SELECT).eq('class_id', scope.classId).eq('subject', scope.subject),
-    supabase.from('learning_units').select(UNIT_SELECT).contains('shared_with', [scope.classId]),
+    supabase.from('learning_units').select(UNIT_SELECT).filter('shared_with', 'cs', JSON.stringify([scope.classId])),
   ]);
   if (ownRes.error) console.error('Error fetching units:', ownRes.error);
+  if (sharedRes.error) console.error('Error fetching shared units:', sharedRes.error);
   const seen = new Set<string>();
   const all = [...(ownRes.data || []), ...(sharedRes.data || [])].filter((r: any) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
   return all.map(mapUnit);
