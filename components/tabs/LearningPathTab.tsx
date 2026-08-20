@@ -1401,7 +1401,7 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
               ) : (
               <div className="grid grid-cols-2 gap-4">
                 <button 
-                  onClick={() => openAddLesson(activeUnitForAdd, units.find(u => u.id === activeUnitForAdd)?.title || '')}
+                  onClick={() => openAddLesson(activeUnitForAdd || '', units.find(u => u.id === activeUnitForAdd)?.title || '')}
                   className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-teal-300 hover:bg-teal-50 rounded-2xl text-center group transition-all shadow-none"
                 >
                   <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-600 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -1413,7 +1413,7 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
                   </div>
                 </button>
                 <button 
-                  onClick={() => openAddAssessment(activeUnitForAdd, units.find(u => u.id === activeUnitForAdd)?.title || '', 'quiz')}
+                  onClick={() => openAddAssessment(activeUnitForAdd || '', units.find(u => u.id === activeUnitForAdd)?.title || '', 'quiz')}
                   className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-purple-300 hover:bg-purple-50 rounded-2xl text-center group transition-all shadow-none"
                 >
                   <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -1425,7 +1425,7 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
                   </div>
                 </button>
                 <button 
-                  onClick={() => openAddAssessment(activeUnitForAdd, units.find(u => u.id === activeUnitForAdd)?.title || '', 'assignment')}
+                  onClick={() => openAddAssessment(activeUnitForAdd || '', units.find(u => u.id === activeUnitForAdd)?.title || '', 'assignment')}
                   className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-orange-300 hover:bg-orange-50 rounded-2xl text-center group transition-all shadow-none"
                 >
                   <div className="w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center group-hover:scale-110 transition-transform">
