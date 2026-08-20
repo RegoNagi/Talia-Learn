@@ -1346,13 +1346,13 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
 
       {/* Add Material Modal */}
       <AnimatePresence>
-        {(activeUnitForAdd || activeFolderForAdd) && !isStudent && (
+        {(activeUnitForAdd || activeFolderForAdd) && !isStudent && !isCreatingFolder && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl border border-slate-100 p-6 w-full max-w-lg relative shadow-none"
+              className="bg-white rounded-3xl border border-slate-100 p-5 w-full max-w-2xl relative shadow-none"
             >
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold text-slate-800">Add Content</h3>
@@ -1370,95 +1370,74 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
                   const folder = parentUnit?.folders.find(f => f.id === activeFolderForAdd);
                   if (!parentUnit || !folder) return null;
                   return (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-5 gap-2">
                     <button 
                       onClick={() => openAddLesson(parentUnit.id, parentUnit.title, folder.id)}
-                      className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-teal-300 hover:bg-teal-50 rounded-2xl text-center group transition-all shadow-none"
+                      className="flex flex-col items-center gap-1.5 p-3 border border-slate-200 hover:border-teal-300 hover:bg-teal-50 rounded-xl text-center group transition-all shadow-none"
                     >
-                      <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <Layout size={24} />
+                      <div className="w-9 h-9 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <Layout size={17} />
                       </div>
-                      <div>
-                        <span className="block text-sm font-bold text-slate-700 mb-1">Add Topic</span>
-                        <span className="block text-xs text-slate-500">Upload video, PDF or link</span>
-                      </div>
+                      <span className="block text-[11px] font-bold text-slate-700 leading-tight">Add Topic</span>
                     </button>
                     <button 
                       onClick={() => openLibrary(parentUnit.id, parentUnit.title, folder.id)}
-                      className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-blue-300 hover:bg-blue-50 rounded-2xl text-center group transition-all shadow-none"
+                      className="flex flex-col items-center gap-1.5 p-3 border border-slate-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl text-center group transition-all shadow-none"
                     >
-                      <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <Book size={24} />
+                      <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <Book size={17} />
                       </div>
-                      <div>
-                        <span className="block text-sm font-bold text-slate-700 mb-1">Import from Library</span>
-                        <span className="block text-xs text-slate-500">Official curriculum content</span>
-                      </div>
+                      <span className="block text-[11px] font-bold text-slate-700 leading-tight">Import</span>
                     </button>
                   </div>
                   );
                 })()
               ) : (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-5 gap-2">
                 <button 
                   onClick={() => openAddLesson(activeUnitForAdd || '', units.find(u => u.id === activeUnitForAdd)?.title || '')}
-                  className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-teal-300 hover:bg-teal-50 rounded-2xl text-center group transition-all shadow-none"
+                  className="flex flex-col items-center gap-1.5 p-3 border border-slate-200 hover:border-teal-300 hover:bg-teal-50 rounded-xl text-center group transition-all shadow-none"
                 >
-                  <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Layout size={24} />
+                  <div className="w-9 h-9 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <Layout size={17} />
                   </div>
-                  <div>
-                    <span className="block text-sm font-bold text-slate-700 mb-1">Add Topic</span>
-                    <span className="block text-xs text-slate-500">Upload video, PDF or link</span>
-                  </div>
+                  <span className="block text-[11px] font-bold text-slate-700 leading-tight">Add Topic</span>
                 </button>
                 <button 
                   onClick={() => openAddAssessment(activeUnitForAdd || '', units.find(u => u.id === activeUnitForAdd)?.title || '', 'quiz')}
-                  className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-purple-300 hover:bg-purple-50 rounded-2xl text-center group transition-all shadow-none"
+                  className="flex flex-col items-center gap-1.5 p-3 border border-slate-200 hover:border-purple-300 hover:bg-purple-50 rounded-xl text-center group transition-all shadow-none"
                 >
-                  <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <BrainCircuit size={24} />
+                  <div className="w-9 h-9 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <BrainCircuit size={17} />
                   </div>
-                  <div>
-                    <span className="block text-sm font-bold text-slate-700 mb-1">Add Quiz</span>
-                    <span className="block text-xs text-slate-500">Questions, auto-graded</span>
-                  </div>
+                  <span className="block text-[11px] font-bold text-slate-700 leading-tight">Add Quiz</span>
                 </button>
                 <button 
                   onClick={() => openAddAssessment(activeUnitForAdd || '', units.find(u => u.id === activeUnitForAdd)?.title || '', 'assignment')}
-                  className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-orange-300 hover:bg-orange-50 rounded-2xl text-center group transition-all shadow-none"
+                  className="flex flex-col items-center gap-1.5 p-3 border border-slate-200 hover:border-orange-300 hover:bg-orange-50 rounded-xl text-center group transition-all shadow-none"
                 >
-                  <div className="w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <ClipboardCheck size={24} />
+                  <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <ClipboardCheck size={17} />
                   </div>
-                  <div>
-                    <span className="block text-sm font-bold text-slate-700 mb-1">Add Assignment</span>
-                    <span className="block text-xs text-slate-500">Upload/submit, manual grading</span>
-                  </div>
+                  <span className="block text-[11px] font-bold text-slate-700 leading-tight">Assignment</span>
                 </button>
                 <button 
                   onClick={() => openLibrary(activeUnitForAdd || '', units.find(u => u.id === activeUnitForAdd)?.title || '')}
-                  className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-blue-300 hover:bg-blue-50 rounded-2xl text-center group transition-all shadow-none"
+                  className="flex flex-col items-center gap-1.5 p-3 border border-slate-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl text-center group transition-all shadow-none"
                 >
-                  <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Book size={24} />
+                  <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <Book size={17} />
                   </div>
-                  <div>
-                    <span className="block text-sm font-bold text-slate-700 mb-1">Import from Library</span>
-                    <span className="block text-xs text-slate-500">Official curriculum content</span>
-                  </div>
+                  <span className="block text-[11px] font-bold text-slate-700 leading-tight">Library</span>
                 </button>
                 <button 
-                  onClick={() => { setIsCreatingFolder(activeUnitForAdd); setNewFolderTitle(''); }}
-                  className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-amber-300 hover:bg-amber-50 rounded-2xl text-center group transition-all shadow-none"
+                  onClick={() => { const u = activeUnitForAdd; setActiveUnitForAdd(null); setActiveFolderForAdd(null); setIsCreatingFolder(u); setNewFolderTitle(''); }}
+                  className="flex flex-col items-center gap-1.5 p-3 border border-slate-200 hover:border-amber-300 hover:bg-amber-50 rounded-xl text-center group transition-all shadow-none"
                 >
-                  <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Folder size={24} />
+                  <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <Folder size={17} />
                   </div>
-                  <div>
-                    <span className="block text-sm font-bold text-slate-700 mb-1">{language === 'ar' ? 'إضافة مجلد' : 'Add Folder'}</span>
-                    <span className="block text-xs text-slate-500">{language === 'ar' ? 'تنظيم المحتوى جوه الموديول' : 'Organize content within the module'}</span>
-                  </div>
+                  <span className="block text-[11px] font-bold text-slate-700 leading-tight">{language === 'ar' ? 'مجلد' : 'Folder'}</span>
                 </button>
               </div>
               )}
