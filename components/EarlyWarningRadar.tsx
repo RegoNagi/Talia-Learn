@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useMemo, startTransition } from 're
 import Image from 'next/image';
 import { AlertCircle, AlertTriangle, CheckCircle2, MessageSquare, Zap, ChevronDown, ChevronUp, UserX, TrendingDown, Bot, ShieldCheck, X, Info, Settings2, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getRiskDataForTeacher, getRiskSettings, saveRiskSettings, RiskSettings } from '@/services/riskData';
+import { getRiskDataForTeacher, getRiskSettings } from '@/services/riskData';
 import { sendMessage, sendMessageToStudentParent } from '@/services/messagesData';
 
 type RiskLevel = 'critical' | 'warning' | 'stable';
@@ -131,37 +131,20 @@ export function EarlyWarningRadar({ language = 'ar', teacherId, authUser }: { la
     });
   }, [teacherId, authUser?.subjects, subjectFilter]);
 
-  // Settings state — دلوقتي بتتحمّل وتتحفظ فعليًا في قاعدة البيانات
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  // معايير التحذير المبكر بقت بتتحدّد من Talia 360 (Gradebook للدرجات، تاب الحضور للحضور) — هنا بس بنقرأها
   const [criticalAttThreshold, setCriticalAttThreshold] = useState(75);
   const [criticalMinAverage, setCriticalMinAverage] = useState(50);
   const [warningAttThreshold, setWarningAttThreshold] = useState(85);
   const [warningMinAverage, setWarningMinAverage] = useState(65);
-  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   useEffect(() => {
-    if (!teacherId) return;
-    getRiskSettings(teacherId).then((s) => {
+    getRiskSettings().then((s) => {
       setCriticalAttThreshold(s.criticalAttendance);
       setCriticalMinAverage(s.criticalMinAverage);
       setWarningAttThreshold(s.warningAttendance);
       setWarningMinAverage(s.warningMinAverage);
     });
-  }, [teacherId]);
-
-  const handleSaveSettings = async () => {
-    if (!teacherId) { setIsSettingsOpen(false); return; }
-    setIsSavingSettings(true);
-    const ok = await saveRiskSettings(teacherId, {
-      criticalAttendance: criticalAttThreshold,
-      criticalMinAverage: criticalMinAverage,
-      warningAttendance: warningAttThreshold,
-      warningMinAverage: warningMinAverage,
-    });
-    setIsSavingSettings(false);
-    if (ok) setIsSettingsOpen(false);
-    else alert(isRtl ? 'حصل خطأ أثناء حفظ الإعدادات.' : 'Error saving settings.');
-  };
+  }, []);
 
   const computedStudents = useMemo(() => {
     return rawStudents.map(s => {
@@ -262,13 +245,10 @@ export function EarlyWarningRadar({ language = 'ar', teacherId, authUser }: { la
               {isRtl ? 'نظام التحليلات التنبؤية والتتبع الآلي للطلاب' : 'Predictive analytics and automated student tracking system'}
             </p>
           </div>
-          <button 
-            onClick={() => setIsSettingsOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors shadow-sm text-sm font-bold"
-          >
-            <Settings2 size={16} />
-            {isRtl ? 'إعدادات المعايير' : 'Criteria Settings'}
-          </button>
+          <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-100 text-gray-500 rounded-xl text-xs font-bold">
+            <Info size={14} />
+            {isRtl ? 'المعايير بتتحدد من Talia 360' : 'Criteria configured in Talia 360'}
+          </div>
         </div>
 
         {/* Top Overview Metrics Row */}
@@ -575,115 +555,6 @@ export function EarlyWarningRadar({ language = 'ar', teacherId, authUser }: { la
       </AnimatePresence>
 
       {/* Settings Modal Overlay */}
-      <AnimatePresence>
-        {isSettingsOpen && (
-           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" dir={isRtl ? 'rtl' : 'ltr'}>
-             <motion.div 
-               initial={{ opacity: 0 }}
-               animate={{ opacity: 1 }}
-               exit={{ opacity: 0 }}
-               className="absolute inset-0 bg-gray-900/40 backdrop-blur-sm"
-               onClick={() => setIsSettingsOpen(false)}
-             />
-             <motion.div 
-               initial={{ opacity: 0, scale: 0.95, y: 10 }}
-               animate={{ opacity: 1, scale: 1, y: 0 }}
-               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-               className="relative w-full max-w-lg bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-none flex flex-col max-h-[90vh]"
-             >
-                {/* Modal Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
-                   <div className="flex items-center gap-3">
-                     <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center shadow-none">
-                       <Settings2 size={16} />
-                     </div>
-                     <h2 className="text-base font-bold text-gray-900 leading-none">
-                       {isRtl ? 'إعدادات معايير الرادار' : 'Radar Criteria Settings'}
-                     </h2>
-                   </div>
-                   <button 
-                     onClick={() => setIsSettingsOpen(false)} 
-                     className="text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-full p-1.5 transition-colors"
-                   >
-                     <X size={20} />
-                   </button>
-                </div>
-
-                {/* Modal Body */}
-                <div className="p-6 overflow-y-auto custom-scrollbar flex-shrink-0 flex-grow space-y-6">
-                   
-                   <div>
-                     <h3 className="font-bold text-gray-800 text-sm mb-4 border-b border-gray-100 pb-2">{isRtl ? 'الحالة الحرجة (Critical Risk)' : 'Critical Risk'}</h3>
-                     <div className="space-y-4">
-                       <div>
-                         <label className="block text-xs font-bold text-gray-500 mb-1.5">{isRtl ? 'نسبة الغياب أقل من (%)' : 'Attendance less than (%)'}</label>
-                         <input 
-                           type="number" 
-                           value={criticalAttThreshold}
-                           onChange={(e) => setCriticalAttThreshold(Number(e.target.value))}
-                           className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-800 focus:outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400 transition-colors shadow-none"
-                         />
-                       </div>
-                       <div>
-                         <label className="block text-xs font-bold text-gray-500 mb-1.5">{isRtl ? 'متوسط الأداء العام أقل من (%)' : 'Overall performance average below (%)'}</label>
-                         <input 
-                           type="number" 
-                           value={criticalMinAverage}
-                           onChange={(e) => setCriticalMinAverage(Number(e.target.value))}
-                           className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-800 focus:outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400 transition-colors shadow-none"
-                         />
-                       </div>
-                     </div>
-                   </div>
-
-                   <div>
-                     <h3 className="font-bold text-gray-800 text-sm mb-4 border-b border-gray-100 pb-2">{isRtl ? 'الإنذار (Warning Level)' : 'Warning Level'}</h3>
-                     <div className="space-y-4">
-                       <div>
-                         <label className="block text-xs font-bold text-gray-500 mb-1.5">{isRtl ? 'نسبة الغياب أقل من (%)' : 'Attendance less than (%)'}</label>
-                         <input 
-                           type="number" 
-                           value={warningAttThreshold}
-                           onChange={(e) => setWarningAttThreshold(Number(e.target.value))}
-                           className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-800 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors shadow-none"
-                         />
-                       </div>
-                       <div>
-                         <label className="block text-xs font-bold text-gray-500 mb-1.5">{isRtl ? 'متوسط الأداء العام أقل من (%)' : 'Overall performance average below (%)'}</label>
-                         <input 
-                           type="number" 
-                           value={warningMinAverage}
-                           onChange={(e) => setWarningMinAverage(Number(e.target.value))}
-                           className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-800 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors shadow-none"
-                         />
-                       </div>
-                     </div>
-                   </div>
-
-                </div>
-
-                {/* Modal Footer */}
-                <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-3 rounded-b-2xl">
-                   <button 
-                     onClick={() => setIsSettingsOpen(false)}
-                     className="px-5 py-2 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors shadow-none"
-                   >
-                     {isRtl ? 'إلغاء' : 'Cancel'}
-                   </button>
-                   <button 
-                     onClick={handleSaveSettings}
-                     disabled={isSavingSettings}
-                     className="px-6 py-2 text-sm font-bold text-white bg-gray-800 hover:bg-gray-900 border border-gray-800 rounded-xl transition-colors shadow-none flex items-center gap-2 disabled:opacity-60"
-                   >
-                     <Save size={16} />
-                     {isSavingSettings ? (isRtl ? 'جاري الحفظ...' : 'Saving...') : (isRtl ? 'حفظ' : 'Save')}
-                   </button>
-                </div>
-
-             </motion.div>
-           </div>
-        )}
-      </AnimatePresence>
 
     </div>
   );
