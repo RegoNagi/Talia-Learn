@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useMemo, startTransition } from 're
 import Image from 'next/image';
 import { AlertCircle, AlertTriangle, CheckCircle2, MessageSquare, Zap, ChevronDown, ChevronUp, UserX, TrendingDown, Bot, ShieldCheck, X, Info, Settings2, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getRiskDataForTeacher } from '@/services/riskData';
+import { getRiskDataForTeacher, getRiskSettings, saveRiskSettings, RiskSettings } from '@/services/riskData';
 import { sendMessage, sendMessageToStudentParent } from '@/services/messagesData';
 
 type RiskLevel = 'critical' | 'warning' | 'stable';
@@ -131,12 +131,37 @@ export function EarlyWarningRadar({ language = 'ar', teacherId, authUser }: { la
     });
   }, [teacherId, authUser?.subjects, subjectFilter]);
 
-  // Settings state
+  // Settings state — دلوقتي بتتحمّل وتتحفظ فعليًا في قاعدة البيانات
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [criticalAttThreshold, setCriticalAttThreshold] = useState(75);
   const [criticalMinAverage, setCriticalMinAverage] = useState(50);
   const [warningAttThreshold, setWarningAttThreshold] = useState(85);
   const [warningMinAverage, setWarningMinAverage] = useState(65);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+  useEffect(() => {
+    if (!teacherId) return;
+    getRiskSettings(teacherId).then((s) => {
+      setCriticalAttThreshold(s.criticalAttendance);
+      setCriticalMinAverage(s.criticalMinAverage);
+      setWarningAttThreshold(s.warningAttendance);
+      setWarningMinAverage(s.warningMinAverage);
+    });
+  }, [teacherId]);
+
+  const handleSaveSettings = async () => {
+    if (!teacherId) { setIsSettingsOpen(false); return; }
+    setIsSavingSettings(true);
+    const ok = await saveRiskSettings(teacherId, {
+      criticalAttendance: criticalAttThreshold,
+      criticalMinAverage: criticalMinAverage,
+      warningAttendance: warningAttThreshold,
+      warningMinAverage: warningMinAverage,
+    });
+    setIsSavingSettings(false);
+    if (ok) setIsSettingsOpen(false);
+    else alert(isRtl ? 'حصل خطأ أثناء حفظ الإعدادات.' : 'Error saving settings.');
+  };
 
   const computedStudents = useMemo(() => {
     return rawStudents.map(s => {
@@ -247,7 +272,7 @@ export function EarlyWarningRadar({ language = 'ar', teacherId, authUser }: { la
         </div>
 
         {/* Top Overview Metrics Row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-red-50/50 border border-red-100 rounded-2xl p-5 shadow-none flex items-center justify-between relative group">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -284,17 +309,6 @@ export function EarlyWarningRadar({ language = 'ar', teacherId, authUser }: { la
             </div>
           </div>
 
-          <div className="bg-green-50/50 border border-green-100 rounded-2xl p-5 shadow-none flex items-center justify-between">
-            <div>
-              <p className="text-sm font-bold text-green-600 mb-1">
-                {isRtl ? 'تم احتوائهم' : 'Resolved'}
-              </p>
-              <h2 className="text-3xl font-black text-green-700">{stats.resolved}</h2>
-            </div>
-            <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center shadow-none">
-              <CheckCircle2 size={24} />
-            </div>
-          </div>
         </div>
 
         {/* Filters and Tabs Row */}
@@ -657,11 +671,12 @@ export function EarlyWarningRadar({ language = 'ar', teacherId, authUser }: { la
                      {isRtl ? 'إلغاء' : 'Cancel'}
                    </button>
                    <button 
-                     onClick={() => setIsSettingsOpen(false)}
-                     className="px-6 py-2 text-sm font-bold text-white bg-gray-800 hover:bg-gray-900 border border-gray-800 rounded-xl transition-colors shadow-none flex items-center gap-2"
+                     onClick={handleSaveSettings}
+                     disabled={isSavingSettings}
+                     className="px-6 py-2 text-sm font-bold text-white bg-gray-800 hover:bg-gray-900 border border-gray-800 rounded-xl transition-colors shadow-none flex items-center gap-2 disabled:opacity-60"
                    >
                      <Save size={16} />
-                     {isRtl ? 'حفظ' : 'Save'}
+                     {isSavingSettings ? (isRtl ? 'جاري الحفظ...' : 'Saving...') : (isRtl ? 'حفظ' : 'Save')}
                    </button>
                 </div>
 
@@ -673,4 +688,3 @@ export function EarlyWarningRadar({ language = 'ar', teacherId, authUser }: { la
     </div>
   );
 }
-
