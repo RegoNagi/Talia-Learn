@@ -11,10 +11,11 @@ interface AddAssessmentModalProps {
   subject?: string;
   grade?: string;
   unitId?: string | null;
+  folderId?: string | null;
   assessmentType?: 'quiz' | 'assignment';
 }
 
-export function AddAssessmentModal({ isOpen, onClose, unitTitle, classId, subject, grade, unitId, assessmentType = 'assignment' }: AddAssessmentModalProps) {
+export function AddAssessmentModal({ isOpen, onClose, unitTitle, classId, subject, grade, unitId, folderId, assessmentType = 'assignment' }: AddAssessmentModalProps) {
   const router = useRouter();
 
   useEffect(() => {
@@ -25,6 +26,7 @@ export function AddAssessmentModal({ isOpen, onClose, unitTitle, classId, subjec
       if (subject) params.set('subject', subject);
       if (grade) params.set('grade', grade);
       if (unitId) params.set('unitId', unitId);
+      if (folderId) params.set('folderId', folderId);
       if (typeof window !== 'undefined') params.set('from', encodeURIComponent(window.location.pathname + window.location.search));
       router.push(`/assessment-builder?${params.toString()}`);
       onClose();
