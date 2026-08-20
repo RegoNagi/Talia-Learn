@@ -111,9 +111,27 @@ export function LearningPathTab({
         storagePath: l.storagePath,
         folderId: l.folderId,
       });
+      const mapAssessmentToUi = (a: any): Lesson => ({
+        id: a.id,
+        title: a.title,
+        type: a.type as ContentType,
+        source: 'custom' as LessonSource,
+        week: '',
+        completedCount: 0,
+        totalCount: 0,
+        status: 'upcoming' as LessonStatus,
+        completed: false,
+        isHidden: false,
+        isTopicComplete: a.status === 'Closed',
+        url: null,
+        storagePath: null,
+        folderId: a.folderId,
+      });
       const mapped: Unit[] = realUnits.map((u) => {
         const unitLessons = lessons.filter(l => l.unitId === u.id).map(mapLessonToUi);
+        const unitAssessmentsForUnit = unitAssessments.filter(a => a.unitId === u.id).map(mapAssessmentToUi);
         const unitFolders = realFolders.filter(f => f.unitId === u.id);
+        const allUnitItems = [...unitLessons, ...unitAssessmentsForUnit];
         return {
         id: u.id,
         title: u.title,
@@ -126,27 +144,9 @@ export function LearningPathTab({
           id: f.id,
           title: f.title,
           isHidden: f.isHidden,
-          lessons: unitLessons.filter((l) => l.folderId === f.id),
+          lessons: allUnitItems.filter((l) => l.folderId === f.id),
         })),
-        lessons: [
-          ...unitLessons.filter((l) => !l.folderId),
-          ...unitAssessments.filter(a => a.unitId === u.id).map((a) => ({
-            id: a.id,
-            title: a.title,
-            type: a.type as ContentType,
-            source: 'custom' as LessonSource,
-            week: u.weeksLabel,
-            completedCount: 0,
-            totalCount: 0,
-            status: 'upcoming' as LessonStatus,
-            completed: false,
-            isHidden: false,
-            isTopicComplete: a.status === 'Closed',
-            url: null,
-            storagePath: null,
-            folderId: null,
-          })),
-        ],
+        lessons: allUnitItems.filter((l) => !l.folderId),
       };
       });
       setUnits(mapped);
@@ -297,12 +297,14 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
   };
 
   const [newAssessmentType, setNewAssessmentType] = useState<'quiz' | 'assignment'>('assignment');
-  const openAddAssessment = (unitId: string, unitTitle: string, type: 'quiz' | 'assignment') => {
+  const openAddAssessment = (unitId: string, unitTitle: string, type: 'quiz' | 'assignment', folderId: string | null = null) => {
     setTargetUnitId(unitId);
     setTargetUnitTitle(unitTitle);
+    setTargetFolderId(folderId);
     setNewAssessmentType(type);
     setIsAddAssessmentOpen(true);
     setActiveUnitForAdd(null);
+    setActiveFolderForAdd(null);
   };
 
   const handleSaveLesson = async (lessonData: { title: string; type: ContentType; source: 'custom'; url?: string; file?: File | null }) => {
@@ -1347,12 +1349,12 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
       {/* Add Material Modal */}
       <AnimatePresence>
         {(activeUnitForAdd || activeFolderForAdd) && !isStudent && !isCreatingFolder && (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/70 backdrop-blur-md p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl border border-slate-100 p-5 w-full max-w-2xl relative shadow-none"
+              className="bg-white rounded-3xl border border-slate-100 p-7 w-full max-w-2xl relative shadow-2xl"
             >
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold text-slate-800">Add Content</h3>
@@ -1370,24 +1372,42 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
                   const folder = parentUnit?.folders.find(f => f.id === activeFolderForAdd);
                   if (!parentUnit || !folder) return null;
                   return (
-                  <div className="grid grid-cols-5 gap-2">
+                  <div className="grid grid-cols-4 gap-2">
                     <button 
                       onClick={() => openAddLesson(parentUnit.id, parentUnit.title, folder.id)}
-                      className="flex flex-col items-center gap-1.5 p-3 border border-slate-200 hover:border-teal-300 hover:bg-teal-50 rounded-xl text-center group transition-all shadow-none"
+                      className="flex flex-col items-center gap-2 p-4 border border-slate-200 hover:border-teal-300 hover:bg-teal-50 rounded-xl text-center group transition-all shadow-none"
                     >
-                      <div className="w-9 h-9 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                        <Layout size={17} />
+                      <div className="w-11 h-11 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <Layout size={20} />
                       </div>
-                      <span className="block text-[11px] font-bold text-slate-700 leading-tight">Add Topic</span>
+                      <span className="block text-xs font-bold text-slate-700 leading-tight">Topic</span>
+                    </button>
+                    <button 
+                      onClick={() => openAddAssessment(parentUnit.id, parentUnit.title, 'quiz', folder.id)}
+                      className="flex flex-col items-center gap-2 p-4 border border-slate-200 hover:border-purple-300 hover:bg-purple-50 rounded-xl text-center group transition-all shadow-none"
+                    >
+                      <div className="w-11 h-11 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <BrainCircuit size={20} />
+                      </div>
+                      <span className="block text-xs font-bold text-slate-700 leading-tight">Quiz</span>
+                    </button>
+                    <button 
+                      onClick={() => openAddAssessment(parentUnit.id, parentUnit.title, 'assignment', folder.id)}
+                      className="flex flex-col items-center gap-2 p-4 border border-slate-200 hover:border-orange-300 hover:bg-orange-50 rounded-xl text-center group transition-all shadow-none"
+                    >
+                      <div className="w-11 h-11 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <ClipboardCheck size={20} />
+                      </div>
+                      <span className="block text-xs font-bold text-slate-700 leading-tight">Assignment</span>
                     </button>
                     <button 
                       onClick={() => openLibrary(parentUnit.id, parentUnit.title, folder.id)}
-                      className="flex flex-col items-center gap-1.5 p-3 border border-slate-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl text-center group transition-all shadow-none"
+                      className="flex flex-col items-center gap-2 p-4 border border-slate-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl text-center group transition-all shadow-none"
                     >
-                      <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                        <Book size={17} />
+                      <div className="w-11 h-11 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <Book size={20} />
                       </div>
-                      <span className="block text-[11px] font-bold text-slate-700 leading-tight">Import</span>
+                      <span className="block text-xs font-bold text-slate-700 leading-tight">Library</span>
                     </button>
                   </div>
                   );
@@ -1396,48 +1416,48 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
               <div className="grid grid-cols-5 gap-2">
                 <button 
                   onClick={() => openAddLesson(activeUnitForAdd || '', units.find(u => u.id === activeUnitForAdd)?.title || '')}
-                  className="flex flex-col items-center gap-1.5 p-3 border border-slate-200 hover:border-teal-300 hover:bg-teal-50 rounded-xl text-center group transition-all shadow-none"
+                  className="flex flex-col items-center gap-2 p-4 border border-slate-200 hover:border-teal-300 hover:bg-teal-50 rounded-xl text-center group transition-all shadow-none"
                 >
-                  <div className="w-9 h-9 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Layout size={17} />
+                  <div className="w-11 h-11 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <Layout size={20} />
                   </div>
-                  <span className="block text-[11px] font-bold text-slate-700 leading-tight">Add Topic</span>
+                  <span className="block text-xs font-bold text-slate-700 leading-tight">Topic</span>
                 </button>
                 <button 
                   onClick={() => openAddAssessment(activeUnitForAdd || '', units.find(u => u.id === activeUnitForAdd)?.title || '', 'quiz')}
-                  className="flex flex-col items-center gap-1.5 p-3 border border-slate-200 hover:border-purple-300 hover:bg-purple-50 rounded-xl text-center group transition-all shadow-none"
+                  className="flex flex-col items-center gap-2 p-4 border border-slate-200 hover:border-purple-300 hover:bg-purple-50 rounded-xl text-center group transition-all shadow-none"
                 >
-                  <div className="w-9 h-9 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <BrainCircuit size={17} />
+                  <div className="w-11 h-11 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <BrainCircuit size={20} />
                   </div>
-                  <span className="block text-[11px] font-bold text-slate-700 leading-tight">Add Quiz</span>
+                  <span className="block text-xs font-bold text-slate-700 leading-tight">Quiz</span>
                 </button>
                 <button 
                   onClick={() => openAddAssessment(activeUnitForAdd || '', units.find(u => u.id === activeUnitForAdd)?.title || '', 'assignment')}
-                  className="flex flex-col items-center gap-1.5 p-3 border border-slate-200 hover:border-orange-300 hover:bg-orange-50 rounded-xl text-center group transition-all shadow-none"
+                  className="flex flex-col items-center gap-2 p-4 border border-slate-200 hover:border-orange-300 hover:bg-orange-50 rounded-xl text-center group transition-all shadow-none"
                 >
-                  <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <ClipboardCheck size={17} />
+                  <div className="w-11 h-11 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <ClipboardCheck size={20} />
                   </div>
-                  <span className="block text-[11px] font-bold text-slate-700 leading-tight">Assignment</span>
+                  <span className="block text-xs font-bold text-slate-700 leading-tight">Assignment</span>
                 </button>
                 <button 
                   onClick={() => openLibrary(activeUnitForAdd || '', units.find(u => u.id === activeUnitForAdd)?.title || '')}
-                  className="flex flex-col items-center gap-1.5 p-3 border border-slate-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl text-center group transition-all shadow-none"
+                  className="flex flex-col items-center gap-2 p-4 border border-slate-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl text-center group transition-all shadow-none"
                 >
-                  <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Book size={17} />
+                  <div className="w-11 h-11 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <Book size={20} />
                   </div>
-                  <span className="block text-[11px] font-bold text-slate-700 leading-tight">Library</span>
+                  <span className="block text-xs font-bold text-slate-700 leading-tight">Library</span>
                 </button>
                 <button 
                   onClick={() => { const u = activeUnitForAdd; setActiveUnitForAdd(null); setActiveFolderForAdd(null); setIsCreatingFolder(u); setNewFolderTitle(''); }}
-                  className="flex flex-col items-center gap-1.5 p-3 border border-slate-200 hover:border-amber-300 hover:bg-amber-50 rounded-xl text-center group transition-all shadow-none"
+                  className="flex flex-col items-center gap-2 p-4 border border-slate-200 hover:border-amber-300 hover:bg-amber-50 rounded-xl text-center group transition-all shadow-none"
                 >
-                  <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Folder size={17} />
+                  <div className="w-11 h-11 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <Folder size={20} />
                   </div>
-                  <span className="block text-[11px] font-bold text-slate-700 leading-tight">{language === 'ar' ? 'مجلد' : 'Folder'}</span>
+                  <span className="block text-xs font-bold text-slate-700 leading-tight">{language === 'ar' ? 'مجلد' : 'Folder'}</span>
                 </button>
               </div>
               )}
@@ -1449,7 +1469,7 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
       {/* New Folder Name Modal */}
       <AnimatePresence>
         {isCreatingFolder && (
-          <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={() => { setIsCreatingFolder(null); setNewFolderTitle(''); }}>
+          <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/70 backdrop-blur-md p-4" onClick={() => { setIsCreatingFolder(null); setNewFolderTitle(''); }}>
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl border border-slate-100 shadow-none p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-slate-800">{language === 'ar' ? 'مجلد جديد' : 'New Folder'}</h3>
@@ -1479,7 +1499,7 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
       {/* Rename Folder Modal */}
       <AnimatePresence>
         {renamingFolder && (
-          <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={() => setRenamingFolder(null)}>
+          <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/70 backdrop-blur-md p-4" onClick={() => setRenamingFolder(null)}>
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl border border-slate-100 shadow-none p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-slate-800">{language === 'ar' ? 'تعديل اسم المجلد' : 'Rename Folder'}</h3>
@@ -1504,7 +1524,7 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
       {/* Move Modal (folder or lesson) */}
       <AnimatePresence>
         {moveTarget && (
-          <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={() => { setMoveTarget(null); setMoveDestUnitId(null); setMoveDestFolderId(null); }}>
+          <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/70 backdrop-blur-md p-4" onClick={() => { setMoveTarget(null); setMoveDestUnitId(null); setMoveDestFolderId(null); }}>
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl border border-slate-100 shadow-none p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-slate-800">{language === 'ar' ? 'نقل إلى' : 'Move to'}</h3>
@@ -1590,6 +1610,7 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
         subject={subject}
         grade={grade}
         unitId={targetUnitId}
+        folderId={targetFolderId}
         assessmentType={newAssessmentType}
       />
 
