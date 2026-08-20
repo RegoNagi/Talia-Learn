@@ -93,9 +93,9 @@ const DEFAULT_RISK_SETTINGS: RiskSettings = {
   warningMinAverage: 65,
 };
 
-// بيجيب إعدادات معايير الرادار الحقيقية بتاعة المعلم ده، أو القيم الافتراضية لو لسه معملهاش
-export async function getRiskSettings(teacherId: string): Promise<RiskSettings> {
-  const { data, error } = await supabase.from('risk_settings').select('*').eq('teacher_id', teacherId).maybeSingle();
+// بيجيب معايير التحذير المبكر الحقيقية بتاعة المدرسة (إعداد واحد للمدرسة كلها، بيتعدّل من Talia 360 — الدرجات من Gradebook والحضور من تاب الحضور)
+export async function getRiskSettings(): Promise<RiskSettings> {
+  const { data, error } = await supabase.from('early_warning_criteria').select('*').limit(1).maybeSingle();
   if (error || !data) return DEFAULT_RISK_SETTINGS;
   return {
     criticalAttendance: data.critical_attendance,
@@ -103,18 +103,4 @@ export async function getRiskSettings(teacherId: string): Promise<RiskSettings> 
     warningAttendance: data.warning_attendance,
     warningMinAverage: data.warning_min_average,
   };
-}
-
-// بيحفظ إعدادات معايير الرادار بتاعة المعلم ده (بينشئ الصف لو مش موجود، أو يحدّثه لو موجود)
-export async function saveRiskSettings(teacherId: string, settings: RiskSettings): Promise<boolean> {
-  const { error } = await supabase.from('risk_settings').upsert({
-    teacher_id: teacherId,
-    critical_attendance: settings.criticalAttendance,
-    critical_min_average: settings.criticalMinAverage,
-    warning_attendance: settings.warningAttendance,
-    warning_min_average: settings.warningMinAverage,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'teacher_id' });
-  if (error) console.error('Error saving risk settings:', error);
-  return !error;
 }
