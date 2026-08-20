@@ -125,7 +125,7 @@ export async function getAssignmentById(id: string): Promise<Assignment | null> 
   return mapAssignment(data);
 }
 
-export async function createAssignment(scope: AssignmentScope, input: { title: string; instructions: string; dueDate: string | null; status?: 'Active' | 'Draft'; unitId?: string | null; settings?: Record<string, any>; rubric?: any[]; attachments?: { name: string; storagePath: string }[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ id: string | null; error: string | null }> {
+export async function createAssignment(scope: AssignmentScope, input: { title: string; instructions: string; dueDate: string | null; status?: 'Active' | 'Draft'; unitId?: string | null; folderId?: string | null; settings?: Record<string, any>; rubric?: any[]; attachments?: { name: string; storagePath: string }[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ id: string | null; error: string | null }> {
   const { data, error } = await supabase
     .from('assignments')
     .insert({
@@ -138,6 +138,7 @@ export async function createAssignment(scope: AssignmentScope, input: { title: s
       due_date: input.dueDate,
       status: input.status || 'Active',
       unit_id: input.unitId || null,
+      folder_id: input.folderId || null,
       settings: input.settings || {},
       rubric: input.rubric || [],
       attachments: input.attachments || [],
@@ -194,7 +195,7 @@ export async function getQuizById(id: string): Promise<Quiz | null> {
   return mapQuiz(data);
 }
 
-export async function createQuiz(scope: AssignmentScope, input: { title: string; dueDate: string | null; releaseAt: string | null; status?: 'Active' | 'Draft'; approvalStatus?: 'pending' | 'approved'; unitId?: string | null; settings?: Record<string, any>; questions: QuizQuestion[]; sections: any[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ id: string | null; error: string | null }> {
+export async function createQuiz(scope: AssignmentScope, input: { title: string; dueDate: string | null; releaseAt: string | null; status?: 'Active' | 'Draft'; approvalStatus?: 'pending' | 'approved'; unitId?: string | null; folderId?: string | null; settings?: Record<string, any>; questions: QuizQuestion[]; sections: any[]; assignedClasses?: string[]; assignedStudents?: string[] }): Promise<{ id: string | null; error: string | null }> {
   const { data, error } = await supabase
     .from('assignments')
     .insert({
@@ -208,6 +209,7 @@ export async function createQuiz(scope: AssignmentScope, input: { title: string;
       status: input.status || 'Active',
       approval_status: input.approvalStatus || 'approved',
       unit_id: input.unitId || null,
+      folder_id: input.folderId || null,
       settings: input.settings || {},
       questions: input.questions || [],
       sections: input.sections || [],
@@ -557,16 +559,17 @@ export async function gradeQuizManualQuestion(attemptId: string, extraScore: num
 }
 
 // الواجبات والكويزات الحقيقية المرتبطة بوحدات معيّنة في مسار التعلّم — عشان تظهر فعليًا كعناصر داخل الموديول
-export async function getAssignmentsForUnits(unitIds: string[]): Promise<{ id: string; unitId: string; title: string; type: 'assignment' | 'quiz'; dueDate: string | null; status: string }[]> {
+export async function getAssignmentsForUnits(unitIds: string[]): Promise<{ id: string; unitId: string; folderId: string | null; title: string; type: 'assignment' | 'quiz'; dueDate: string | null; status: string }[]> {
   if (unitIds.length === 0) return [];
   const { data, error } = await supabase
     .from('assignments')
-    .select('id, unit_id, title, type, due_date, status')
+    .select('id, unit_id, folder_id, title, type, due_date, status')
     .in('unit_id', unitIds);
   if (error || !data) return [];
   return data.map((row: any) => ({
     id: row.id,
     unitId: row.unit_id,
+    folderId: row.folder_id,
     title: row.title,
     type: row.type === 'quiz' ? 'quiz' as const : 'assignment' as const,
     dueDate: row.due_date,
