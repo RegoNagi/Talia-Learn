@@ -1,6 +1,6 @@
 import { useState, useEffect, startTransition } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Book, ChevronDown, MoreHorizontal, PlayCircle, FileText, BrainCircuit, Shuffle, Plus, Sparkles, Trash2, EyeOff, Eye, Share2, Edit, Layout, Check, ClipboardCheck, X, MoreVertical, Link as LinkIcon, LayoutGrid, List, ArrowLeft, Clock, CheckCircle2 } from 'lucide-react';
+import { Book, ChevronDown, MoreHorizontal, PlayCircle, FileText, BrainCircuit, Shuffle, Plus, Sparkles, Trash2, EyeOff, Eye, Share2, Edit, Layout, Check, ClipboardCheck, X, MoreVertical, Link as LinkIcon, LayoutGrid, List, ArrowLeft, Clock, CheckCircle2, Folder, FolderOpen, Copy, FolderInput } from 'lucide-react';
 
 import { LibraryDrawer } from '@/components/LearningPath/LibraryDrawer';
 import { AddLessonModal } from '@/components/LearningPath/AddLessonModal';
@@ -8,7 +8,7 @@ import { AddAssessmentModal } from '@/components/LearningPath/AddAssessmentModal
 import { StudentCompletionPopover } from '@/components/LearningPath/StudentCompletionPopover';
 import { UnitMasteryBuilder } from '@/components/UnitMasteryBuilder';
 import { BrowseLibraryTab } from '@/components/tabs/BrowseLibraryTab';
-import { getUnits, createUnit, deleteUnit, updateUnit, toggleUnitHidden, toggleUnitComplete, updateUnitSharing, getLessons, createLesson, updateLesson, deleteLesson, toggleLessonHidden, toggleLessonComplete, getLessonFileUrl, toggleLessonCompletionForStudent, getLessonCompletionCounts, getStudentLessonCompletions } from '@/services/learningPathData';
+import { getUnits, createUnit, deleteUnit, updateUnit, toggleUnitHidden, toggleUnitComplete, updateUnitSharing, getLessons, createLesson, updateLesson, deleteLesson, toggleLessonHidden, toggleLessonComplete, getLessonFileUrl, toggleLessonCompletionForStudent, getLessonCompletionCounts, getStudentLessonCompletions, getFolders, createFolder, updateFolder, toggleFolderHidden, deleteFolder, moveFolder, duplicateFolder, duplicateUnit, duplicateLesson, moveLesson, LearnFolder } from '@/services/learningPathData';
 import { getAssignmentsForUnits } from '@/services/assignmentData';
 import { getTeacherClassNames } from '@/services/libraryData';
 import { getOfficialLessonPlans } from '@/services/academicData';
@@ -33,6 +33,14 @@ interface Lesson {
   isTopicComplete: boolean;
   url?: string | null;
   storagePath?: string | null;
+  folderId?: string | null;
+}
+
+interface FolderGroup {
+  id: string;
+  title: string;
+  isHidden: boolean;
+  lessons: Lesson[];
 }
 
 interface Unit {
@@ -41,6 +49,7 @@ interface Unit {
   weeks: string;
   progress: number;
   lessons: Lesson[];
+  folders: FolderGroup[];
   isHidden: boolean;
   isComplete: boolean;
   sharedWith: string[];
@@ -76,16 +85,36 @@ export function LearningPathTab({
     startTransition(() => setIsLoadingUnits(true));
     getUnits(learnScope).then(async (realUnits) => {
       const unitIds = realUnits.map(u => u.id);
-      const [lessons, unitAssessments] = await Promise.all([
+      const [lessons, unitAssessments, realFolders] = await Promise.all([
         getLessons(unitIds),
         getAssignmentsForUnits(unitIds),
+        getFolders(unitIds),
       ]);
       const lessonIds = lessons.map((l) => l.id);
       const [counts, myCompletions] = await Promise.all([
         classId ? getLessonCompletionCounts(lessonIds, classId) : Promise.resolve({} as Record<string, { completed: number; total: number }>),
         studentId ? getStudentLessonCompletions(studentId, lessonIds) : Promise.resolve(new Set<string>()),
       ]);
-      const mapped: Unit[] = realUnits.map((u) => ({
+      const mapLessonToUi = (l: any): Lesson => ({
+        id: l.id,
+        title: l.title,
+        type: l.type as ContentType,
+        source: 'custom' as LessonSource,
+        week: l.weekLabel,
+        completedCount: counts[l.id]?.completed || 0,
+        totalCount: counts[l.id]?.total || 0,
+        status: 'upcoming' as LessonStatus,
+        completed: myCompletions.has(l.id),
+        isHidden: l.isHidden,
+        isTopicComplete: l.isComplete,
+        url: l.url,
+        storagePath: l.storagePath,
+        folderId: l.folderId,
+      });
+      const mapped: Unit[] = realUnits.map((u) => {
+        const unitLessons = lessons.filter(l => l.unitId === u.id).map(mapLessonToUi);
+        const unitFolders = realFolders.filter(f => f.unitId === u.id);
+        return {
         id: u.id,
         title: u.title,
         weeks: u.weeksLabel,
@@ -93,22 +122,14 @@ export function LearningPathTab({
         isHidden: u.isHidden,
         isComplete: u.isComplete,
         sharedWith: u.sharedWith,
+        folders: unitFolders.map((f) => ({
+          id: f.id,
+          title: f.title,
+          isHidden: f.isHidden,
+          lessons: unitLessons.filter((l) => l.folderId === f.id),
+        })),
         lessons: [
-          ...lessons.filter(l => l.unitId === u.id).map((l) => ({
-          id: l.id,
-          title: l.title,
-          type: l.type as ContentType,
-          source: 'custom' as LessonSource,
-          week: l.weekLabel,
-          completedCount: counts[l.id]?.completed || 0,
-          totalCount: counts[l.id]?.total || 0,
-          status: 'upcoming' as LessonStatus,
-          completed: myCompletions.has(l.id),
-          isHidden: l.isHidden,
-          isTopicComplete: l.isComplete,
-          url: l.url,
-          storagePath: l.storagePath,
-          })),
+          ...unitLessons.filter((l) => !l.folderId),
           ...unitAssessments.filter(a => a.unitId === u.id).map((a) => ({
             id: a.id,
             title: a.title,
@@ -123,9 +144,11 @@ export function LearningPathTab({
             isTopicComplete: a.status === 'Closed',
             url: null,
             storagePath: null,
+            folderId: null,
           })),
         ],
-      }));
+      };
+      });
       setUnits(mapped);
      setIsLoadingUnits(false);
     });
@@ -139,19 +162,28 @@ export function LearningPathTab({
   const [lessonViewMode, setLessonViewMode] = useState<'grid' | 'list'>('grid');
   const [activeUnitMenuId, setActiveUnitMenuId] = useState<string | null>(null);
   const [activeLessonMenuId, setActiveLessonMenuId] = useState<string | null>(null);
+  const [activeFolderMenuId, setActiveFolderMenuId] = useState<string | null>(null);
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
 
   useEffect(() => {
-    if (!activeUnitMenuId && !activeLessonMenuId) return;
-    const closeMenus = () => { setActiveUnitMenuId(null); setActiveLessonMenuId(null); };
+    if (!activeUnitMenuId && !activeLessonMenuId && !activeFolderMenuId) return;
+    const closeMenus = () => { setActiveUnitMenuId(null); setActiveLessonMenuId(null); setActiveFolderMenuId(null); };
     document.addEventListener('click', closeMenus);
     return () => document.removeEventListener('click', closeMenus);
-  }, [activeUnitMenuId, activeLessonMenuId]);
+  }, [activeUnitMenuId, activeLessonMenuId, activeFolderMenuId]);
 
   const expandAllUnits = () => setExpandedUnits(units.map(u => u.id));
   const collapseAllUnits = () => setExpandedUnits([]);
 
   const [activeUnitForAdd, setActiveUnitForAdd] = useState<string | null>(null);
+  const [activeFolderForAdd, setActiveFolderForAdd] = useState<string | null>(null);
+  const [expandedFolders, setExpandedFolders] = useState<string[]>([]);
+  const [isCreatingFolder, setIsCreatingFolder] = useState<string | null>(null);
+  const [newFolderTitle, setNewFolderTitle] = useState('');
+  const [renamingFolder, setRenamingFolder] = useState<{ id: string; title: string } | null>(null);
+  const [moveTarget, setMoveTarget] = useState<{ type: 'folder' | 'lesson'; id: string; currentUnitId: string } | null>(null);
+  const [moveDestUnitId, setMoveDestUnitId] = useState<string | null>(null);
+  const [moveDestFolderId, setMoveDestFolderId] = useState<string | null>(null);
   const [activeCompletion, setActiveCompletion] = useState<{ id: string; rect: DOMRect } | null>(null);
   const [activeMasteryUnitId, setActiveMasteryUnitId] = useState<string | null>(null);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
@@ -244,17 +276,24 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
     }
   };
 
-  const openLibrary = (unitTitle: string) => {
-    setTargetUnitTitle(unitTitle);
-    setIsLibraryOpen(true);
-    setActiveUnitForAdd(null);
-  };
+  const [targetFolderId, setTargetFolderId] = useState<string | null>(null);
 
-  const openAddLesson = (unitId: string, unitTitle: string) => {
+  const openLibrary = (unitId: string, unitTitle: string, folderId: string | null = null) => {
     setTargetUnitId(unitId);
     setTargetUnitTitle(unitTitle);
+    setTargetFolderId(folderId);
+    setIsLibraryOpen(true);
+    setActiveUnitForAdd(null);
+    setActiveFolderForAdd(null);
+  };
+
+  const openAddLesson = (unitId: string, unitTitle: string, folderId: string | null = null) => {
+    setTargetUnitId(unitId);
+    setTargetUnitTitle(unitTitle);
+    setTargetFolderId(folderId);
     setIsAddLessonOpen(true);
     setActiveUnitForAdd(null);
+    setActiveFolderForAdd(null);
   };
 
   const [newAssessmentType, setNewAssessmentType] = useState<'quiz' | 'assignment'>('assignment');
@@ -270,6 +309,7 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
     if (!targetUnitId) return;
     const { id, error } = await createLesson({
       unitId: targetUnitId,
+      folderId: targetFolderId,
       title: lessonData.title,
       type: (lessonData.type === 'video' || lessonData.type === 'pdf') ? lessonData.type : (lessonData.url ? 'link' : 'link'),
       weekLabel: units.find(u => u.id === targetUnitId)?.weeks || '',
@@ -281,6 +321,77 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
     } else {
       alert(language === 'ar' ? `حصل خطأ أثناء إضافة الموضوع: ${error}` : `Error adding topic: ${error}`);
     }
+  };
+
+  // ============ إدارة المجلدات ============
+  const handleCreateFolder = async (unitId: string) => {
+    if (!newFolderTitle.trim()) return;
+    const { id, error } = await createFolder(unitId, newFolderTitle.trim());
+    if (id) {
+      refreshUnits();
+      setIsCreatingFolder(null);
+      setNewFolderTitle('');
+      setActiveUnitForAdd(null);
+    } else {
+      alert(language === 'ar' ? `حصل خطأ أثناء إنشاء المجلد: ${error}` : `Error creating folder: ${error}`);
+    }
+  };
+
+  const handleRenameFolder = async () => {
+    if (!renamingFolder || !renamingFolder.title.trim()) return;
+    const { ok, error } = await updateFolder(renamingFolder.id, { title: renamingFolder.title.trim() });
+    if (ok) {
+      refreshUnits();
+      setRenamingFolder(null);
+    } else {
+      alert(language === 'ar' ? `حصل خطأ أثناء إعادة التسمية: ${error}` : `Error renaming: ${error}`);
+    }
+  };
+
+  const handleDeleteFolder = async (folderId: string) => {
+    setActiveFolderMenuId(null);
+    if (!window.confirm(language === 'ar' ? 'متأكد إنك عايز تمسح المجلد ده وكل اللي جواه؟ الإجراء ده مينفعش يترجع.' : 'Delete this folder and everything inside it? This cannot be undone.')) return;
+    const { ok, error } = await deleteFolder(folderId);
+    if (ok) refreshUnits();
+    else alert(language === 'ar' ? `حصل خطأ أثناء الحذف: ${error}` : `Error deleting: ${error}`);
+  };
+
+  const handleDuplicateFolder = async (folderId: string) => {
+    setActiveFolderMenuId(null);
+    const { id, error } = await duplicateFolder(folderId);
+    if (id) refreshUnits();
+    else alert(language === 'ar' ? `حصل خطأ أثناء التكرار: ${error}` : `Error duplicating: ${error}`);
+  };
+
+  const handleDuplicateUnit = async (unitId: string) => {
+    setActiveUnitMenuId(null);
+    const { id, error } = await duplicateUnit(unitId);
+    if (id) refreshUnits();
+    else alert(language === 'ar' ? `حصل خطأ أثناء تكرار الموديول: ${error}` : `Error duplicating module: ${error}`);
+  };
+
+  const handleDuplicateLesson = async (lessonId: string) => {
+    setActiveLessonMenuId(null);
+    const { id, error } = await duplicateLesson(lessonId);
+    if (id) refreshUnits();
+    else alert(language === 'ar' ? `حصل خطأ أثناء التكرار: ${error}` : `Error duplicating: ${error}`);
+  };
+
+  const handleConfirmMove = async () => {
+    if (!moveTarget || !moveDestUnitId) return;
+    if (moveTarget.type === 'folder') {
+      const { ok, error } = await moveFolder(moveTarget.id, moveDestUnitId);
+      if (ok) { refreshUnits(); setMoveTarget(null); }
+      else alert(language === 'ar' ? `حصل خطأ أثناء النقل: ${error}` : `Error moving: ${error}`);
+    } else {
+      const { ok, error } = await moveLesson(moveTarget.id, { unitId: moveDestUnitId, folderId: moveDestFolderId });
+      if (ok) { refreshUnits(); setMoveTarget(null); }
+      else alert(language === 'ar' ? `حصل خطأ أثناء النقل: ${error}` : `Error moving: ${error}`);
+    }
+  };
+
+  const toggleFolderExpand = (folderId: string) => {
+    setExpandedFolders((prev) => prev.includes(folderId) ? prev.filter((f) => f !== folderId) : [...prev, folderId]);
   };
 
   const getStatusColor = (status: LessonStatus) => {
@@ -506,6 +617,12 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
                         <Edit size={14} /> {language === 'ar' ? 'تعديل الاسم' : 'Edit Name'}
                       </button>
                       <button
+                        onClick={() => handleDuplicateUnit(unit.id)}
+                        className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+                      >
+                        <Copy size={14} /> {language === 'ar' ? 'تكرار الموديول' : 'Duplicate Module'}
+                      </button>
+                      <button
                         onClick={async () => { setActiveUnitMenuId(null); const { ok } = await toggleUnitHidden(unit.id, !unit.isHidden); if (ok) refreshUnits(); }}
                         className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
                       >
@@ -647,6 +764,12 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
                         >
                           <Edit size={14} /> Edit Module
                         </button>
+                        <button 
+                          onClick={() => handleDuplicateUnit(unit.id)}
+                          className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
+                        >
+                          <Copy size={14} /> {language === 'ar' ? 'تكرار الموديول' : 'Duplicate Module'}
+                        </button>
                         <div className="h-px bg-slate-100 my-1" />
                         <button 
                           onClick={async () => {
@@ -752,6 +875,18 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
                                 >
                                   <EyeOff size={14} /> {lesson.isHidden ? (language === 'ar' ? 'إظهار للطلاب' : 'Show to Students') : (language === 'ar' ? 'إخفاء عن الطلاب' : 'Hide from Students')}
                                 </button>
+                                <button
+                                  onClick={() => handleDuplicateLesson(lesson.id)}
+                                  className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
+                                >
+                                  <Copy size={14} /> {language === 'ar' ? 'تكرار' : 'Duplicate'}
+                                </button>
+                                <button
+                                  onClick={() => { setActiveLessonMenuId(null); setMoveTarget({ type: 'lesson', id: lesson.id, currentUnitId: unit.id }); setMoveDestUnitId(unit.id); setMoveDestFolderId(null); }}
+                                  className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2 shadow-none"
+                                >
+                                  <FolderInput size={14} /> {language === 'ar' ? 'نقل' : 'Move'}
+                                </button>
                                 <div className="h-px bg-slate-100 my-1" />
                                 <button
                                   onClick={async () => {
@@ -829,6 +964,155 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
                         )}
                       </div>
                     ))}
+                  </div>
+                  )}
+
+                  {lessonViewMode === 'list' && unit.folders.length > 0 && (
+                  <div className="bg-white divide-y divide-slate-50 border-b border-slate-50">
+                    {unit.folders.map((folder) => {
+                      const isFolderExpanded = expandedFolders.includes(folder.id);
+                      return (
+                      <div key={folder.id}>
+                        <div className="group flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors">
+                          <button onClick={() => toggleFolderExpand(folder.id)} className="flex items-center gap-3 flex-1 text-left">
+                            <motion.div animate={{ rotate: isFolderExpanded ? 90 : 0 }} className="text-slate-400 shrink-0">
+                              <ChevronDown size={16} className="-rotate-90" style={{ transform: isFolderExpanded ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
+                            </motion.div>
+                            {isFolderExpanded ? <FolderOpen size={18} className="text-amber-500 shrink-0" /> : <Folder size={18} className="text-amber-500 shrink-0" />}
+                            <span className="font-bold text-slate-800 text-sm">{folder.title}</span>
+                            <span className="text-xs text-slate-400">{folder.lessons.length} {language === 'ar' ? 'عنصر' : 'items'}</span>
+                            {folder.isHidden && (
+                              <span className="flex items-center gap-1 text-amber-600 text-[10px] font-bold">
+                                <EyeOff size={9} /> {language === 'ar' ? 'مخفي' : 'Hidden'}
+                              </span>
+                            )}
+                          </button>
+                          {!isStudent && (
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => { setActiveFolderForAdd(folder.id); }}
+                                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-teal-50 hover:text-teal-600 transition-colors"
+                                title={language === 'ar' ? 'إضافة محتوى' : 'Add content'}
+                              >
+                                <Plus size={16} />
+                              </button>
+                              <div className="relative">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setActiveFolderMenuId(activeFolderMenuId === folder.id ? null : folder.id); }}
+                                  className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors"
+                                >
+                                  <MoreHorizontal size={16} />
+                                </button>
+                                {activeFolderMenuId === folder.id && (
+                                  <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-lg border border-slate-100 p-1 z-20">
+                                    <button
+                                      onClick={() => { setRenamingFolder({ id: folder.id, title: folder.title }); setActiveFolderMenuId(null); }}
+                                      className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+                                    >
+                                      <Edit size={14} /> {language === 'ar' ? 'تعديل الاسم' : 'Rename'}
+                                    </button>
+                                    <button
+                                      onClick={async () => { setActiveFolderMenuId(null); const { ok } = await toggleFolderHidden(folder.id, !folder.isHidden); if (ok) refreshUnits(); }}
+                                      className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+                                    >
+                                      {folder.isHidden ? <Eye size={14} /> : <EyeOff size={14} />} {folder.isHidden ? (language === 'ar' ? 'إظهار للطلاب' : 'Show to students') : (language === 'ar' ? 'إخفاء عن الطلاب' : 'Hide from students')}
+                                    </button>
+                                    <button
+                                      onClick={() => handleDuplicateFolder(folder.id)}
+                                      className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+                                    >
+                                      <Copy size={14} /> {language === 'ar' ? 'تكرار المجلد' : 'Duplicate Folder'}
+                                    </button>
+                                    <button
+                                      onClick={() => { setActiveFolderMenuId(null); setMoveTarget({ type: 'folder', id: folder.id, currentUnitId: unit.id }); setMoveDestUnitId(unit.id); }}
+                                      className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+                                    >
+                                      <FolderInput size={14} /> {language === 'ar' ? 'نقل المجلد' : 'Move Folder'}
+                                    </button>
+                                    <div className="h-px bg-slate-100 my-1" />
+                                    <button
+                                      onClick={() => handleDeleteFolder(folder.id)}
+                                      className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2"
+                                    >
+                                      <Trash2 size={14} /> {language === 'ar' ? 'حذف المجلد' : 'Delete Folder'}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <AnimatePresence>
+                        {isFolderExpanded && (
+                          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="bg-slate-50/50 pl-8">
+                            {folder.lessons.length === 0 ? (
+                              <p className="text-xs text-slate-400 py-3 px-4">{language === 'ar' ? 'المجلد فاضي لسه.' : 'Folder is empty.'}</p>
+                            ) : (
+                            <div className="divide-y divide-slate-100">
+                              {folder.lessons.map((lesson) => {
+                                const FIcon = lesson.type === 'video' ? PlayCircle : lesson.type === 'pdf' ? FileText : lesson.type === 'link' ? LinkIcon : ClipboardCheck;
+                                return (
+                                <div
+                                  key={lesson.id}
+                                  onClick={() => {
+                                    if (lesson.type === 'link' && lesson.url) window.open(lesson.url, '_blank');
+                                    else if (lesson.type === 'pdf' && lesson.storagePath) window.open(getLessonFileUrl(lesson.storagePath), '_blank');
+                                  }}
+                                  className="group flex items-center gap-3 px-4 py-2.5 hover:bg-white transition-colors cursor-pointer"
+                                >
+                                  <FIcon size={16} className="text-slate-400 shrink-0" />
+                                  <span className="text-sm text-slate-700 flex-1 truncate">{lesson.title}</span>
+                                  {lesson.isHidden && <EyeOff size={12} className="text-amber-500 shrink-0" />}
+                                  {!isStudent && (
+                                    <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleDuplicateLesson(lesson.id); }}
+                                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100"
+                                        title={language === 'ar' ? 'تكرار' : 'Duplicate'}
+                                      >
+                                        <Copy size={13} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setMoveTarget({ type: 'lesson', id: lesson.id, currentUnitId: unit.id }); setMoveDestUnitId(unit.id); setMoveDestFolderId(folder.id); }}
+                                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100"
+                                        title={language === 'ar' ? 'نقل' : 'Move'}
+                                      >
+                                        <FolderInput size={13} />
+                                      </button>
+                                      <button
+                                        onClick={async (e) => { e.stopPropagation(); const { ok } = await toggleLessonHidden(lesson.id, !lesson.isHidden); if (ok) refreshUnits(); }}
+                                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100"
+                                        title={language === 'ar' ? 'إخفاء/إظهار' : 'Hide/Show'}
+                                      >
+                                        <EyeOff size={13} />
+                                      </button>
+                                      <button
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          if (window.confirm(language === 'ar' ? 'متأكد إنك عايز تمسح الموضوع ده؟' : 'Delete this topic?')) {
+                                            const { ok, error } = await deleteLesson(lesson.id);
+                                            if (ok) refreshUnits();
+                                            else alert(language === 'ar' ? `حصل خطأ أثناء الحذف: ${error}` : `Error deleting: ${error}`);
+                                          }
+                                        }}
+                                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                                        title={language === 'ar' ? 'حذف' : 'Delete'}
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                                );
+                              })}
+                            </div>
+                            )}
+                          </motion.div>
+                        )}
+                        </AnimatePresence>
+                      </div>
+                      );
+                    })}
                   </div>
                   )}
 
@@ -945,6 +1229,18 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
                               >
                                 <EyeOff size={14} /> {lesson.isHidden ? (language === 'ar' ? 'إظهار للطلاب' : 'Show to Students') : (language === 'ar' ? 'إخفاء عن الطلاب' : 'Hide from Students')}
                               </button>
+                              <button
+                                onClick={() => handleDuplicateLesson(lesson.id)}
+                                className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+                              >
+                                <Copy size={14} /> {language === 'ar' ? 'تكرار' : 'Duplicate'}
+                              </button>
+                              <button
+                                onClick={() => { setActiveLessonMenuId(null); setMoveTarget({ type: 'lesson', id: lesson.id, currentUnitId: unit.id }); setMoveDestUnitId(unit.id); setMoveDestFolderId(null); }}
+                                className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+                              >
+                                <FolderInput size={14} /> {language === 'ar' ? 'نقل' : 'Move'}
+                              </button>
                               <div className="h-px bg-slate-100 my-1" />
                               <button
                                 onClick={async () => {
@@ -1050,7 +1346,7 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
 
       {/* Add Material Modal */}
       <AnimatePresence>
-        {activeUnitForAdd && !isStudent && (
+        {(activeUnitForAdd || activeFolderForAdd) && !isStudent && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -1061,13 +1357,48 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold text-slate-800">Add Content</h3>
                 <button 
-                  onClick={() => setActiveUnitForAdd(null)}
+                  onClick={() => { setActiveUnitForAdd(null); setActiveFolderForAdd(null); }}
                   className="text-slate-400 hover:text-slate-600 transition-colors shadow-none"
                 >
                   <X size={24} />
                 </button>
               </div>
 
+              {activeFolderForAdd ? (
+                (() => {
+                  const parentUnit = units.find(u => u.folders.some(f => f.id === activeFolderForAdd));
+                  const folder = parentUnit?.folders.find(f => f.id === activeFolderForAdd);
+                  if (!parentUnit || !folder) return null;
+                  return (
+                  <div className="grid grid-cols-2 gap-4">
+                    <button 
+                      onClick={() => openAddLesson(parentUnit.id, parentUnit.title, folder.id)}
+                      className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-teal-300 hover:bg-teal-50 rounded-2xl text-center group transition-all shadow-none"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <Layout size={24} />
+                      </div>
+                      <div>
+                        <span className="block text-sm font-bold text-slate-700 mb-1">Add Topic</span>
+                        <span className="block text-xs text-slate-500">Upload video, PDF or link</span>
+                      </div>
+                    </button>
+                    <button 
+                      onClick={() => openLibrary(parentUnit.id, parentUnit.title, folder.id)}
+                      className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-blue-300 hover:bg-blue-50 rounded-2xl text-center group transition-all shadow-none"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <Book size={24} />
+                      </div>
+                      <div>
+                        <span className="block text-sm font-bold text-slate-700 mb-1">Import from Library</span>
+                        <span className="block text-xs text-slate-500">Official curriculum content</span>
+                      </div>
+                    </button>
+                  </div>
+                  );
+                })()
+              ) : (
               <div className="grid grid-cols-2 gap-4">
                 <button 
                   onClick={() => openAddLesson(activeUnitForAdd, units.find(u => u.id === activeUnitForAdd)?.title || '')}
@@ -1106,7 +1437,7 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
                   </div>
                 </button>
                 <button 
-                  onClick={() => openLibrary(units.find(u => u.id === activeUnitForAdd)?.title || '')}
+                  onClick={() => openLibrary(activeUnitForAdd || '', units.find(u => u.id === activeUnitForAdd)?.title || '')}
                   className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-blue-300 hover:bg-blue-50 rounded-2xl text-center group transition-all shadow-none"
                 >
                   <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -1116,6 +1447,121 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
                     <span className="block text-sm font-bold text-slate-700 mb-1">Import from Library</span>
                     <span className="block text-xs text-slate-500">Official curriculum content</span>
                   </div>
+                </button>
+                <button 
+                  onClick={() => { setIsCreatingFolder(activeUnitForAdd); setNewFolderTitle(''); }}
+                  className="flex flex-col items-center gap-3 p-6 border border-slate-200 hover:border-amber-300 hover:bg-amber-50 rounded-2xl text-center group transition-all shadow-none"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Folder size={24} />
+                  </div>
+                  <div>
+                    <span className="block text-sm font-bold text-slate-700 mb-1">{language === 'ar' ? 'إضافة مجلد' : 'Add Folder'}</span>
+                    <span className="block text-xs text-slate-500">{language === 'ar' ? 'تنظيم المحتوى جوه الموديول' : 'Organize content within the module'}</span>
+                  </div>
+                </button>
+              </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* New Folder Name Modal */}
+      <AnimatePresence>
+        {isCreatingFolder && (
+          <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={() => { setIsCreatingFolder(null); setNewFolderTitle(''); }}>
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl border border-slate-100 shadow-none p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-slate-800">{language === 'ar' ? 'مجلد جديد' : 'New Folder'}</h3>
+                <button onClick={() => { setIsCreatingFolder(null); setNewFolderTitle(''); }} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+              </div>
+              <input
+                type="text"
+                autoFocus
+                value={newFolderTitle}
+                onChange={(e) => setNewFolderTitle(e.target.value)}
+                placeholder={language === 'ar' ? 'اسم المجلد' : 'Folder name'}
+                onKeyDown={(e) => { if (e.key === 'Enter' && isCreatingFolder) handleCreateFolder(isCreatingFolder); }}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-none mb-4"
+              />
+              <button
+                onClick={() => isCreatingFolder && handleCreateFolder(isCreatingFolder)}
+                disabled={!newFolderTitle.trim()}
+                className="w-full px-5 py-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl font-bold transition-colors shadow-none"
+              >
+                {language === 'ar' ? 'إنشاء المجلد' : 'Create Folder'}
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Rename Folder Modal */}
+      <AnimatePresence>
+        {renamingFolder && (
+          <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={() => setRenamingFolder(null)}>
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl border border-slate-100 shadow-none p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-slate-800">{language === 'ar' ? 'تعديل اسم المجلد' : 'Rename Folder'}</h3>
+                <button onClick={() => setRenamingFolder(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+              </div>
+              <input
+                type="text"
+                autoFocus
+                value={renamingFolder.title}
+                onChange={(e) => setRenamingFolder({ ...renamingFolder, title: e.target.value })}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleRenameFolder(); }}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-none mb-4"
+              />
+              <button onClick={handleRenameFolder} disabled={!renamingFolder.title.trim()} className="w-full px-5 py-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl font-bold transition-colors shadow-none">
+                {language === 'ar' ? 'حفظ' : 'Save'}
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Move Modal (folder or lesson) */}
+      <AnimatePresence>
+        {moveTarget && (
+          <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={() => { setMoveTarget(null); setMoveDestUnitId(null); setMoveDestFolderId(null); }}>
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl border border-slate-100 shadow-none p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-slate-800">{language === 'ar' ? 'نقل إلى' : 'Move to'}</h3>
+                <button onClick={() => { setMoveTarget(null); setMoveDestUnitId(null); setMoveDestFolderId(null); }} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">{language === 'ar' ? 'الموديول' : 'Module'}</label>
+                  <select
+                    value={moveDestUnitId || ''}
+                    onChange={(e) => { setMoveDestUnitId(e.target.value || null); setMoveDestFolderId(null); }}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-sm"
+                  >
+                    <option value="">{language === 'ar' ? 'اختار موديول...' : 'Select a module...'}</option>
+                    {units.map((u) => <option key={u.id} value={u.id}>{u.title}</option>)}
+                  </select>
+                </div>
+                {moveTarget.type === 'lesson' && moveDestUnitId && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">{language === 'ar' ? 'المجلد (اختياري)' : 'Folder (optional)'}</label>
+                    <select
+                      value={moveDestFolderId || ''}
+                      onChange={(e) => setMoveDestFolderId(e.target.value || null)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-sm"
+                    >
+                      <option value="">{language === 'ar' ? 'بره أي مجلد' : 'No folder'}</option>
+                      {units.find((u) => u.id === moveDestUnitId)?.folders.map((f) => <option key={f.id} value={f.id}>{f.title}</option>)}
+                    </select>
+                  </div>
+                )}
+                <button
+                  onClick={handleConfirmMove}
+                  disabled={!moveDestUnitId}
+                  className="w-full px-5 py-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl font-bold transition-colors shadow-none mt-2"
+                >
+                  {language === 'ar' ? 'نقل' : 'Move'}
                 </button>
               </div>
             </motion.div>
@@ -1138,6 +1584,7 @@ const [contentView, setContentView] = useState<'path' | 'material' | 'my-library
           for (const item of items) {
             await createLesson({
               unitId: targetUnitId,
+              folderId: targetFolderId,
               title: item.title,
               type: 'library',
               weekLabel: units.find(u => u.id === targetUnitId)?.weeks || '',
