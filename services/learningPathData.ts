@@ -14,6 +14,7 @@ export interface LearnUnit {
 export interface LearnLesson {
   id: string;
   unitId: string;
+  folderId: string | null;
   title: string;
   type: 'video' | 'pdf' | 'link' | 'library';
   weekLabel: string;
@@ -25,6 +26,14 @@ export interface LearnLesson {
   isComplete: boolean;
 }
 
+export interface LearnFolder {
+  id: string;
+  unitId: string;
+  title: string;
+  displayOrder: number;
+  isHidden: boolean;
+}
+
 interface UnitScope {
   teacherId: string;
   classId: string;
@@ -32,7 +41,8 @@ interface UnitScope {
 }
 
 const UNIT_SELECT = 'id, title, weeks_label, display_order, is_hidden, is_complete, shared_with';
-const LESSON_SELECT = 'id, unit_id, title, type, week_label, url, library_file_id, storage_path, display_order, is_hidden, is_complete';
+const LESSON_SELECT = 'id, unit_id, folder_id, title, type, week_label, url, library_file_id, storage_path, display_order, is_hidden, is_complete';
+const FOLDER_SELECT = 'id, unit_id, title, display_order, is_hidden';
 
 function mapUnit(row: any): LearnUnit {
   return {
@@ -50,6 +60,7 @@ function mapLesson(row: any): LearnLesson {
   return {
     id: row.id,
     unitId: row.unit_id,
+    folderId: row.folder_id,
     title: row.title,
     type: row.type,
     weekLabel: row.week_label || '',
@@ -59,6 +70,16 @@ function mapLesson(row: any): LearnLesson {
     displayOrder: row.display_order,
     isHidden: row.is_hidden,
     isComplete: row.is_complete,
+  };
+}
+
+function mapFolder(row: any): LearnFolder {
+  return {
+    id: row.id,
+    unitId: row.unit_id,
+    title: row.title,
+    displayOrder: row.display_order,
+    isHidden: row.is_hidden,
   };
 }
 
@@ -135,7 +156,7 @@ export async function getLessons(unitIds: string[]): Promise<LearnLesson[]> {
 }
 
 // بيرفع الملف فعليًا (لو موجود) لنفس bucket المكتبة، وبيسجّل الدرس بعد كده
-export async function createLesson(input: { unitId: string; title: string; type: LearnLesson['type']; weekLabel: string; url?: string | null; libraryFileId?: string | null; file?: File | null }): Promise<{ id: string | null; error: string | null }> {
+export async function createLesson(input: { unitId: string; folderId?: string | null; title: string; type: LearnLesson['type']; weekLabel: string; url?: string | null; libraryFileId?: string | null; file?: File | null }): Promise<{ id: string | null; error: string | null }> {
   let storagePath: string | null = null;
 
   if (input.file) {
@@ -154,6 +175,7 @@ export async function createLesson(input: { unitId: string; title: string; type:
     .from('learning_lessons')
     .insert({
       unit_id: input.unitId,
+      folder_id: input.folderId || null,
       title: input.title,
       type: input.type,
       week_label: input.weekLabel,
@@ -271,4 +293,148 @@ export async function getStudentLessonCompletions(studentId: string, lessonIds: 
   const { data, error } = await supabase.from('lesson_completions').select('lesson_id').eq('student_id', studentId).in('lesson_id', lessonIds);
   if (error || !data) return new Set();
   return new Set(data.map((r) => r.lesson_id));
+}
+
+
+// ============ المجلدات جوه الموديول ============
+
+export async function getFolders(unitIds: string[]): Promise<LearnFolder[]> {
+  if (unitIds.length === 0) return [];
+  const { data, error } = await supabase.from('learning_folders').select(FOLDER_SELECT).in('unit_id', unitIds).order('display_order', { ascending: true });
+  if (error) {
+    console.error('Error fetching folders:', error);
+    return [];
+  }
+  return (data || []).map(mapFolder);
+}
+
+export async function createFolder(unitId: string, title: string): Promise<{ id: string | null; error: string | null }> {
+  const { data: existing } = await supabase.from('learning_folders').select('display_order').eq('unit_id', unitId).order('display_order', { ascending: false }).limit(1).maybeSingle();
+  const nextOrder = (existing?.display_order ?? -1) + 1;
+  const { data, error } = await supabase.from('learning_folders').insert({ unit_id: unitId, title, display_order: nextOrder }).select('id').single();
+  if (error || !data) {
+    console.error('Error creating folder:', error);
+    return { id: null, error: error?.message || 'Unknown error creating folder' };
+  }
+  return { id: data.id, error: null };
+}
+
+export async function updateFolder(id: string, input: { title?: string }): Promise<{ ok: boolean; error: string | null }> {
+  const patch: any = {};
+  if (input.title !== undefined) patch.title = input.title;
+  const { error } = await supabase.from('learning_folders').update(patch).eq('id', id);
+  return { ok: !error, error: error?.message || null };
+}
+
+export async function toggleFolderHidden(id: string, isHidden: boolean): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await supabase.from('learning_folders').update({ is_hidden: isHidden }).eq('id', id);
+  return { ok: !error, error: error?.message || null };
+}
+
+// حذف المجلد بيحذف كل المحتوى اللي جواه تلقائيًا (cascade في قاعدة البيانات)
+export async function deleteFolder(id: string): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await supabase.from('learning_folders').delete().eq('id', id);
+  if (error) console.error('Error deleting folder:', error);
+  return { ok: !error, error: error?.message || null };
+}
+
+// نقل مجلد كامل (بمحتواه) لموديول تاني
+export async function moveFolder(id: string, newUnitId: string): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await supabase.from('learning_folders').update({ unit_id: newUnitId }).eq('id', id);
+  return { ok: !error, error: error?.message || null };
+}
+
+// تكرار مجلد كامل مع كل المحتوى اللي جواه
+export async function duplicateFolder(id: string): Promise<{ id: string | null; error: string | null }> {
+  const { data: folder, error: folderErr } = await supabase.from('learning_folders').select(FOLDER_SELECT).eq('id', id).single();
+  if (folderErr || !folder) return { id: null, error: folderErr?.message || 'Folder not found' };
+  const { data: newFolder, error: createErr } = await supabase.from('learning_folders').insert({ unit_id: folder.unit_id, title: `${folder.title} (نسخة)`, display_order: folder.display_order }).select('id').single();
+  if (createErr || !newFolder) return { id: null, error: createErr?.message || 'Error creating duplicate folder' };
+
+  const { data: lessons } = await supabase.from('learning_lessons').select(LESSON_SELECT).eq('folder_id', id);
+  if (lessons && lessons.length > 0) {
+    const clones = lessons.map((l: any) => ({
+      unit_id: l.unit_id,
+      folder_id: newFolder.id,
+      title: l.title,
+      type: l.type,
+      week_label: l.week_label,
+      url: l.url,
+      library_file_id: l.library_file_id,
+      storage_path: l.storage_path,
+      display_order: l.display_order,
+    }));
+    await supabase.from('learning_lessons').insert(clones);
+  }
+  return { id: newFolder.id, error: null };
+}
+
+// ============ تكرار ونقل الموديول والدرس ============
+
+// تكرار موديول كامل: بمجلداته ودروسه (اللي جوه مجلدات واللي مباشرة تحت الموديول)
+export async function duplicateUnit(id: string): Promise<{ id: string | null; error: string | null }> {
+  const { data: unit, error: unitErr } = await supabase.from('learning_units').select('*').eq('id', id).single();
+  if (unitErr || !unit) return { id: null, error: unitErr?.message || 'Module not found' };
+
+  const { data: newUnit, error: createErr } = await supabase
+    .from('learning_units')
+    .insert({ teacher_id: unit.teacher_id, class_id: unit.class_id, subject: unit.subject, title: `${unit.title} (نسخة)`, weeks_label: unit.weeks_label, display_order: unit.display_order })
+    .select('id')
+    .single();
+  if (createErr || !newUnit) return { id: null, error: createErr?.message || 'Error creating duplicate module' };
+
+  const { data: folders } = await supabase.from('learning_folders').select(FOLDER_SELECT).eq('unit_id', id);
+  const folderIdMap: Record<string, string> = {};
+  if (folders && folders.length > 0) {
+    for (const f of folders as any[]) {
+      const { data: newFolder } = await supabase.from('learning_folders').insert({ unit_id: newUnit.id, title: f.title, display_order: f.display_order, is_hidden: f.is_hidden }).select('id').single();
+      if (newFolder) folderIdMap[f.id] = newFolder.id;
+    }
+  }
+
+  const { data: lessons } = await supabase.from('learning_lessons').select(LESSON_SELECT).eq('unit_id', id);
+  if (lessons && lessons.length > 0) {
+    const clones = (lessons as any[]).map((l) => ({
+      unit_id: newUnit.id,
+      folder_id: l.folder_id ? folderIdMap[l.folder_id] || null : null,
+      title: l.title,
+      type: l.type,
+      week_label: l.week_label,
+      url: l.url,
+      library_file_id: l.library_file_id,
+      storage_path: l.storage_path,
+      display_order: l.display_order,
+    }));
+    await supabase.from('learning_lessons').insert(clones);
+  }
+  return { id: newUnit.id, error: null };
+}
+
+export async function duplicateLesson(id: string): Promise<{ id: string | null; error: string | null }> {
+  const { data: lesson, error } = await supabase.from('learning_lessons').select(LESSON_SELECT).eq('id', id).single();
+  if (error || !lesson) return { id: null, error: error?.message || 'Topic not found' };
+  const l: any = lesson;
+  const { data, error: createErr } = await supabase
+    .from('learning_lessons')
+    .insert({
+      unit_id: l.unit_id,
+      folder_id: l.folder_id,
+      title: `${l.title} (نسخة)`,
+      type: l.type,
+      week_label: l.week_label,
+      url: l.url,
+      library_file_id: l.library_file_id,
+      storage_path: l.storage_path,
+      display_order: l.display_order,
+    })
+    .select('id')
+    .single();
+  if (createErr || !data) return { id: null, error: createErr?.message || 'Error duplicating topic' };
+  return { id: data.id, error: null };
+}
+
+// نقل درس/موضوع لموديول و/أو مجلد تاني (لو folderId جالك null، معناها "بره أي مجلد" مباشرة تحت الموديول)
+export async function moveLesson(id: string, target: { unitId: string; folderId: string | null }): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await supabase.from('learning_lessons').update({ unit_id: target.unitId, folder_id: target.folderId }).eq('id', id);
+  return { ok: !error, error: error?.message || null };
 }
