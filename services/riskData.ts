@@ -1,3 +1,4 @@
+import { supabase } from '@/lib/supabaseClient';
 import { getMyClassSections, getStudentsByIds, getAttendancePercentagesForStudents } from './attendanceData';
 import { getGradebookConfigFull, getRealAssessments, getRealGradeEntries } from './gradebookSync';
 import { getRecentNotesForStudents } from './rosterData';
@@ -75,4 +76,45 @@ export async function getRiskDataForTeacher(teacherId: string, subjects: string[
     });
   }
   return results;
+}
+
+
+export interface RiskSettings {
+  criticalAttendance: number;
+  criticalMinAverage: number;
+  warningAttendance: number;
+  warningMinAverage: number;
+}
+
+const DEFAULT_RISK_SETTINGS: RiskSettings = {
+  criticalAttendance: 75,
+  criticalMinAverage: 50,
+  warningAttendance: 85,
+  warningMinAverage: 65,
+};
+
+// بيجيب إعدادات معايير الرادار الحقيقية بتاعة المعلم ده، أو القيم الافتراضية لو لسه معملهاش
+export async function getRiskSettings(teacherId: string): Promise<RiskSettings> {
+  const { data, error } = await supabase.from('risk_settings').select('*').eq('teacher_id', teacherId).maybeSingle();
+  if (error || !data) return DEFAULT_RISK_SETTINGS;
+  return {
+    criticalAttendance: data.critical_attendance,
+    criticalMinAverage: data.critical_min_average,
+    warningAttendance: data.warning_attendance,
+    warningMinAverage: data.warning_min_average,
+  };
+}
+
+// بيحفظ إعدادات معايير الرادار بتاعة المعلم ده (بينشئ الصف لو مش موجود، أو يحدّثه لو موجود)
+export async function saveRiskSettings(teacherId: string, settings: RiskSettings): Promise<boolean> {
+  const { error } = await supabase.from('risk_settings').upsert({
+    teacher_id: teacherId,
+    critical_attendance: settings.criticalAttendance,
+    critical_min_average: settings.criticalMinAverage,
+    warning_attendance: settings.warningAttendance,
+    warning_min_average: settings.warningMinAverage,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'teacher_id' });
+  if (error) console.error('Error saving risk settings:', error);
+  return !error;
 }
