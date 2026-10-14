@@ -1,5 +1,6 @@
 'use client';
 
+import { RichContent, VideoPlayer, HintBox } from '@/components/question-bank/RichContent';
 import React, { useState, useEffect, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
@@ -314,7 +315,7 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
           {manualQuestions.map((q: any) => (
             <div key={q.id} className="bg-white rounded-2xl border border-slate-100 p-6">
               <div className="flex justify-between items-start mb-3">
-                <p className="font-bold text-slate-800 flex-1">{q.text}</p>
+                <RichContent html={q.textHtml} text={q.text} className="font-bold text-slate-800 flex-1" />
                 <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full shrink-0">{q.points} pts max</span>
               </div>
               {(q.correctAnswer || q.modelAnswer) && (
@@ -742,11 +743,13 @@ export function AssessmentsTab({ role = 'teacher', teacherId, studentId, classId
           {questionsToShow.map((q: any) => (
             <div key={q.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
               <div className="flex justify-between items-start mb-4">
-                <p className="font-bold text-slate-800 flex-1">{q.text}</p>
+                <RichContent html={q.textHtml} text={q.text} className="font-bold text-slate-800 flex-1" />
                 <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full shrink-0">{q.points} pts</span>
               </div>
               {q.imageUrl && <img src={q.imageUrl} alt="" className="max-h-48 rounded-xl border border-slate-200 mb-4" />}
               {q.audioUrl && <audio src={q.audioUrl} controls className="w-full mb-4" />}
+              {q.videoUrl && <div className="mb-4"><VideoPlayer videoUrl={q.videoUrl} videoStart={q.videoStart} videoEnd={q.videoEnd} /></div>}
+              {q.hint && <div className="mb-4"><HintBox hint={q.hint} language="ar" /></div>}
               {(q.type === 'multiple_choice' || q.type === 'true_false') && (
                 <div className="space-y-2">
                   {(q.options || []).map((opt: any) => (

@@ -8,9 +8,25 @@ export type BankStatus = 'approved' | 'pending' | 'rejected';
 
 // شكل المحتوى المرن لأي سؤال في البنك، يغطي كل الحقول المستخدمة عبر الـ13 نوع سؤال المدعومين.
 // نفس فلسفة QuizQuestion في assignmentData.ts — حقول اختيارية بدل any، مفيش تغيير في أي سلوك قائم.
+export interface QuestionHint {
+  text?: string;
+  fileUrl?: string;
+  fileName?: string;
+}
+
 export interface BankQuestionContent {
   title: string;
+  /** نص السؤال بتنسيق غني (HTML بعد التنضيف). title بيفضل النسخة النصية */
+  titleHtml?: string;
   questionImageUrl?: string;
+  // فيديو (يوتيوب / فيميو / ملف) مع بداية ونهاية بالثواني
+  videoUrl?: string;
+  videoStart?: number;
+  videoEnd?: number;
+  /** تلميح اختياري يظهر للطالب لو طلبه */
+  hint?: QuestionHint;
+  /** العمق المعرفي (Webb) 1-4 */
+  dok?: 1 | 2 | 3 | 4;
   correctAnswer?: string;
   modelAnswer?: string;
   options?: { id: string; text: string; isCorrect: boolean; imageUrl?: string }[];
@@ -470,6 +486,12 @@ export function convertBankQuestionToQuizQuestion(bq: BankQuestion, pointsPerQue
   return {
     id: bq.id,
     text: bq.title,
+    textHtml: (bq.question as any)?.titleHtml ?? undefined,
+    videoUrl: (bq.question as any)?.videoUrl ?? undefined,
+    videoStart: (bq.question as any)?.videoStart ?? undefined,
+    videoEnd: (bq.question as any)?.videoEnd ?? undefined,
+    hint: (bq.question as any)?.hint ?? undefined,
+    dok: (bq.question as any)?.dok ?? undefined,
     type: typeMap[bq.type] || 'short_answer',
     options: bq.options,
     points: computedPoints,
@@ -492,30 +514,45 @@ export function convertBankQuestionToQuizQuestion(bq: BankQuestion, pointsPerQue
   };
 }
 
-// رفع صورة لسؤال "منطقة تفاعلية" (Hotspot) — بيستخدم نفس bucket المستخدم في مرفقات التقييمات
-export async function uploadQuestionImage(file: File): Promise<{ url: string; storagePath: string } | null> {
+// رفع ملف لـ bucket المكتبة تحت مجلد معيّن. بيرجّع null لو الرفع فشل
+async function uploadToQuestionFolder(file: File, folder: string): Promise<{ url: string; storagePath: string } | null> {
   const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-  const storagePath = `question-bank-images/${Date.now()}_${safeName}`;
+  const storagePath = `${folder}/${Date.now()}_${safeName}`;
   const { error } = await supabase.storage.from('library-files').upload(storagePath, file);
   if (error) {
-    console.error('Error uploading question image:', error);
+    console.error(`Error uploading to ${folder}:`, error);
     return null;
   }
   const { data } = supabase.storage.from('library-files').getPublicUrl(storagePath);
   return { url: data.publicUrl, storagePath };
 }
 
-// رفع مقطع صوتي لسؤال "مقطع صوتي" — بيستخدم نفس bucket المستخدم في الصور والمرفقات
+// رفع صورة لسؤال — بيستخدم نفس bucket المستخدم في مرفقات التقييمات
+export async function uploadQuestionImage(file: File): Promise<{ url: string; storagePath: string } | null> {
+  return uploadToQuestionFolder(file, 'question-bank-images');
+}
+
+// رفع مقطع صوتي (مرفوع أو تسجيل من الميكروفون)
 export async function uploadQuestionAudio(file: File): Promise<{ url: string; storagePath: string } | null> {
-  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-  const storagePath = `question-bank-audio/${Date.now()}_${safeName}`;
-  const { error } = await supabase.storage.from('library-files').upload(storagePath, file);
-  if (error) {
-    console.error('Error uploading question audio:', error);
-    return null;
-  }
-  const { data } = supabase.storage.from('library-files').getPublicUrl(storagePath);
-  return { url: data.publicUrl, storagePath };
+  return uploadToQuestionFolder(file, 'question-bank-audio');
+}
+
+export const MAX_QUESTION_VIDEO_MB = 100;
+export const MAX_QUESTION_ATTACHMENT_MB = 20;
+
+// رفع فيديو للسؤال (mp4 / webm). بيرفض الحجم الكبير قبل الرفع
+export async function uploadQuestionVideo(file: File): Promise<{ url: string; storagePath: string } | { error: string }> {
+  if (!/^video\/(mp4|webm|ogg|quicktime)$/.test(file.type)) return { error: 'نوع الفيديو غير مدعوم (mp4 أو webm)' };
+  if (file.size > MAX_QUESTION_VIDEO_MB * 1024 * 1024) return { error: `الفيديو أكبر من ${MAX_QUESTION_VIDEO_MB}MB` };
+  const r = await uploadToQuestionFolder(file, 'question-bank-video');
+  return r || { error: 'فشل رفع الفيديو' };
+}
+
+// رفع ملف مرفق للتلميح (PDF / صورة / صوت)
+export async function uploadQuestionAttachment(file: File): Promise<{ url: string; storagePath: string } | { error: string }> {
+  if (file.size > MAX_QUESTION_ATTACHMENT_MB * 1024 * 1024) return { error: `الملف أكبر من ${MAX_QUESTION_ATTACHMENT_MB}MB` };
+  const r = await uploadToQuestionFolder(file, 'question-bank-files');
+  return r || { error: 'فشل رفع الملف' };
 }
 
 

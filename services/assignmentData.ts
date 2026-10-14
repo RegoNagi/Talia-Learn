@@ -34,6 +34,13 @@ export interface AssignmentSubmission {
 export interface QuizQuestion {
   id: string;
   text: string;
+  /** نص السؤال بتنسيق غني (HTML منضّف) لو السؤال جاي من البنك بمعادلات/جداول/تنسيق */
+  textHtml?: string;
+  videoUrl?: string;
+  videoStart?: number;
+  videoEnd?: number;
+  hint?: { text?: string; fileUrl?: string; fileName?: string };
+  dok?: 1 | 2 | 3 | 4;
   type: 'multiple_choice' | 'true_false' | 'short_answer' | 'file_upload' | 'numeric_answer' | 'matching' | 'ordering' | 'classification' | 'drag_and_drop' | 'hotspot' | 'passage';
   points: number;
   sectionId?: string | null;

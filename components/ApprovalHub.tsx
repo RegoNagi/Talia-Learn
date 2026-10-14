@@ -7,6 +7,7 @@ import { getPendingQuestions, reviewQuestions, updateReviewedQuestion, getAuditP
 import { getQuizById } from '@/services/assignmentData';
 import { useAuth } from '@/contexts/AuthContext';
 import { auditQuestion, worstSeverity, type AuditContent, type AuditIssue, type AuditPoolItem } from '@/lib/questionAudit';
+import { QuestionStem } from '@/components/question-bank/RichContent';
 import { ReviewEditor, type ReviewPatch } from '@/components/question-bank/ReviewEditor';
 
 // القيمة الفاضية '' = "الكل"
@@ -530,8 +531,8 @@ export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                             {(activeItem as any).difficulty}
                           </span>
                         </div>
-                        <div className="inline-flex flex-col gap-2 mb-6">
-                          <h4 className="font-bold text-slate-800 text-lg leading-relaxed">{activeItem.title}</h4>
+                        <div className="mb-6 pe-40">
+                          <QuestionStem data={{ ...((activeItem as any).question || {}), title: activeItem.title }} language={language} showHint showDok hintOpen titleClassName="font-bold text-slate-800 text-lg" />
                         </div>
 
                         {(activeItem as any).type === 'اختيار من متعدد' && Array.isArray((activeItem as any).options) ? (

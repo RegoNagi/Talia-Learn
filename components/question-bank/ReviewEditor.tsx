@@ -1,6 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { RichTextEditor } from './RichTextEditor';
+import { htmlToText, textToHtml, hasRichContent, isRichEmpty } from '@/lib/richText';
+import { DOK_LEVELS, normalizeDok, type DokLevel } from '@/lib/dok';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import type { BankQuestion, BankQuestionContent } from '@/services/questionBankData';
 
@@ -33,6 +36,8 @@ export function ReviewEditor({ q, language, saving, onSave, onCancel }: Props) {
   const c = q.question || ({ title: q.title } as BankQuestionContent);
 
   const [title, setTitle] = useState(q.title);
+  const [titleHtml, setTitleHtml] = useState(c.titleHtml || textToHtml(q.title));
+  const [dok, setDok] = useState<DokLevel | undefined>(normalizeDok(c.dok));
   const [unit, setUnit] = useState(q.unit || '');
   const [lesson, setLesson] = useState(q.lesson || '');
   const [bloom, setBloom] = useState(q.bloomLevel);
@@ -50,7 +55,7 @@ export function ReviewEditor({ q, language, saving, onSave, onCancel }: Props) {
   const hasOptions = OPTION_TYPES.includes(q.type);
 
   const build = (): ReviewPatch => {
-    const content: BankQuestionContent = { ...c, title: title.trim() };
+    const content: BankQuestionContent = { ...c, title: title.trim(), titleHtml: !isRichEmpty(titleHtml) && hasRichContent(titleHtml) ? titleHtml : undefined, dok };
     if (hasOptions) {
       content.options = options;
       content.correctOption = Math.max(0, options.findIndex((o) => o.isCorrect));
@@ -71,10 +76,10 @@ export function ReviewEditor({ q, language, saving, onSave, onCancel }: Props) {
     <div className="bg-white border border-violet-200 rounded-2xl p-6 space-y-5">
       <p className="text-xs text-violet-700 bg-violet-50 rounded-lg px-3 py-2">{t('أي تعديل هنا بيتسجل في سجل المراجعة باسمك.', 'Every edit here is recorded in the review log under your name.')}</p>
 
-      <label className={label}>
+      <div className={label}>
         {t('نص السؤال', 'Question text')}
-        <textarea className="w-full min-h-20 p-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-violet-400" value={title} onChange={(e) => setTitle(e.target.value)} />
-      </label>
+        <RichTextEditor initialHtml={titleHtml} resetKey={q.id} onChange={(h) => { setTitleHtml(h); setTitle(htmlToText(h)); }} language={language} minHeight={90} />
+      </div>
 
       <div className="grid grid-cols-2 gap-4">
         <label className={label}>{t('الوحدة', 'Unit')}<input className={input} value={unit} onChange={(e) => setUnit(e.target.value)} /></label>
@@ -85,6 +90,17 @@ export function ReviewEditor({ q, language, saving, onSave, onCancel }: Props) {
         <label className={label}>{t('مستوى بلوم', 'Bloom level')}
           <select className={input} value={bloom} onChange={(e) => setBloom(e.target.value)}>{BLOOMS.map((b) => <option key={b}>{b}</option>)}</select>
         </label>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-bold text-slate-500">{t('العمق المعرفي (DOK)', 'Depth of Knowledge (DOK)')}</p>
+        <div className="flex flex-wrap gap-2">
+          {DOK_LEVELS.map((d) => (
+            <button key={d.level} type="button" aria-pressed={dok === d.level} onClick={() => setDok(dok === d.level ? undefined : d.level)} title={language === 'ar' ? d.descAr : d.descEn} className={`px-3 py-1.5 rounded-full border text-xs font-bold ${dok === d.level ? d.color + ' ring-2 ring-violet-300' : 'bg-white border-slate-200 text-slate-500'}`}>
+              DOK {d.level} · {language === 'ar' ? d.ar : d.en}
+            </button>
+          ))}
+        </div>
       </div>
 
       {hasOptions && (

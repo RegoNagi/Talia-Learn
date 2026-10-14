@@ -4,11 +4,18 @@ import { useState, useRef, useEffect, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { GlobalSidebar } from '@/components/GlobalSidebar';
 import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
-import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCircuit, LayoutTemplate, Edit2, Trash2, BookOpen, ListChecks, CheckCircle2, AlignRight, Type, Mic, Copy, Eye, Search, ChevronDown, ChevronUp, MessageSquare, Layers, BarChart, FileText, LayoutGrid, Signal, Award, Play, X, Globe, Monitor, Flag, Check, Loader2, MousePointerClick, Settings2, RefreshCw, ShieldCheck, Calendar, Clock, Sigma, Calculator, GitMerge, ListOrdered, Move, Map, ImagePlus } from 'lucide-react';
+import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCircuit, LayoutTemplate, Edit2, Trash2, BookOpen, ListChecks, CheckCircle2, AlignRight, Type, Mic, Copy, Eye, Search, ChevronDown, ChevronUp, MessageSquare, Layers, BarChart, FileText, LayoutGrid, Signal, Award, Play, X, Globe, Monitor, Flag, Check, Loader2, MousePointerClick, Settings2, RefreshCw, ShieldCheck, Calendar, Clock, Calculator, GitMerge, ListOrdered, Move, Map, ImagePlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ApprovalHub } from '@/components/ApprovalHub';
 import { BankExchange } from '@/components/question-bank/BankExchange';
 import { StatusBadge } from '@/components/question-bank/StatusBadge';
+import { RichTextEditor, type RichTextEditorHandle } from '@/components/question-bank/RichTextEditor';
+import { StemExtras } from '@/components/question-bank/StemExtras';
+import { QuestionStem } from '@/components/question-bank/RichContent';
+import { htmlToText, textToHtml, hasRichContent, isRichEmpty } from '@/lib/richText';
+import { parseVideoUrl, parseTime } from '@/lib/media';
+import { normalizeDok } from '@/lib/dok';
+import type { QuestionHint } from '@/services/questionBankData';
 import { useAuth } from '@/contexts/AuthContext';
 import { getVisibleQuestions, createQuestion, updateQuestion, deleteQuestion, linkQuestionsToQuiz, unlinkAllQuestionsFromQuiz, generateBlueprintQuestions, getBlueprintAssessments, getQuestionsForQuiz, convertBankQuestionToQuizQuestion, uploadQuestionImage, uploadQuestionAudio, BankQuestion } from '@/services/questionBankData';
 import { HotspotEditor } from '@/components/question-editor/HotspotEditor';
@@ -461,6 +468,14 @@ export default function QuestionBank() {
 
   // Factory States
   const [newQTitle, setNewQTitle] = useState('');
+  const [newQTitleHtml, setNewQTitleHtml] = useState('');
+  const [editorKey, setEditorKey] = useState(0);
+  const stemEditorRef = useRef<RichTextEditorHandle>(null);
+  const [newQVideoUrl, setNewQVideoUrl] = useState('');
+  const [newQVideoStart, setNewQVideoStart] = useState('');
+  const [newQVideoEnd, setNewQVideoEnd] = useState('');
+  const [newQHint, setNewQHint] = useState<QuestionHint>({});
+  const [newQDok, setNewQDok] = useState<1 | 2 | 3 | 4 | undefined>(undefined);
   const [newQUnit, setNewQUnit] = useState('');
   const [newQLesson, setNewQLesson] = useState('');
   const [newQBloom, setNewQBloom] = useState('تذكر');
@@ -562,8 +577,17 @@ export default function QuestionBank() {
 
   const handleSaveQuestion = async (stayInEditor: boolean = false) => {
     if (!newQTitle || !activeSubject) return;
-    setIsSavingQuestion(true);
     setSaveQuestionError('');
+    if (newQVideoUrl) {
+      const vs = parseTime(newQVideoStart);
+      const ve = parseTime(newQVideoEnd);
+      if (!parseVideoUrl(newQVideoUrl)) { setSaveQuestionError(language === 'ar' ? 'رابط الفيديو غير مدعوم (يوتيوب أو فيميو أو ملف mp4/webm).' : 'Unsupported video link.'); return; }
+      if ((newQVideoStart && vs === undefined) || (newQVideoEnd && ve === undefined) || (vs !== undefined && ve !== undefined && ve <= vs)) {
+        setSaveQuestionError(language === 'ar' ? 'وقت بداية/نهاية الفيديو غير صحيح.' : 'Invalid video start/end time.');
+        return;
+      }
+    }
+    setIsSavingQuestion(true);
     const payload = {
       createdBy: authUser?.teacherId || null,
       createdByRole: (isSupervisor ? 'supervisor' : 'teacher') as 'teacher' | 'supervisor',
@@ -577,7 +601,14 @@ export default function QuestionBank() {
       type: newQType,
       question: { 
         title: newQTitle, 
+        titleHtml: !isRichEmpty(newQTitleHtml) && hasRichContent(newQTitleHtml) ? newQTitleHtml : undefined,
         questionImageUrl: newQQuestionImageUrl || undefined,
+        audioUrl: newQAudioUrl || undefined,
+        videoUrl: newQVideoUrl || undefined,
+        videoStart: newQVideoUrl ? parseTime(newQVideoStart) : undefined,
+        videoEnd: newQVideoUrl ? parseTime(newQVideoEnd) : undefined,
+        hint: (newQHint.text?.trim() || newQHint.fileUrl) ? { text: newQHint.text?.trim() || undefined, fileUrl: newQHint.fileUrl, fileName: newQHint.fileName } : undefined,
+        dok: newQDok,
         options: newQOptions, 
         correctOption: newQCorrectOption, 
         standard: qStandard || undefined,
@@ -609,9 +640,6 @@ export default function QuestionBank() {
         ...(newQType === 'منطقة تفاعلية' ? {
           imageUrl: newQImageUrl || undefined,
           hotspots: newQHotspots.map((hs) => ({ xPercent: hs.xPercent, yPercent: hs.yPercent, label: hs.label, isCorrect: hs.isCorrect })),
-        } : {}),
-        ...(newQType === 'مقطع صوتي' ? {
-          audioUrl: newQAudioUrl || undefined,
         } : {}),
         ...(newQType === 'أكمل الفراغ' ? {
           correctAnswer: newQFillBlankAnswer || undefined,
@@ -646,6 +674,13 @@ export default function QuestionBank() {
 
     // Clear only text entry inputs to allow continuous fluid flow
     setNewQTitle('');
+    setNewQTitleHtml('');
+    setEditorKey((k) => k + 1);
+    setNewQVideoUrl('');
+    setNewQVideoStart('');
+    setNewQVideoEnd('');
+    setNewQHint({});
+    setNewQDok(undefined);
     setNewQQuestionImageUrl('');
     setNewQOptions([
       { id: '1', text: '', isCorrect: true, imageUrl: null },
@@ -686,6 +721,13 @@ export default function QuestionBank() {
     setNewQDiff(q.difficulty);
     setNewQType(q.type);
     setNewQTitle(q.question?.title || '');
+    setNewQTitleHtml(q.question?.titleHtml || textToHtml(q.question?.title || ''));
+    setEditorKey((k) => k + 1);
+    setNewQVideoUrl(q.question?.videoUrl || '');
+    setNewQVideoStart(q.question?.videoStart != null ? String(q.question.videoStart) : '');
+    setNewQVideoEnd(q.question?.videoEnd != null ? String(q.question.videoEnd) : '');
+    setNewQHint(q.question?.hint ? { ...q.question.hint } : {});
+    setNewQDok(normalizeDok(q.question?.dok));
     setNewQQuestionImageUrl((q.question as any)?.questionImageUrl || '');
     setQStandard(q.question?.standard || '');
     setNewQFillBlankAnswer((q.question as any)?.correctAnswer || '');
@@ -1578,7 +1620,7 @@ export default function QuestionBank() {
                                 </div>
                                 <div className="flex items-center gap-2 text-slate-400">
                                   <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center hover:text-violet-600 transition-colors" aria-label={language === 'ar' ? 'نسخ' : 'Copy'}><Copy size={16} /></button>
-                                  <button onClick={() => { setNewQTitle(''); setNewQOptions([
+                                  <button onClick={() => { setNewQTitle(''); setNewQTitleHtml(''); setEditorKey((k) => k + 1); setNewQOptions([
                                     { id: '1', text: '', isCorrect: true, imageUrl: null },
                                     { id: '2', text: '', isCorrect: false, imageUrl: null },
                                     { id: '3', text: '', isCorrect: false, imageUrl: null },
@@ -1595,23 +1637,15 @@ export default function QuestionBank() {
                                </div>
                            </div>
 
-                           {/* Question Title */}
-                           <div className="mb-10 bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-none focus-within:border-violet-300 transition-colors">
-                              {/* WYSIWYG Toolbar */}
-                              <div className="flex items-center gap-2 p-2 px-3 border-b border-gray-100 bg-slate-50">
-                                <button className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title={language === 'ar' ? 'تسجيل صوتي' : 'Audio recording'}>
-                                  <Mic size={16} />
-                                </button>
-                                <button className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title={language === 'ar' ? 'معادلات' : 'Equations'}>
-                                  <Sigma size={16} />
-                                </button>
-                              </div>
-                              <textarea 
-                                value={newQTitle}
-                                onChange={e => setNewQTitle(e.target.value)}
+                           {/* Question Title — محرر غني: تنسيق، جداول، معادلات */}
+                           <div className="mb-6">
+                              <RichTextEditor
+                                ref={stemEditorRef}
+                                initialHtml={newQTitleHtml}
+                                resetKey={`${editorKey}-${editingQuestionId || 'new'}`}
+                                onChange={(html) => { setNewQTitleHtml(html); setNewQTitle(htmlToText(html)); }}
+                                language={language}
                                 placeholder={language === 'ar' ? 'اكتب نص السؤال هنا...' : 'Write the question text here...'}
-                                className="w-full p-4 text-xl font-bold text-slate-800 bg-transparent resize-y outline-none placeholder:text-slate-300 min-h-[140px]"
-                                rows={5}
                               />
                            </div>
 
@@ -1648,37 +1682,28 @@ export default function QuestionBank() {
                              )}
                            </div>
 
-                           {/* Audio Prompt (for Audio Clip questions) */}
-                           {newQType === 'مقطع صوتي' && (
-                             <div className="mb-6">
-                               {!newQAudioUrl ? (
-                                 <label className="border-2 border-dashed border-slate-200 rounded-2xl p-6 flex flex-col items-center gap-2 text-slate-400 hover:bg-slate-50 cursor-pointer transition-colors">
-                                   <Mic size={24} />
-                                   <span className="text-sm font-bold">{isUploadingQAudio ? (language === 'ar' ? 'جاري الرفع...' : 'Uploading...') : (language === 'ar' ? 'ارفع المقطع الصوتي' : 'Upload audio clip')}</span>
-                                   <input 
-                                     type="file" 
-                                     accept="audio/*" 
-                                     className="hidden" 
-                                     onChange={async (e) => {
-                                       const file = e.target.files?.[0];
-                                       if (!file) return;
-                                       setIsUploadingQAudio(true);
-                                       const result = await uploadQuestionAudio(file);
-                                       setIsUploadingQAudio(false);
-                                       if (result) setNewQAudioUrl(result.url);
-                                     }} 
-                                   />
-                                 </label>
-                               ) : (
-                                 <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                                   <audio src={newQAudioUrl} controls className="flex-1" />
-                                   <button onClick={() => setNewQAudioUrl('')} className="text-xs font-bold text-red-500 hover:text-red-600 shrink-0">
-                                     {language === 'ar' ? 'إزالة' : 'Remove'}
-                                   </button>
-                                 </div>
-                               )}
-                               <p className="text-xs font-semibold text-slate-400 px-1 mt-2">{language === 'ar' ? 'الطالب هيسمع المقطع ده ويختار الإجابة الصحيحة من الاختيارات تحت.' : 'The student will listen to this clip and pick the correct answer from the options below.'}</p>
-                             </div>
+                           {/* صوت / فيديو / تلميح / العمق المعرفي / مكتبة */}
+                           {activeSubject && (
+                             <StemExtras
+                               key={`extras-${editorKey}-${editingQuestionId || 'new'}-${newQType === 'مقطع صوتي' ? 'a' : 'x'}`}
+                               language={language}
+                               subject={activeSubject.subject}
+                               grade={activeSubject.grade}
+                               questionType={newQType}
+                               audioUrl={newQAudioUrl}
+                               setAudioUrl={setNewQAudioUrl}
+                               videoUrl={newQVideoUrl}
+                               setVideoUrl={setNewQVideoUrl}
+                               videoStart={newQVideoStart}
+                               setVideoStart={setNewQVideoStart}
+                               videoEnd={newQVideoEnd}
+                               setVideoEnd={setNewQVideoEnd}
+                               hint={newQHint}
+                               setHint={setNewQHint}
+                               dok={newQDok}
+                               setDok={setNewQDok}
+                               onInsertLink={(url, title) => stemEditorRef.current?.insertLink(url, title)}
+                             />
                            )}
 
                            {/* Options / Inputs based on Type */}
@@ -3463,15 +3488,14 @@ export default function QuestionBank() {
               <div className="flex justify-between items-start mb-5">
                 <div>
                   <span className="text-[10px] font-bold text-violet-600 bg-violet-50 px-2 py-1 rounded-full uppercase tracking-wider">{viewingQuestion.type}</span>
-                  <h3 className="text-lg font-bold text-slate-800 mt-2">{viewingQuestion.question?.title}</h3>
+                  <div className="mt-2">
+                    <QuestionStem data={{ ...viewingQuestion.question, title: viewingQuestion.question?.title }} language={language} showHint showDok hintOpen />
+                  </div>
                 </div>
                 <button onClick={() => setViewingQuestion(null)} className="text-slate-400 hover:text-slate-600 shrink-0"><X size={20} /></button>
               </div>
 
               <div className="space-y-3">
-                {(viewingQuestion.question as any)?.questionImageUrl && (
-                  <img src={(viewingQuestion.question as any).questionImageUrl} alt="" className="max-h-56 rounded-2xl border border-slate-200" />
-                )}
                 {viewingQuestion.question?.passageText && (
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm text-slate-700 whitespace-pre-wrap">{viewingQuestion.question.passageText}</div>
                 )}
