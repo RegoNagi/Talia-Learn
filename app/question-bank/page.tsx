@@ -7,6 +7,7 @@ import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
 import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCircuit, LayoutTemplate, Edit2, Trash2, BookOpen, ListChecks, CheckCircle2, AlignRight, Type, Mic, Copy, Eye, Search, ChevronDown, ChevronUp, MessageSquare, Layers, BarChart, FileText, LayoutGrid, Signal, Award, Play, X, Globe, Monitor, Flag, Check, Loader2, MousePointerClick, Settings2, RefreshCw, ShieldCheck, Calendar, Clock, Sigma, Calculator, GitMerge, ListOrdered, Move, Map, ImagePlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ApprovalHub } from '@/components/ApprovalHub';
+import { BankExchange } from '@/components/question-bank/BankExchange';
 import { useAuth } from '@/contexts/AuthContext';
 import { getVisibleQuestions, createQuestion, updateQuestion, deleteQuestion, linkQuestionsToQuiz, unlinkAllQuestionsFromQuiz, generateBlueprintQuestions, getBlueprintAssessments, getQuestionsForQuiz, convertBankQuestionToQuizQuestion, uploadQuestionImage, uploadQuestionAudio, BankQuestion } from '@/services/questionBankData';
 import { HotspotEditor } from '@/components/question-editor/HotspotEditor';
@@ -1185,14 +1186,15 @@ export default function QuestionBank() {
                       <h2 className="text-2xl font-bold text-slate-800">{activeSubject.subject} <span className="text-slate-400 font-medium text-lg">• {activeSubject.grade}</span></h2>
                     </div>
                     <div className="flex gap-4 flex-wrap">
-                      <button className="px-6 py-2.5 bg-white border border-purple-200 text-purple-700 hover:bg-purple-50 font-bold rounded-xl flex items-center gap-2 transition-colors shadow-none text-sm">
-                        <UploadCloud size={18} />
-                        {language === 'ar' ? 'استيراد بنك أسئلة (QTI XML / Excel)' : 'Import Question Bank (QTI XML / Excel)'}
-                      </button>
-                      <button className="px-6 py-2.5 bg-white border border-purple-200 text-purple-700 hover:bg-purple-50 font-bold rounded-xl flex items-center gap-2 transition-colors shadow-none text-sm">
-                        <DownloadCloud size={18} />
-                        {language === 'ar' ? 'تصدير البنك الحالي (QTI XML)' : 'Export Current Bank (QTI XML)'}
-                      </button>
+                      <BankExchange
+                        language={language}
+                        subject={activeSubject.subject}
+                        grade={activeSubject.grade}
+                        questions={questions}
+                        teacherId={authUser?.teacherId || null}
+                        isSupervisor={isSupervisor}
+                        onChanged={refreshQuestions}
+                      />
                       <button onClick={() => setMgtStep('FACTORY')} className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl flex items-center gap-2 transition-colors shadow-none text-sm">
                         <Plus size={18} />
                         {language === 'ar' ? 'إضافة سؤال جديد' : 'Add New Question'}

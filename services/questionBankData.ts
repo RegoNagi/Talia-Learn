@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 import type { QuizQuestion } from '@/services/assignmentData';
+import { planBankInsert } from '@/lib/bankTransfer';
 
 export type BankScope = 'central' | 'shared' | 'private';
 export type BankStatus = 'approved' | 'pending' | 'rejected';
@@ -510,4 +511,53 @@ export async function uploadQuestionAudio(file: File): Promise<{ url: string; st
   }
   const { data } = supabase.storage.from('library-files').getPublicUrl(storagePath);
   return { url: data.publicUrl, storagePath };
+}
+
+
+// ============ إضافة دفعة أسئلة لبنك (استيراد QTI أو نسخ من بنك تاني) ============
+
+export interface NewBankQuestion {
+  type: string;
+  difficulty: string;
+  bloomLevel: string;
+  unit: string;
+  lesson?: string | null;
+  question: BankQuestionContent;
+}
+
+export interface AddBatchResult {
+  created: number;
+  duplicates: number;
+  failed: { title: string; error: string }[];
+}
+
+// بتضيف الأسئلة واحد واحد عن طريق createQuestion، فنفس قاعدة الاعتماد بتتطبق:
+// المعلم في البنك المشترك/المركزي بيدخل "معلّق"، والمشرف أو البنك الخاص "معتمد" على طول.
+export async function addQuestionsToBank(
+  items: NewBankQuestion[],
+  target: { scope: BankScope; subject: string; grade: string; createdBy: string | null; createdByRole: 'teacher' | 'supervisor'; skipDuplicates: boolean },
+): Promise<AddBatchResult> {
+  const pool = await getVisibleQuestions({ subject: target.subject, grade: target.grade, isSupervisor: true });
+  const existingTitles = pool.filter((q) => q.scope === target.scope && (target.scope !== 'private' || q.createdBy === target.createdBy)).map((q) => q.title);
+  const { toInsert, duplicates } = planBankInsert(items, existingTitles, target.skipDuplicates);
+
+  const result: AddBatchResult = { created: 0, duplicates: duplicates.length, failed: [] };
+  for (const item of toInsert) {
+    const { id, error } = await createQuestion({
+      createdBy: target.createdBy,
+      createdByRole: target.createdByRole,
+      scope: target.scope,
+      subject: target.subject,
+      grade: target.grade,
+      unit: item.unit,
+      lesson: item.lesson || undefined,
+      bloomLevel: item.bloomLevel,
+      difficulty: item.difficulty,
+      type: item.type,
+      question: item.question,
+    });
+    if (id) result.created += 1;
+    else result.failed.push({ title: item.question.title, error: error || 'Unknown error' });
+  }
+  return result;
 }
