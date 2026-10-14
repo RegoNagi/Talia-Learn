@@ -8,6 +8,7 @@ import { Database, Filter, Plus, UploadCloud, DownloadCloud, ArrowRight, BrainCi
 import { motion, AnimatePresence } from 'motion/react';
 import { ApprovalHub } from '@/components/ApprovalHub';
 import { BankExchange } from '@/components/question-bank/BankExchange';
+import { StatusBadge } from '@/components/question-bank/StatusBadge';
 import { useAuth } from '@/contexts/AuthContext';
 import { getVisibleQuestions, createQuestion, updateQuestion, deleteQuestion, linkQuestionsToQuiz, unlinkAllQuestionsFromQuiz, generateBlueprintQuestions, getBlueprintAssessments, getQuestionsForQuiz, convertBankQuestionToQuizQuestion, uploadQuestionImage, uploadQuestionAudio, BankQuestion } from '@/services/questionBankData';
 import { HotspotEditor } from '@/components/question-editor/HotspotEditor';
@@ -630,8 +631,11 @@ export default function QuestionBank() {
         } : {}),
       },
     };
+    // المعلم لما يعدّل سؤال مرفوض، أو سؤال معتمد في بنك مشترك/مركزي، أو ينقل سؤال لبنك مشترك/مركزي: بيرجع "معلّق" للمراجعة من جديد
+    const editedQuestion = editingQuestionId ? questions.find((x) => x.id === editingQuestionId) : undefined;
+    const needsResubmit = !!editedQuestion && !isSupervisor && payload.scope !== 'private' && editedQuestion.status !== 'pending';
     const { id, error } = editingQuestionId
-      ? await updateQuestion(editingQuestionId, payload).then((r) => ({ id: r.ok ? editingQuestionId : null, error: r.error }))
+      ? await updateQuestion(editingQuestionId, { ...payload, resubmit: needsResubmit }).then((r) => ({ id: r.ok ? editingQuestionId : null, error: r.error }))
       : await createQuestion(payload);
     setIsSavingQuestion(false);
     if (!id) {
@@ -1194,6 +1198,7 @@ export default function QuestionBank() {
                         teacherId={authUser?.teacherId || null}
                         isSupervisor={isSupervisor}
                         onChanged={refreshQuestions}
+                        onEditQuestion={openEditQuestion}
                       />
                       <button onClick={() => setMgtStep('FACTORY')} className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl flex items-center gap-2 transition-colors shadow-none text-sm">
                         <Plus size={18} />
@@ -1261,6 +1266,7 @@ export default function QuestionBank() {
                               <tr key={q.id} className="hover:bg-slate-50/50 transition-colors group">
                                 <td className="px-6 py-4 font-bold text-slate-800">
                                    <div className="max-w-[280px] truncate">{q.title}</div>
+                                   <StatusBadge q={q} language={language} />
                                 </td>
                                 <td className="px-6 py-4 font-medium text-slate-600">
                                   <div className="flex items-center gap-2">

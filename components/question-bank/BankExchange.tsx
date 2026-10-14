@@ -1,13 +1,14 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { UploadCloud, DownloadCloud, Copy, X, Loader2, Check, AlertTriangle } from 'lucide-react';
+import { UploadCloud, DownloadCloud, Copy, X, Loader2, Check, AlertTriangle, ShieldCheck, Pencil } from 'lucide-react';
 import { addQuestionsToBank, type BankQuestion, type BankScope, type NewBankQuestion, type AddBatchResult } from '@/services/questionBankData';
 import { buildQtiPackage, exportSummary, parseQtiFile, type ParsedQtiQuestion, type QtiExportItem, type QtiQuestionContent } from '@/lib/qti';
 import type { BankQuestionContent } from '@/services/questionBankData';
+import { auditQuestion, worstSeverity, type AuditContent, type IssueSeverity } from '@/lib/questionAudit';
 
 type Lang = 'ar' | 'en';
-type Dialog = null | 'import' | 'export' | 'copy';
+type Dialog = null | 'import' | 'export' | 'copy' | 'audit';
 
 interface Props {
   language: Lang;
@@ -17,6 +18,7 @@ interface Props {
   teacherId: string | null;
   isSupervisor: boolean;
   onChanged: () => void;
+  onEditQuestion?: (q: BankQuestion) => void;
 }
 
 const SCOPES: { value: BankScope; ar: string; en: string }[] = [
@@ -32,7 +34,7 @@ const btn = 'px-6 py-2.5 bg-white border border-purple-200 text-purple-700 hover
 const primary = 'px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl flex items-center gap-2 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed';
 const field = 'h-10 px-3 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:border-violet-500';
 
-export function BankExchange({ language, subject, grade, questions, teacherId, isSupervisor, onChanged }: Props) {
+export function BankExchange({ language, subject, grade, questions, teacherId, isSupervisor, onChanged, onEditQuestion }: Props) {
   const t = (ar: string, en: string) => (language === 'ar' ? ar : en);
   const [dialog, setDialog] = useState<Dialog>(null);
   const close = () => setDialog(null);
@@ -50,11 +52,17 @@ export function BankExchange({ language, subject, grade, questions, teacherId, i
       <button onClick={() => setDialog('copy')} className={btn}>
         <Copy size={18} /> {t('نسخ بين البنوك', 'Copy Between Banks')}
       </button>
+      <button onClick={() => setDialog('audit')} className={btn}>
+        <ShieldCheck size={18} /> {t('تنقيح البنك', 'Bank Audit')}
+      </button>
 
       {dialog === 'import' && (
         <ImportDialog t={t} subject={subject} grade={grade} teacherId={teacherId} role={role} scopeLabel={scopeLabel} onClose={close} onChanged={onChanged} />
       )}
       {dialog === 'export' && <ExportDialog t={t} subject={subject} grade={grade} questions={questions} onClose={close} />}
+      {dialog === 'audit' && (
+        <AuditDialog t={t} language={language} subject={subject} grade={grade} questions={questions} onClose={close} onEdit={onEditQuestion ? (q) => { close(); onEditQuestion(q); } : undefined} />
+      )}
       {dialog === 'copy' && (
         <CopyDialog t={t} subject={subject} grade={grade} questions={questions} teacherId={teacherId} role={role} scopeLabel={scopeLabel} onClose={close} onChanged={onChanged} />
       )}
@@ -368,6 +376,64 @@ function CopyDialog({ t, subject, grade, questions, teacherId, role, scopeLabel,
       <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={skipDup} onChange={(e) => setSkipDup(e.target.checked)} /> {t('تخطّي الأسئلة المكررة في البنك المستهدف', 'Skip questions already in the target bank')}</label>
       {needsApproval(target, role) && <p className="text-xs text-amber-600">{t('الأسئلة هتدخل "معلّقة" لحد ما مشرف البنك يعتمدها.', 'Questions will be added as "pending" until the bank supervisor approves them.')}</p>}
       {result && <ResultBox t={t} result={result} pendingNote={needsApproval(target, role)} />}
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------- تنقيح البنك (فحص آلي)
+
+const SEV_STYLE: Record<IssueSeverity, string> = {
+  error: 'bg-red-50 text-red-700 border-red-200',
+  warning: 'bg-amber-50 text-amber-700 border-amber-200',
+  info: 'bg-sky-50 text-sky-700 border-sky-200',
+};
+
+function AuditDialog({ t, language, subject, grade, questions, onClose, onEdit }: {
+  t: T; language: Lang; subject: string; grade: string; questions: BankQuestion[]; onClose: () => void; onEdit?: (q: BankQuestion) => void;
+}) {
+  const [level, setLevel] = useState<'serious' | 'all'>('serious');
+  const results = useMemo(() => {
+    const pool = questions.map((q) => ({ id: q.id, title: q.title, subject: q.subject, grade: q.grade, status: q.status }));
+    return questions
+      .map((q) => ({ q, issues: auditQuestion({ id: q.id, type: q.type, title: q.title, subject: q.subject, grade: q.grade, question: q.question as unknown as AuditContent }, pool) }))
+      .filter((r) => r.issues.length > 0);
+  }, [questions]);
+  const shown = results.filter((r) => level === 'all' || r.issues.some((i) => i.severity !== 'info'));
+  const errors = results.filter((r) => worstSeverity(r.issues) === 'error').length;
+  const dups = results.filter((r) => r.issues.some((i) => i.code === 'DUPLICATE' || i.code === 'NEAR_DUPLICATE')).length;
+
+  return (
+    <Modal
+      title={t('تنقيح البنك (فحص آلي)', 'Bank audit (automatic check)')}
+      onClose={onClose}
+      footer={<button onClick={onClose} className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl">{t('إغلاق', 'Close')}</button>}
+    >
+      <p className="text-sm text-slate-500">{t(`${subject} • ${grade}. الفحص بيكشف الأسئلة اللي فيها أخطاء بناء (بدون إجابة صحيحة مثلاً)، والمكرر، وهفوات الصياغة.`, `${subject} • ${grade}. The check finds build errors (e.g. no correct answer), duplicates and wording slips.`)}</p>
+      <div className="grid grid-cols-3 gap-3 text-center">
+        <div className="rounded-xl border border-slate-100 p-3"><p className="text-2xl font-black text-slate-800">{questions.length}</p><p className="text-xs text-slate-500">{t('سؤال اتفحص', 'checked')}</p></div>
+        <div className="rounded-xl border border-red-100 bg-red-50 p-3"><p className="text-2xl font-black text-red-700">{errors}</p><p className="text-xs text-red-600">{t('فيها أخطاء بناء', 'with build errors')}</p></div>
+        <div className="rounded-xl border border-amber-100 bg-amber-50 p-3"><p className="text-2xl font-black text-amber-700">{dups}</p><p className="text-xs text-amber-600">{t('مكرر أو مشابه', 'duplicates')}</p></div>
+      </div>
+      <div className="flex gap-2 text-xs font-bold">
+        <button onClick={() => setLevel('serious')} className={`px-3 py-1.5 rounded-lg border ${level === 'serious' ? 'bg-purple-50 border-purple-200 text-purple-700' : 'border-slate-200 text-slate-500'}`}>{t('أخطاء وتحذيرات', 'Errors & warnings')}</button>
+        <button onClick={() => setLevel('all')} className={`px-3 py-1.5 rounded-lg border ${level === 'all' ? 'bg-purple-50 border-purple-200 text-purple-700' : 'border-slate-200 text-slate-500'}`}>{t('كل الملاحظات', 'All notes')}</button>
+      </div>
+      <div className="border border-slate-100 rounded-2xl divide-y divide-slate-50 max-h-80 overflow-y-auto">
+        {shown.length === 0 && <p className="p-8 text-center text-sm text-emerald-600 font-bold flex items-center justify-center gap-2"><Check size={16} />{t('مفيش ملاحظات', 'No issues found')}</p>}
+        {shown.map(({ q, issues }) => (
+          <div key={q.id} className="px-4 py-3 text-sm space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <span className="font-bold text-slate-800 min-w-0 truncate">{q.title || t('(بدون نص)', '(no text)')}</span>
+              {onEdit && <button onClick={() => onEdit(q)} className="shrink-0 text-xs font-bold text-purple-700 flex items-center gap-1 hover:underline"><Pencil size={12} />{t('تعديل', 'Edit')}</button>}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {issues.filter((i) => level === 'all' || i.severity !== 'info').map((i, k) => (
+                <span key={k} className={`px-2 py-0.5 rounded-full border text-[11px] font-bold ${SEV_STYLE[i.severity]}`}>{language === 'ar' ? i.ar : i.en}</span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </Modal>
   );
 }

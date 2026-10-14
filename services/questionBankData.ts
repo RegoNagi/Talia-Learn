@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabaseClient';
 import type { QuizQuestion } from '@/services/assignmentData';
 import { planBankInsert } from '@/lib/bankTransfer';
+import { appendReviewLog, changedFields, type ReviewLogEntry } from '@/lib/reviewLog';
 
 export type BankScope = 'central' | 'shared' | 'private';
 export type BankStatus = 'approved' | 'pending' | 'rejected';
@@ -15,6 +16,8 @@ export interface BankQuestionContent {
   options?: { id: string; text: string; isCorrect: boolean; imageUrl?: string }[];
   correctOption?: number;
   standard?: string;
+  // سجل المراجعة (مين راجع ومتى)
+  reviewLog?: ReviewLogEntry[];
   // إجابة رقمية
   numericAnswer?: number | null;
   numericTolerance?: number;
@@ -157,6 +160,7 @@ export async function createQuestion(input: {
 
 export async function updateQuestion(id: string, input: Partial<{
   subject: string; grade: string; unit: string; lesson: string; bloomLevel: string; difficulty: string; type: string; question: any; scope: BankScope;
+  resubmit: boolean; // تعديل المعلم لسؤال مرفوض أو معتمد في بنك مشترك/مركزي يرجّعه "معلّق" للمراجعة من جديد
 }>): Promise<{ ok: boolean; error: string | null }> {
   const patch: any = {};
   if (input.subject !== undefined) patch.subject = input.subject;
@@ -168,6 +172,7 @@ export async function updateQuestion(id: string, input: Partial<{
   if (input.type !== undefined) patch.type = input.type;
   if (input.question !== undefined) patch.question = input.question;
   if (input.scope !== undefined) patch.scope = input.scope;
+  if (input.resubmit) { patch.status = 'pending'; patch.rejection_note = null; }
   const { error } = await supabase.from('question_bank').update(patch).eq('id', id);
   return { ok: !error, error: error?.message || null };
 }
@@ -560,4 +565,73 @@ export async function addQuestionsToBank(
     else result.failed.push({ title: item.question.title, error: error || 'Unknown error' });
   }
   return result;
+}
+
+
+// ============ مراجعة الأسئلة (اعتماد/إرجاع مجمّع + تعديل قبل الاعتماد + سجل المراجعة) ============
+
+export interface Reviewer { id: string | null; name: string }
+
+// بتراجع مجموعة أسئلة معلّقة مرة واحدة. بتتخطى أي سؤال مش "معلّق" (اتراجع قبل كده من مشرف تاني).
+export async function reviewQuestions(
+  ids: string[],
+  action: 'approved' | 'rejected',
+  reviewer: Reviewer,
+  note?: string,
+): Promise<{ done: number; skipped: number; failed: number }> {
+  if (ids.length === 0) return { done: 0, skipped: 0, failed: 0 };
+  const { data, error } = await supabase.from('question_bank').select('id, question, status').in('id', ids);
+  if (error || !data) return { done: 0, skipped: 0, failed: ids.length };
+
+  const pending = data.filter((r: any) => r.status === 'pending');
+  const at = new Date().toISOString();
+  const results = await Promise.all(pending.map(async (row: any) => {
+    const question = appendReviewLog(row.question || {}, { at, by: reviewer.name, byId: reviewer.id, action, ...(note ? { note } : {}) });
+    const patch = action === 'approved'
+      ? { status: 'approved', rejection_note: null, question }
+      : { status: 'rejected', rejection_note: note || '', question };
+    const { error: upErr } = await supabase.from('question_bank').update(patch).eq('id', row.id).eq('status', 'pending');
+    return !upErr;
+  }));
+  const done = results.filter(Boolean).length;
+  return { done, failed: results.length - done, skipped: ids.length - pending.length };
+}
+
+// تعديل المراجع للسؤال قبل اعتماده. بيسجّل الحقول اللي اتغيرت في سجل المراجعة.
+export async function updateReviewedQuestion(
+  id: string,
+  patch: { unit?: string; lesson?: string | null; bloomLevel?: string; difficulty?: string; question: BankQuestionContent },
+  reviewer: Reviewer,
+): Promise<{ ok: boolean; error: string | null }> {
+  const { data, error } = await supabase.from('question_bank').select('unit, lesson, bloom_level, difficulty, question').eq('id', id).single();
+  if (error || !data) return { ok: false, error: error?.message || 'Not found' };
+
+  const before = (data.question || {}) as Record<string, unknown>;
+  const after = patch.question as unknown as Record<string, unknown>;
+  const changes = changedFields(before, after, {
+    before: { unit: data.unit, lesson: data.lesson, bloomLevel: data.bloom_level, difficulty: data.difficulty },
+    after: {
+      unit: patch.unit ?? data.unit,
+      lesson: patch.lesson === undefined ? data.lesson : patch.lesson,
+      bloomLevel: patch.bloomLevel ?? data.bloom_level,
+      difficulty: patch.difficulty ?? data.difficulty,
+    },
+  });
+  if (changes.length === 0) return { ok: true, error: null };
+
+  const entry: ReviewLogEntry = { at: new Date().toISOString(), by: reviewer.name, byId: reviewer.id, action: 'edited', changes };
+  const update: Record<string, unknown> = { question: appendReviewLog({ ...(before as { reviewLog?: ReviewLogEntry[] }), ...after, reviewLog: (before as { reviewLog?: ReviewLogEntry[] }).reviewLog }, entry) };
+  if (patch.unit !== undefined) update.unit = patch.unit;
+  if (patch.lesson !== undefined) update.lesson = patch.lesson;
+  if (patch.bloomLevel !== undefined) update.bloom_level = patch.bloomLevel;
+  if (patch.difficulty !== undefined) update.difficulty = patch.difficulty;
+  const { error: upErr } = await supabase.from('question_bank').update(update).eq('id', id);
+  return { ok: !upErr, error: upErr?.message || null };
+}
+
+// أسئلة البنك بالحد الأدنى من البيانات، لكشف التكرار أثناء المراجعة
+export async function getAuditPool(): Promise<{ id: string; title: string; subject: string; grade: string; status: string }[]> {
+  const { data, error } = await supabase.from('question_bank').select('id, subject, grade, status, question').neq('status', 'rejected');
+  if (error || !data) return [];
+  return data.map((r: any) => ({ id: r.id, title: r.question?.title || '', subject: r.subject, grade: r.grade, status: r.status }));
 }

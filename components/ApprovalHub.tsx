@@ -1,12 +1,16 @@
 'use client';
 
-import { useState, useRef, useEffect, startTransition } from 'react';
-import { CheckCircle2, XCircle, Clock, Search, ShieldCheck, HelpCircle, FileText, Flag, ChevronDown, Calendar, PieChart, AlertCircle, ArrowLeftRight } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo, startTransition } from 'react';
+import { CheckCircle2, XCircle, Clock, Search, ShieldCheck, HelpCircle, FileText, Flag, ChevronDown, Calendar, PieChart, AlertCircle, ArrowLeftRight, AlertTriangle, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getPendingQuestions, approveQuestion, rejectQuestion, getPendingAssessments, getPendingAssessmentDetail, approveAssessment, rejectAssessment, BankQuestion } from '@/services/questionBankData';
+import { getPendingQuestions, reviewQuestions, updateReviewedQuestion, getAuditPool, getPendingAssessments, getPendingAssessmentDetail, approveAssessment, rejectAssessment, BankQuestion, type Reviewer } from '@/services/questionBankData';
 import { getQuizById } from '@/services/assignmentData';
+import { useAuth } from '@/contexts/AuthContext';
+import { auditQuestion, worstSeverity, type AuditContent, type AuditIssue, type AuditPoolItem } from '@/lib/questionAudit';
+import { ReviewEditor, type ReviewPatch } from '@/components/question-bank/ReviewEditor';
 
-function SmartDropdown({ label, options, value, onChange }: { label: string, options: string[], value: string, onChange: (v: string) => void }) {
+// القيمة الفاضية '' = "الكل"
+function SmartDropdown({ label, allLabel, options, value, onChange }: { label: string, allLabel: string, options: string[], value: string, onChange: (v: string) => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -20,7 +24,7 @@ function SmartDropdown({ label, options, value, onChange }: { label: string, opt
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  const isActive = value !== 'الكل';
+  const isActive = value !== '';
 
   return (
     <div className="relative" ref={containerRef}>
@@ -43,19 +47,22 @@ function SmartDropdown({ label, options, value, onChange }: { label: string, opt
             animate={{ opacity: 1, y: 0 }} 
             exit={{ opacity: 0, y: 4 }}
             transition={{ duration: 0.15 }}
-            className="absolute top-full right-0 mt-1 w-48 bg-white rounded-lg border border-slate-200 shadow-none py-1 z-50 overflow-hidden"
+            className="absolute top-full right-0 mt-1 w-48 max-h-72 overflow-y-auto bg-white rounded-lg border border-slate-200 shadow-none py-1 z-50"
           >
-            {options.map((opt) => (
-              <button
-                key={opt}
-                onClick={() => { onChange(opt); setIsOpen(false); }}
-                className={`w-full text-right px-4 py-2 text-sm transition-colors ${
-                  value === opt ? 'bg-slate-50 text-violet-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                {opt}
-              </button>
-            ))}
+            {[allLabel, ...options].map((opt, idx) => {
+              const optValue = idx === 0 ? '' : opt;
+              return (
+                <button
+                  key={opt + idx}
+                  onClick={() => { onChange(optValue); setIsOpen(false); }}
+                  className={`w-full text-right px-4 py-2 text-sm transition-colors ${
+                    value === optValue ? 'bg-slate-50 text-violet-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {opt}
+                </button>
+              );
+            })}
           </motion.div>
         )}
       </AnimatePresence>
@@ -63,32 +70,52 @@ function SmartDropdown({ label, options, value, onChange }: { label: string, opt
   );
 }
 
+const SEVERITY_STYLE: Record<'error' | 'warning' | 'info', string> = {
+  error: 'bg-red-50 text-red-700 border-red-200',
+  warning: 'bg-amber-50 text-amber-700 border-amber-200',
+  info: 'bg-sky-50 text-sky-700 border-sky-200',
+};
+
 export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
+  const t = (ar: string, en: string) => (language === 'ar' ? ar : en);
+  const { authUser } = useAuth();
+  const reviewer: Reviewer = { id: authUser?.teacherId || authUser?.userId || null, name: authUser?.name || '—' };
   const [subTab, setSubTab] = useState<'QUESTIONS' | 'ASSESSMENTS'>('QUESTIONS');
-  
-  // Smart Filters State
-  const [gradeFilter, setGradeFilter] = useState('الكل');
-  const [subjectFilter, setSubjectFilter] = useState('الكل');
-  const [statusFilter, setStatusFilter] = useState('الكل'); // Reset to 'الكل'
-  const [typeFilter, setTypeFilter] = useState('الكل');
+
+  // الفلاتر الفعلية ('' = الكل)
+  const [gradeFilter, setGradeFilter] = useState('');
+  const [subjectFilter, setSubjectFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [difficultyFilter, setDifficultyFilter] = useState('');
+  const [authorFilter, setAuthorFilter] = useState('');
+  const [onlyIssues, setOnlyIssues] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Assessment Detail State
   const [assessmentView, setAssessmentView] = useState<'overview' | 'preview'>('overview');
-  
+
   // Modal State
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectNote, setRejectNote] = useState('');
-  
+  const [rejectTarget, setRejectTarget] = useState<'single' | 'bulk'>('single');
+
+  // التحديد المتعدد + رسائل النتيجة + التعديل قبل الاعتماد
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [flash, setFlash] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   // الأسئلة المعلّقة الحقيقية (بانتظار اعتماد المشرف) — بالبيانات الكاملة عشان نعرض الخيارات الحقيقية في شاشة المراجعة
   const [questions, setQuestions] = useState<(BankQuestion & { creatorName: string; author: string; date: string })[]>([]);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(true);
+  const [auditPool, setAuditPool] = useState<AuditPoolItem[]>([]);
 
   const fetchPending = () => {
     getPendingQuestions().then((qs) => {
       setQuestions(qs.map((q) => ({ ...q, author: q.creatorName, date: new Date(q.createdAt).toLocaleDateString() })));
       setIsLoadingQuestions(false);
     });
+    getAuditPool().then(setAuditPool);
   };
 
   const refreshPending = () => {
@@ -137,11 +164,45 @@ export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
   } | null>(null);
   const [isLoadingAssessmentDetail, setIsLoadingAssessmentDetail] = useState(false);
 
-  const [selectedItemId, setSelectedItemId] = useState<string | null>('q1');
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [statusMap, setStatusMap] = useState<Record<string, 'APPROVED' | 'REJECTED'>>({});
 
-  const activeList = subTab === 'QUESTIONS' ? questions : assessments;
+
+  // الفحص الآلي لكل سؤال معلّق (أخطاء بناء، صياغة، تكرار مع البنك)
+  const issuesById = useMemo(() => {
+    const map: Record<string, AuditIssue[]> = {};
+    for (const q of questions) {
+      map[q.id] = auditQuestion({ id: q.id, type: q.type, title: q.title, subject: q.subject, grade: q.grade, question: q.question as unknown as AuditContent }, auditPool);
+    }
+    return map;
+  }, [questions, auditPool]);
+
+  const uniq = (xs: string[]) => Array.from(new Set(xs.filter(Boolean))).sort((a, b) => a.localeCompare(b, 'ar'));
+  const gradeOptions = uniq(questions.map((q) => q.grade));
+  const subjectOptions = uniq(subTab === 'QUESTIONS' ? questions.map((q) => q.subject) : assessments.map((a) => a.subject));
+  const typeOptions = uniq(questions.map((q) => q.type));
+  const authorOptions = uniq(questions.map((q) => q.author));
+
+  const needle = searchQuery.trim().toLowerCase();
+  const filteredQuestions = questions.filter((q) =>
+    (!gradeFilter || q.grade === gradeFilter) &&
+    (!subjectFilter || q.subject === subjectFilter) &&
+    (!typeFilter || q.type === typeFilter) &&
+    (!difficultyFilter || q.difficulty === difficultyFilter) &&
+    (!authorFilter || q.author === authorFilter) &&
+    (!onlyIssues || (issuesById[q.id] || []).some((i) => i.severity !== 'info')) &&
+    (!needle || q.title.toLowerCase().includes(needle) || q.author.toLowerCase().includes(needle))
+  );
+  const filteredAssessments = assessments.filter((a) =>
+    (!subjectFilter || a.subject === subjectFilter) &&
+    (!needle || a.title.toLowerCase().includes(needle) || a.author.toLowerCase().includes(needle))
+  );
+
+  const activeList = subTab === 'QUESTIONS' ? filteredQuestions : filteredAssessments;
   const activeItem = activeList.find(i => i.id === selectedItemId) || activeList[0];
+  const activeIssues = subTab === 'QUESTIONS' && activeItem ? (issuesById[activeItem.id] || []) : [];
+  const isEditingActive = subTab === 'QUESTIONS' && !!activeItem && editingId === activeItem.id;
+  const checkedVisible = filteredQuestions.filter((q) => checked.has(q.id));
 
   useEffect(() => {
     if (subTab !== 'ASSESSMENTS' || !activeItem) { startTransition(() => setAssessmentDetail(null)); return; }
@@ -165,27 +226,61 @@ export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
     return () => { cancelled = true; };
   }, [subTab, activeItem?.id]);
 
+  const toggleChecked = (id: string) => setChecked((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const allVisibleChecked = filteredQuestions.length > 0 && checkedVisible.length === filteredQuestions.length;
+
+  const runBulk = async (action: 'approved' | 'rejected', note?: string) => {
+    const ids = checkedVisible.map((q) => q.id);
+    if (ids.length === 0) return;
+    if (action === 'approved') {
+      const withErrors = ids.filter((id) => (issuesById[id] || []).some((i) => i.severity === 'error')).length;
+      if (withErrors > 0 && !window.confirm(t(`${withErrors} سؤال من المحدد فيهم أخطاء بناء (مثلاً بدون إجابة صحيحة). تعتمدهم برضه؟`, `${withErrors} selected question(s) have build errors (e.g. no correct answer). Approve anyway?`))) return;
+    }
+    setBusy(true);
+    const r = await reviewQuestions(ids, action, reviewer, note);
+    setBusy(false);
+    setChecked(new Set());
+    const verb = action === 'approved' ? t('اتعتمد', 'approved') : t('اتبعت للتعديل', 'sent back');
+    setFlash(t(`${r.done} سؤال ${verb}`, `${r.done} question(s) ${verb}`) + (r.skipped ? t(` • ${r.skipped} اتراجع قبل كده`, ` • ${r.skipped} already reviewed`) : '') + (r.failed ? t(` • ${r.failed} فشل`, ` • ${r.failed} failed`) : ''));
+    refreshPending();
+  };
+
   const handleAction = async (id: string, action: 'APPROVED' | 'REJECTED', note?: string) => {
     if (subTab === 'QUESTIONS') {
-      if (action === 'APPROVED') {
-        await approveQuestion(id);
-      } else {
-        await rejectQuestion(id, note || '');
-      }
+      setBusy(true);
+      await reviewQuestions([id], action === 'APPROVED' ? 'approved' : 'rejected', reviewer, note);
+      setBusy(false);
       refreshPending();
-    } else {
-      if (action === 'APPROVED') {
-        await approveAssessment(id);
-      } else {
-        await rejectAssessment(id, note || '');
-      }
-      refreshPendingAssessments();
+      return;
     }
+    if (action === 'APPROVED') {
+      await approveAssessment(id);
+    } else {
+      await rejectAssessment(id, note || '');
+    }
+    refreshPendingAssessments();
     setStatusMap(prev => ({ ...prev, [id]: action }));
   };
 
+  const saveEdit = async (id: string, patch: ReviewPatch, approveAfter: boolean) => {
+    setBusy(true);
+    const res = await updateReviewedQuestion(id, patch, reviewer);
+    if (!res.ok) {
+      setBusy(false);
+      setFlash(t('فشل حفظ التعديل: ', 'Could not save the edit: ') + (res.error || ''));
+      return;
+    }
+    if (approveAfter) await reviewQuestions([id], 'approved', reviewer);
+    setBusy(false);
+    setEditingId(null);
+    setFlash(approveAfter ? t('اتحفظ التعديل واتعتمد السؤال', 'Edit saved and question approved') : t('اتحفظ التعديل', 'Edit saved'));
+    refreshPending();
+  };
+
   const submitRejection = () => {
-    if (activeItem) {
+    if (rejectTarget === 'bulk') {
+      runBulk('rejected', rejectNote);
+    } else if (activeItem) {
       handleAction(activeItem.id, 'REJECTED', rejectNote);
     }
     setRejectNote('');
@@ -196,23 +291,32 @@ export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
     <div className="flex flex-col h-[calc(100vh-160px)] bg-white rounded-3xl border border-slate-200 overflow-hidden" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       
       {/* Horizontal Top Filter Bar */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white shrink-0">
-        <div className="flex items-center gap-3">
-          <SmartDropdown label={language === 'ar' ? 'الصف الدراسي' : 'Grade'} options={[language === 'ar' ? 'الكل' : 'All', 'الصف العاشر', 'الصف الحادي عشر', 'الصف الثاني عشر']} value={gradeFilter} onChange={setGradeFilter} />
-          <SmartDropdown label={language === 'ar' ? 'المادة' : 'Subject'} options={[language === 'ar' ? 'الكل' : 'All', 'رياضيات', 'فيزياء', 'كيمياء', 'تاريخ', 'لغة عربية']} value={subjectFilter} onChange={setSubjectFilter} />
-          <SmartDropdown label={language === 'ar' ? 'حالة الاعتماد' : 'Approval Status'} options={[language === 'ar' ? 'الكل' : 'All', 'قيد المراجعة', 'معتمد', 'مرفوض']} value={statusFilter} onChange={setStatusFilter} />
+      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white shrink-0 gap-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          {subTab === 'QUESTIONS' && <SmartDropdown label={t('الصف الدراسي', 'Grade')} allLabel={t('الكل', 'All')} options={gradeOptions} value={gradeFilter} onChange={setGradeFilter} />}
+          <SmartDropdown label={t('المادة', 'Subject')} allLabel={t('الكل', 'All')} options={subjectOptions} value={subjectFilter} onChange={setSubjectFilter} />
           {subTab === 'QUESTIONS' && (
-            <SmartDropdown label={language === 'ar' ? 'نوع السؤال' : 'Question Type'} options={[language === 'ar' ? 'الكل' : 'All', 'اختيار من متعدد', 'سؤال مقالي', 'صح أم خطأ']} value={typeFilter} onChange={setTypeFilter} />
+            <>
+              <SmartDropdown label={t('نوع السؤال', 'Question Type')} allLabel={t('الكل', 'All')} options={typeOptions} value={typeFilter} onChange={setTypeFilter} />
+              <SmartDropdown label={t('الصعوبة', 'Difficulty')} allLabel={t('الكل', 'All')} options={['سهل', 'متوسط', 'صعب']} value={difficultyFilter} onChange={setDifficultyFilter} />
+              <SmartDropdown label={t('المعلم المدخل', 'Author')} allLabel={t('الكل', 'All')} options={authorOptions} value={authorFilter} onChange={setAuthorFilter} />
+              <button
+                onClick={() => setOnlyIssues((v) => !v)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${onlyIssues ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+              >
+                <AlertTriangle size={14} /> {t('بها ملاحظات فقط', 'With issues only')}
+              </button>
+            </>
           )}
         </div>
         
-        <div className="relative w-80">
+        <div className="relative w-72 shrink-0">
           <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input 
             type="text" 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={language === 'ar' ? 'البحث في الطلبات...' : 'Search requests...'} 
+            placeholder={t('البحث في الطلبات...', 'Search requests...')} 
             className="w-full pl-3 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:bg-white focus:border-violet-300 transition-colors shadow-none"
           />
         </div>
@@ -224,13 +328,13 @@ export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
           <div className="p-4 border-b border-slate-200 bg-white">
             <div className="flex bg-slate-100 p-1 rounded-lg">
               <button
-                onClick={() => { setSubTab('QUESTIONS'); setSelectedItemId(questions[0]?.id || null); setTypeFilter('الكل'); }}
+                onClick={() => { setSubTab('QUESTIONS'); setSelectedItemId(null); setSubjectFilter(''); setChecked(new Set()); }}
                 className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors shadow-none ${subTab === 'QUESTIONS' ? 'bg-white text-violet-700 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 {language === 'ar' ? 'اعتماد الأسئلة' : 'Approve Questions'}
               </button>
               <button
-                onClick={() => { setSubTab('ASSESSMENTS'); setSelectedItemId(assessments[0]?.id || null); setAssessmentView('overview'); }}
+                onClick={() => { setSubTab('ASSESSMENTS'); setSelectedItemId(null); setSubjectFilter(''); setAssessmentView('overview'); }}
                 className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-colors shadow-none ${subTab === 'ASSESSMENTS' ? 'bg-white text-violet-700 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 {language === 'ar' ? 'اعتماد التقييمات' : 'Approve Assessments'}
@@ -238,15 +342,42 @@ export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
             </div>
           </div>
           
+          {subTab === 'QUESTIONS' && filteredQuestions.length > 0 && (
+            <div className="px-4 py-2.5 border-b border-slate-200 bg-white flex items-center justify-between gap-2 text-xs">
+              <label className="flex items-center gap-2 font-bold text-slate-600 cursor-pointer">
+                <input type="checkbox" checked={allVisibleChecked} onChange={() => setChecked(allVisibleChecked ? new Set() : new Set(filteredQuestions.map((q) => q.id)))} />
+                {checkedVisible.length > 0 ? t(`${checkedVisible.length} محدد`, `${checkedVisible.length} selected`) : t(`تحديد الكل (${filteredQuestions.length})`, `Select all (${filteredQuestions.length})`)}
+              </label>
+              {checkedVisible.length > 0 && (
+                <div className="flex gap-2">
+                  <button disabled={busy} onClick={() => { setRejectTarget('bulk'); setRejectModalOpen(true); }} className="px-3 py-1.5 rounded-lg border border-slate-200 font-bold text-slate-700 hover:text-red-600 hover:border-red-200 disabled:opacity-50">{t('إرسال للتعديل', 'Send back')}</button>
+                  <button disabled={busy} onClick={() => runBulk('approved')} className="px-3 py-1.5 rounded-lg bg-violet-600 text-white font-bold hover:bg-violet-700 disabled:opacity-50">{t('اعتماد المحدد', 'Approve selected')}</button>
+                </div>
+              )}
+            </div>
+          )}
+          {flash && (
+            <div className="px-4 py-2 text-xs font-bold bg-emerald-50 text-emerald-700 border-b border-emerald-100 flex items-center justify-between">
+              <span>{flash}</span>
+              <button onClick={() => setFlash('')} aria-label="dismiss"><XCircle size={14} /></button>
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
             {(subTab === 'QUESTIONS' && isLoadingQuestions) || (subTab === 'ASSESSMENTS' && isLoadingAssessments) ? (
-              <p className="text-center text-sm text-slate-400 py-10">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
+              <p className="text-center text-sm text-slate-400 py-10">{t('جاري التحميل...', 'Loading...')}</p>
             ) : activeList.length === 0 ? (
-              <p className="text-center text-sm text-slate-400 py-10">{subTab === 'QUESTIONS' ? (language === 'ar' ? 'لا توجد أسئلة بانتظار الاعتماد' : 'No questions pending approval') : (language === 'ar' ? 'لا توجد تقييمات بانتظار الاعتماد' : 'No assessments pending approval')}</p>
+              <p className="text-center text-sm text-slate-400 py-10">
+                {(subTab === 'QUESTIONS' ? questions.length : assessments.length) > 0
+                  ? t('لا توجد نتائج تطابق الفلاتر الحالية', 'No results match the current filters')
+                  : subTab === 'QUESTIONS' ? t('لا توجد أسئلة بانتظار الاعتماد', 'No questions pending approval') : t('لا توجد تقييمات بانتظار الاعتماد', 'No assessments pending approval')}
+              </p>
             ) : activeList.map(item => {
               const isApproved = statusMap[item.id] === 'APPROVED';
               const isRejected = statusMap[item.id] === 'REJECTED';
-              const isActive = selectedItemId === item.id;
+              const isActive = activeItem?.id === item.id;
+              const itemIssues = subTab === 'QUESTIONS' ? (issuesById[item.id] || []) : [];
+              const worst = worstSeverity(itemIssues);
               
               return (
                 <div 
@@ -258,8 +389,16 @@ export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                   {isRejected && <div className="absolute left-3 top-3 text-amber-500"><AlertCircle size={18} /></div>}
                   
                   <div className="flex items-center gap-2 mb-1.5">
+                    {subTab === 'QUESTIONS' && (
+                      <input type="checkbox" checked={checked.has(item.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggleChecked(item.id)} aria-label="select" />
+                    )}
                     {subTab === 'QUESTIONS' ? <HelpCircle size={14} className="text-violet-500" /> : <FileText size={14} className="text-violet-500" />}
                     <span className="text-xs font-bold text-slate-500">{item.subject}</span>
+                    {worst && (
+                      <span className={`mr-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold ${SEVERITY_STYLE[worst]}`}>
+                        <AlertTriangle size={10} /> {itemIssues.length}
+                      </span>
+                    )}
                   </div>
                   <h4 className={`font-bold text-sm mb-3 ml-6 leading-tight ${isActive ? 'text-violet-900' : 'text-slate-800'}`}>{item.title}</h4>
                   <div className="flex items-center justify-between text-[11px] font-medium text-slate-400 mt-auto pt-2 border-t border-slate-100/50">
@@ -312,16 +451,24 @@ export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                       </div>
                     </div>
                     <div className="flex gap-3 shrink-0">
+                      {subTab === 'QUESTIONS' && (
+                        <button
+                          onClick={() => setEditingId(isEditingActive ? null : activeItem.id)}
+                          className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 flex items-center gap-2"
+                        >
+                          <Pencil size={14} /> {t('تعديل قبل الاعتماد', 'Edit before approval')}
+                        </button>
+                      )}
                       <button 
-                        onClick={() => setRejectModalOpen(true)}
-                        disabled={statusMap[activeItem.id] === 'REJECTED'}
+                        onClick={() => { setRejectTarget('single'); setRejectModalOpen(true); }}
+                        disabled={busy || isEditingActive || statusMap[activeItem.id] === 'REJECTED'}
                         className="px-5 py-2 rounded-lg border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-40 disabled:hover:bg-transparent shadow-none"
                       >
                         {language === 'ar' ? 'إرسال للتعديل' : 'Send for Revision'}
                       </button>
                       <button 
                         onClick={() => handleAction(activeItem.id, 'APPROVED')}
-                        disabled={statusMap[activeItem.id] === 'APPROVED'}
+                        disabled={busy || isEditingActive || statusMap[activeItem.id] === 'APPROVED'}
                         className="px-5 py-2 rounded-lg bg-violet-600 text-white font-bold text-sm hover:bg-violet-700 transition-colors shadow-none disabled:opacity-50"
                       >
                         {language === 'ar' ? 'اعتماد ونشر' : 'Approve & Publish'}
@@ -359,7 +506,20 @@ export function ApprovalHub({ language = 'ar' }: { language?: 'ar' | 'en' }) {
                       </p>
                     </div>
                     
-                    {subTab === 'QUESTIONS' ? (
+                    {subTab === 'QUESTIONS' && activeIssues.length > 0 && (
+                      <div className="bg-white rounded-xl p-5 border border-slate-200">
+                        <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><AlertTriangle size={16} className="text-amber-500" />{t('الفحص الآلي', 'Automatic check')} ({activeIssues.length})</h3>
+                        <ul className="space-y-2">
+                          {activeIssues.map((iss, k) => (
+                            <li key={k} className={`text-sm font-medium px-3 py-2 rounded-lg border ${SEVERITY_STYLE[iss.severity]}`}>{language === 'ar' ? iss.ar : iss.en}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {subTab === 'QUESTIONS' && isEditingActive ? (
+                      <ReviewEditor key={activeItem.id} q={questions.find((x) => x.id === activeItem.id) as BankQuestion} language={language} saving={busy} onCancel={() => setEditingId(null)} onSave={(patch, approveAfter) => saveEdit(activeItem.id, patch, approveAfter)} />
+                    ) : subTab === 'QUESTIONS' ? (
                       // QUESTION VIEW — بيانات حقيقية من السؤال المحدد فعليًا
                       <div className="bg-white border border-slate-200 shadow-none rounded-2xl p-8 relative">
                         <div className="absolute top-8 left-8 flex gap-2">
