@@ -11,6 +11,9 @@ import { BankExchange } from '@/components/question-bank/BankExchange';
 import { StatusBadge } from '@/components/question-bank/StatusBadge';
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/question-bank/RichTextEditor';
 import { StemExtras } from '@/components/question-bank/StemExtras';
+import { BankReports } from '@/components/question-bank/BankReports';
+import { AuditLogView } from '@/components/question-bank/AuditLogView';
+import { setBankAuditActor } from '@/services/bankAudit';
 import { QuestionStem } from '@/components/question-bank/RichContent';
 import { htmlToText, textToHtml, hasRichContent, isRichEmpty } from '@/lib/richText';
 import { parseVideoUrl, parseTime } from '@/lib/media';
@@ -264,7 +267,7 @@ export default function QuestionBank() {
   };
   const [language, setLanguage] = useState<'ar' | 'en'>('en');
   const [isSidebarPinned, setIsSidebarPinned] = useState(false);
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'MANAGEMENT' | 'ASSESSMENTS' | 'APPROVAL_HUB'>(authUser?.role === 'teacher' ? 'MANAGEMENT' : 'DASHBOARD');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'MANAGEMENT' | 'ASSESSMENTS' | 'APPROVAL_HUB' | 'REPORTS' | 'AUDIT'>(authUser?.role === 'teacher' ? 'MANAGEMENT' : 'DASHBOARD');
   
   // Bank Scope State
   const [bankScope, setBankScope] = useState<'central' | 'shared' | 'private'>('central');
@@ -707,6 +710,11 @@ export default function QuestionBank() {
 
   // بوابة الصلاحية الحقيقية — إما مشرف بنك الأسئلة (وصول كامل) أو معلم عنده صلاحية "إضافة أسئلة" بس
   const isSupervisor = authUser?.role === 'qb_supervisor';
+
+  // كل عمليات البنك (إضافة/تعديل/حذف/استيراد…) بتتسجل في سجل التدقيق باسم المستخدم الحالي
+  useEffect(() => {
+    setBankAuditActor(authUser ? { id: authUser.teacherId || authUser.userId || null, name: authUser.name || 'غير معروف', role: authUser.role } : null);
+  }, [authUser]);
   const canContribute = isSupervisor || (authUser?.role === 'teacher' && !!authUser?.canUseQuestionBank);
 
   // بيحمّل سؤال حقيقي موجود جوه نفس نموذج الإنشاء عشان نقدر نعدّله فعليًا (نفس الحقول بالظبط لكل الأنواع الـ١٣)
@@ -1113,6 +1121,32 @@ export default function QuestionBank() {
               >
                 <ShieldCheck size={18} />
                 {language === 'ar' ? 'الاعتمادات' : 'Approvals'}
+              </button>
+              )}
+              {isSupervisor && (
+              <button
+                onClick={() => setActiveTab('REPORTS')}
+                className={`px-6 py-2.5 text-sm font-bold rounded-lg transition-all shadow-none flex items-center gap-2 ${
+                  activeTab === 'REPORTS'
+                    ? 'bg-white text-violet-700 shadow-sm border border-slate-200/50'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                }`}
+              >
+                <BarChart size={18} />
+                {language === 'ar' ? 'تقارير البنك' : 'Reports'}
+              </button>
+              )}
+              {isSupervisor && (
+              <button
+                onClick={() => setActiveTab('AUDIT')}
+                className={`px-6 py-2.5 text-sm font-bold rounded-lg transition-all shadow-none flex items-center gap-2 ${
+                  activeTab === 'AUDIT'
+                    ? 'bg-white text-violet-700 shadow-sm border border-slate-200/50'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                }`}
+              >
+                <Flag size={18} />
+                {language === 'ar' ? 'سجل التدقيق' : 'Audit log'}
               </button>
               )}
             </div>
@@ -3470,6 +3504,16 @@ export default function QuestionBank() {
             <div className="w-full">
               <ApprovalHub language={language} />
             </div>
+          )}
+
+          {/* REPORTS TAB (المشرف بس) */}
+          {activeTab === 'REPORTS' && isSupervisor && (
+            <div className="w-full"><BankReports language={language} /></div>
+          )}
+
+          {/* AUDIT TAB (المشرف بس) */}
+          {activeTab === 'AUDIT' && isSupervisor && (
+            <div className="w-full"><AuditLogView language={language} /></div>
           )}
         </div>
       </main>

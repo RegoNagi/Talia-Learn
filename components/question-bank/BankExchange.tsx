@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { UploadCloud, DownloadCloud, Copy, X, Loader2, Check, AlertTriangle, ShieldCheck, Pencil } from 'lucide-react';
+import { logBankEvent } from '@/services/bankAudit';
 import { addQuestionsToBank, type BankQuestion, type BankScope, type NewBankQuestion, type AddBatchResult } from '@/services/questionBankData';
 import { buildQtiPackage, exportSummary, parseQtiFile, type ParsedQtiQuestion, type QtiExportItem, type QtiQuestionContent } from '@/lib/qti';
 import type { BankQuestionContent } from '@/services/questionBankData';
@@ -165,7 +166,7 @@ function ImportDialog({ t, subject, grade, teacherId, role, scopeLabel, onClose,
         lesson: p.lesson,
         question: p.question as BankQuestionContent,
       }));
-    const res = await addQuestionsToBank(items, { scope, subject, grade, createdBy: teacherId, createdByRole: role, skipDuplicates: skipDup });
+    const res = await addQuestionsToBank(items, { scope, subject, grade, createdBy: teacherId, createdByRole: role, skipDuplicates: skipDup, origin: 'import', originNote: `استيراد QTI من الملف ${fileName || ''}`.trim() });
     setBusy(false);
     setResult(res);
     if (res.created > 0) onChanged();
@@ -276,6 +277,7 @@ function ExportDialog({ t, subject, grade, questions, onClose }: { t: T; subject
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+    void logBankEvent({ action: 'export', subject, grade, title: `تصدير QTI (${chosen.length} سؤال)`, note: `ملف qti-${subject}-${grade}.zip` });
   };
 
   return (
@@ -335,9 +337,9 @@ function CopyDialog({ t, subject, grade, questions, teacherId, role, scopeLabel,
     setBusy(true);
     const items: NewBankQuestion[] = chosen.map((q) => ({
       type: q.type, difficulty: q.difficulty, bloomLevel: q.bloomLevel, unit: q.unit, lesson: q.lesson,
-      question: q.question,
+      question: { ...q.question, reviewLog: undefined }, // سجل المراجعة بتاع السؤال الأصلي مايتنسخش
     }));
-    const res = await addQuestionsToBank(items, { scope: target, subject, grade, createdBy: teacherId, createdByRole: role, skipDuplicates: skipDup });
+    const res = await addQuestionsToBank(items, { scope: target, subject, grade, createdBy: teacherId, createdByRole: role, skipDuplicates: skipDup, origin: 'copy', originNote: `نسخ ${chosen.length} سؤال إلى البنك ${target === 'central' ? 'المركزي' : target === 'shared' ? 'المشترك' : 'الخاص'}` });
     setBusy(false);
     setResult(res);
     if (res.created > 0) onChanged();

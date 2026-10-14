@@ -1,5 +1,7 @@
 import { supabase } from '@/lib/supabaseClient';
 import type { QuizQuestion } from '@/services/assignmentData';
+import { logBankEvent } from './bankAudit';
+import { snapshotOf, diffSnapshots, fieldLabel } from '@/lib/auditLog';
 import { planBankInsert } from '@/lib/bankTransfer';
 import { appendReviewLog, changedFields, type ReviewLogEntry } from '@/lib/reviewLog';
 
@@ -171,6 +173,14 @@ export async function createQuestion(input: {
     console.error('Error creating bank question:', error);
     return { id: null, error: error?.message || 'Unknown error' };
   }
+  void logBankEvent({
+    action: 'create', questionId: data.id, title: input.question?.title || '', subject: input.subject, grade: input.grade, scope: input.scope,
+    changes: [
+      { field: 'title', label: fieldLabel('title'), before: null, after: input.question?.title || null },
+      { field: 'type', label: fieldLabel('type'), before: null, after: input.type },
+      { field: 'status', label: fieldLabel('status'), before: null, after: status },
+    ],
+  });
   return { id: data.id, error: null };
 }
 
@@ -189,12 +199,27 @@ export async function updateQuestion(id: string, input: Partial<{
   if (input.question !== undefined) patch.question = input.question;
   if (input.scope !== undefined) patch.scope = input.scope;
   if (input.resubmit) { patch.status = 'pending'; patch.rejection_note = null; }
+  // نسخة قبل التعديل لسجل التدقيق (best-effort)
+  let beforeRow: any = null;
+  try { beforeRow = (await supabase.from('question_bank').select('*').eq('id', id).single()).data; } catch { /* السجل مش أساسي */ }
   const { error } = await supabase.from('question_bank').update(patch).eq('id', id);
+  if (!error && beforeRow) {
+    const afterRow = { ...beforeRow, ...patch };
+    const changes = diffSnapshots(snapshotOf(beforeRow), snapshotOf(afterRow));
+    if (changes.length) {
+      void logBankEvent({ action: 'update', questionId: id, title: afterRow.question?.title || beforeRow.question?.title || '', subject: afterRow.subject, grade: afterRow.grade, scope: afterRow.scope, changes });
+    }
+  }
   return { ok: !error, error: error?.message || null };
 }
 
 export async function deleteQuestion(id: string): Promise<{ ok: boolean; error: string | null }> {
+  let beforeRow: any = null;
+  try { beforeRow = (await supabase.from('question_bank').select('*').eq('id', id).single()).data; } catch { /* السجل مش أساسي */ }
   const { error } = await supabase.from('question_bank').delete().eq('id', id);
+  if (!error && beforeRow) {
+    void logBankEvent({ action: 'delete', questionId: id, title: beforeRow.question?.title || '', subject: beforeRow.subject, grade: beforeRow.grade, scope: beforeRow.scope, snapshot: beforeRow });
+  }
   return { ok: !error, error: error?.message || null };
 }
 
@@ -210,6 +235,19 @@ export async function getPendingQuestions(): Promise<(BankQuestion & { creatorNa
   return (data || []).map((row: any) => ({
     ...mapRow(row),
     creatorName: row.teachers?.users?.name || 'غير معروف',
+  }));
+}
+
+// كل أسئلة البنك (كل النطاقات والحالات) مع اسم المؤلف: للتقارير وسجل التدقيق (المشرف بس)
+export async function getAllQuestionsWithAuthors(): Promise<(BankQuestion & { creatorName: string })[]> {
+  const { data, error } = await supabase
+    .from('question_bank')
+    .select('*, teachers(users(name))')
+    .order('created_at', { ascending: false });
+  if (error || !data) return [];
+  return data.map((row: any) => ({
+    ...mapRow(row),
+    creatorName: row.teachers?.users?.name || (row.created_by_role === 'supervisor' ? 'مشرف البنك' : 'غير معروف'),
   }));
 }
 
@@ -577,7 +615,7 @@ export interface AddBatchResult {
 // المعلم في البنك المشترك/المركزي بيدخل "معلّق"، والمشرف أو البنك الخاص "معتمد" على طول.
 export async function addQuestionsToBank(
   items: NewBankQuestion[],
-  target: { scope: BankScope; subject: string; grade: string; createdBy: string | null; createdByRole: 'teacher' | 'supervisor'; skipDuplicates: boolean },
+  target: { scope: BankScope; subject: string; grade: string; createdBy: string | null; createdByRole: 'teacher' | 'supervisor'; skipDuplicates: boolean; origin?: 'import' | 'copy'; originNote?: string },
 ): Promise<AddBatchResult> {
   const pool = await getVisibleQuestions({ subject: target.subject, grade: target.grade, isSupervisor: true });
   const existingTitles = pool.filter((q) => q.scope === target.scope && (target.scope !== 'private' || q.createdBy === target.createdBy)).map((q) => q.title);
@@ -600,6 +638,13 @@ export async function addQuestionsToBank(
     });
     if (id) result.created += 1;
     else result.failed.push({ title: item.question.title, error: error || 'Unknown error' });
+  }
+  if (target.origin) {
+    void logBankEvent({
+      action: target.origin, subject: target.subject, grade: target.grade, scope: target.scope,
+      title: target.originNote || (target.origin === 'import' ? 'استيراد أسئلة' : 'نسخ أسئلة'),
+      note: `تمت إضافة ${result.created} سؤال، مكرر ${result.duplicates}، فشل ${result.failed.length}`,
+    });
   }
   return result;
 }
